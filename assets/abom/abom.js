@@ -147,6 +147,60 @@
     }
   });
 
+  // -------------------------------------------------------------------
+  // Approval workflow. Every action here is also enforced server-side by
+  // Abom_approval_model — these controls are a convenience, not the
+  // authority.
+  // -------------------------------------------------------------------
+  ABOM.workflow = function ($btn) {
+    var $panel = $btn.closest('.abom-workflow');
+    var bomId  = $panel.attr('data-bom');
+    var action = $btn.attr('data-wf');
+
+    var urls = {
+      advance:  window.ABOM_WF_ADVANCE_URL,
+      reject:   window.ABOM_WF_REJECT_URL,
+      reopen:   window.ABOM_WF_REOPEN_URL,
+      revision: window.ABOM_WF_REVISION_URL
+    };
+    if (!urls[action]) { return; }
+
+    var comment = '';
+    if (action === 'reject') {
+      comment = window.prompt('A rejection must carry a comment. What needs changing?', '');
+      if (comment === null || $.trim(comment) === '') { return; }
+    } else if (action === 'revision') {
+      comment = window.prompt('Note for this revision (optional):', '') || '';
+    } else if (action === 'advance') {
+      comment = window.prompt('Comment (optional):', '') || '';
+    }
+
+    $btn.prop('disabled', true);
+
+    $.ajax({
+      url: urls[action] + '/' + bomId,
+      type: 'POST',
+      dataType: 'json',
+      data: { comment: comment }
+    }).done(function (res) {
+      if (res && res.status && res.redirect) { window.location.href = res.redirect; return; }
+      window.location.reload();
+    }).fail(function (xhr) {
+      var res = null;
+      try { res = JSON.parse(xhr.responseText); } catch (e) { res = null; }
+      window.alert(res && res.message ? res.message : 'The action could not be completed.');
+      $btn.prop('disabled', false);
+    });
+  };
+
+  $(function () {
+    var $w = $('.abom-wrap');
+    if (!$w.length) { return; }
+    $w.on('click', '.abom-workflow [data-wf]', function () {
+      ABOM.workflow($(this));
+    });
+  });
+
   window.ABOM = ABOM;
 
 }(window.jQuery, window, document));

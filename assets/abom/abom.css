@@ -424,3 +424,47 @@
   color: #222; height: auto; box-shadow: none; width: auto;
 }
 .abom-wrap .abom-filter-form input { min-width: 180px; }
+
+/* ── APPROVAL WORKFLOW PANEL (screen only) ────────────────────────── */
+.abom-wrap .abom-workflow {
+  background: var(--white); border: 1.5px solid var(--border);
+  border-radius: 8px; padding: 14px 16px; margin-top: 16px;
+}
+.abom-wrap .wf-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.abom-wrap .wf-stage {
+  font-size: 11px; font-weight: 700; color: var(--navy);
+  text-transform: uppercase; letter-spacing: .4px;
+}
+.abom-wrap .wf-status {
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;
+  background: var(--gray); color: var(--dgray);
+}
+.abom-wrap .wf-status.wf-approved      { background: var(--lgreen); color: #1A4001; }
+.abom-wrap .wf-status.wf-eng_approved  { background: var(--lgreen); color: #1A4001; }
+.abom-wrap .wf-status.wf-rejected      { background: #F7D9D9; color: var(--red); }
+.abom-wrap .wf-status.wf-superseded    { background: #EEE; color: #888; }
+.abom-wrap .wf-status.wf-draft         { background: var(--lblue); color: var(--navy); }
+
+.abom-wrap .wf-problem,
+.abom-wrap .wf-blockers {
+  border-radius: 6px; padding: 9px 12px; margin-bottom: 10px;
+  font-size: 11px; line-height: 1.6;
+}
+.abom-wrap .wf-problem  { background: #FDE7E7; border: 1.5px solid #E0A0A0; color: #7A1A1A; }
+.abom-wrap .wf-blockers { background: #FFF3CD; border: 1.5px solid #FFD04A; color: #7A5800; }
+.abom-wrap .wf-problem strong,
+.abom-wrap .wf-blockers strong { display: block; margin-bottom: 4px; font-size: 12px; }
+
+.abom-wrap .wf-actions,
+.abom-wrap .wf-exports { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.abom-wrap .wf-actions .btn-sm[disabled] { opacity: .45; cursor: not-allowed; }
+
+.abom-wrap .wf-trail { border-top: 1.5px solid var(--border); padding-top: 10px; font-size: 11px; }
+.abom-wrap .wf-trail strong {
+  display: block; margin-bottom: 6px; color: var(--navy);
+  text-transform: uppercase; font-size: 10px; letter-spacing: .4px;
+}
+.abom-wrap .wf-entry { padding: 3px 0; color: var(--dgray); }
+.abom-wrap .wf-when  { color: #888; margin-right: 8px; font-family: 'Courier New', monospace; }
+.abom-wrap .wf-what  { font-weight: 700; color: var(--navy); margin-right: 8px; }
+.abom-wrap .wf-comment { font-style: italic; }

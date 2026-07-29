@@ -154,6 +154,94 @@ does not mean "safe to deploy".
 
 ---
 
+## 0.7 Database facts proven this build
+
+`Database/abom_001.sql` and `abom_002_seed.sql` have been run against a
+disposable container loaded with the full production dump. Findings:
+
+**Production is MariaDB 11.x, not 10.x.** The dump uses the collation
+`utf8mb4_uca1400_ai_ci`, which only exists on MariaDB 11+. A 10.6
+container aborted the import at 119 of 293 tables with
+`Unknown collation`. On **MariaDB 11.4** all 293 tables imported cleanly
+and both module scripts ran without error, producing
+`71 / 29 / 42 / 8 / 4 / 4 / 6`.
+
+### 0.7.1 Collation — a constraint, not a bug
+
+The database default is `utf8mb4_uca1400_ai_ci`; the `abom_*` tables are
+`utf8mb4_unicode_ci`; and the three existing tables the module reads
+(`system_users`, `submodule`, `module_capablity`) are
+`latin1_swedish_ci`.
+
+That is safe **only** while `abom_*` varchars are never compared to
+varchars in other tables. The day someone writes such a comparison,
+MariaDB raises *"Illegal mix of collations"* — and it will raise it on
+production while passing every test that stays inside the module.
+
+Verified today: the module touches exactly three non-`abom_` tables, and
+every one of them by **integer** column —
+`system_users.user_id`, `submodule.id`, and
+`module_capablity.role_id / moduleid / submoduleid`. No varchar
+comparison crosses the boundary.
+
+**Constraint for future work:** do not join or compare an `abom_*`
+varchar column to a varchar column in any pre-existing table. If it
+becomes necessary, add an explicit `COLLATE` to the comparison rather
+than changing either table's collation.
+
+`utf8mb4_unicode_ci` is kept deliberately: it is portable, whereas
+`uca1400` exists only on MariaDB 11+ and would make the schema
+un-installable on anything older.
+
+---
+
+## 0.8 Export dependencies and Unicode
+
+### 0.8.1 PDF font — must stay Unicode
+
+TCPDF's core fonts are not Unicode. Measured with
+`BOMMODULEDEVELOPMENT/tests/pdf_glyph_probe.php`, which renders a probe
+PDF and extracts the text back out:
+
+| Glyph | dejavusans | freeserif | helvetica |
+|---|---|---|---|
+| `Ω` U+03A9 | ok | ok | **LOST** |
+| `✎` U+270E | ok | ok | **LOST** |
+| `⚠` U+26A0 | ok | ok | **LOST** |
+| `−` U+2212 | ok | ok | **LOST** |
+| `—` `–` `°` `·` | ok | ok | ok |
+
+With helvetica the DBR line renders as `6.7?, 500W` — a plausible-looking
+spec rather than a visible error.
+
+`$config['abom_pdf_font'] = 'dejavusans'`. **No substitution was needed
+for `✎`** — it renders correctly. Do not change this to a core font; the
+probe exits non-zero if the configured font loses a glyph.
+
+Confirmed on the real export: the produced PDF contains `Ω`, 42 `NO(S)`
+cells and **zero** `?` characters, on landscape A4 with the column header
+repeating on both pages.
+
+### 0.8.2 XLSX needs ext-zip
+
+PHPExcel's Excel2007 writer requires `ZipArchive`. It was absent from the
+first PHP 7.4 test container and produced a 500 from inside the writer.
+`Abom_exporter::xlsx()` now checks `class_exists('ZipArchive')` first and
+throws a message an operator can act on; the controller renders
+`abom/export_unavailable` with a 503 and offers CSV and PDF instead.
+
+**Confirm ext-zip is enabled on the production PHP build** (cPanel →
+Select PHP Version → Extensions). CSV and PDF have no such dependency.
+
+### 0.8.3 UOM display map applies to all three exports
+
+`abom_uom()` (`NOS` → `NO(S)`) is applied in the CSV, XLSX and PDF
+writers as well as on screen — all three are read by humans. A future
+machine-readable or ERP-bound export must use the raw stored value and
+must not call it.
+
+---
+
 ## 1. Schema deltas — `abom_schema.sql` → `Database/abom_001.sql`
 
 ### 1.1 Three new columns on `abom_bom_line` — approved

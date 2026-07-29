@@ -304,6 +304,301 @@ class Abom extends CI_Controller
         ));
     }
 
+    // -----------------------------------------------------------------
+    // APPROVAL WORKFLOW  (build order step 6)
+    // -----------------------------------------------------------------
+
+    /**
+     * Advance one stage. Every guard is enforced in
+     * Abom_approval_model::blockers(), never only in the UI.
+     */
+    public function submit($bom_id = 0)
+    {
+        $this->workflow_action((int) $bom_id, 'advance');
+    }
+
+    /** Alias — the UI calls the same endpoint at every stage. */
+    public function approve($bom_id = 0)
+    {
+        $this->workflow_action((int) $bom_id, 'advance');
+    }
+
+    public function reject($bom_id = 0)
+    {
+        $this->workflow_action((int) $bom_id, 'reject');
+    }
+
+    public function reopen($bom_id = 0)
+    {
+        $this->workflow_action((int) $bom_id, 'reopen');
+    }
+
+    /**
+     * Editing an approved BOM is forbidden; this is the offered
+     * alternative (spec 6.3).
+     */
+    public function create_revision($bom_id = 0)
+    {
+        $this->workflow_action((int) $bom_id, 'revision');
+    }
+
+    /**
+     * Confirms a MANUAL line or acknowledges a conflict line — the two
+     * things that gate Draft -> Submitted.
+     */
+    public function acknowledge_line()
+    {
+        $this->json_only();
+
+        if (!$this->require_tables()) { return; }
+
+        $this->load->model('Abom_model');
+        $this->load->model('Abom_approval_model');
+
+        $bom_id  = (int) $this->input->post('bom_id');
+        $line_id = (int) $this->input->post('line_id');
+        $what    = $this->input->post('what') === 'acknowledge' ? 'acknowledge' : 'confirm';
+        $comment = trim((string) $this->input->post('comment'));
+
+        $bom = $this->Abom_model->get_bom($bom_id);
+        if (!$bom) {
+            $this->output->set_status_header(404);
+            $this->respond(false, 'BOM not found.');
+        }
+
+        if (!abom_qty_editable($bom)) {
+            $this->output->set_status_header(403);
+            $this->respond(false, 'This BOM is ' . abom_status_label($bom->status)
+                . ' and can no longer be annotated.');
+        }
+
+        if ($what === 'acknowledge' && $comment === '') {
+            $this->output->set_status_header(422);
+            $this->respond(false, 'An ERP conflict must be acknowledged with a comment.');
+        }
+
+        $ok = $this->Abom_approval_model->acknowledge_line(
+            $bom_id, $line_id, $what, $comment, $this->current_user_id());
+
+        if (!$ok) {
+            $this->output->set_status_header(422);
+            $this->respond(false, 'The line could not be annotated.');
+        }
+
+        $this->respond(true, $what === 'acknowledge' ? 'Conflict acknowledged.' : 'Quantity confirmed.',
+            array('blockers' => $this->Abom_approval_model->blockers(
+                $this->Abom_model->get_bom($bom_id), $this->current_user_id())));
+    }
+
+    /**
+     * Shared workflow entry point.
+     *
+     * @param int    $bom_id
+     * @param string $what  advance|reject|reopen|revision
+     */
+    private function workflow_action($bom_id, $what)
+    {
+        $this->json_only();
+
+        if (!$this->require_tables()) { return; }
+        if (!$this->require_permissions_configured()) { return; }
+
+        $this->load->model('Abom_model');
+        $this->load->model('Abom_approval_model');
+
+        $bom = $this->Abom_model->get_bom($bom_id);
+        if (!$bom) {
+            $this->output->set_status_header(404);
+            $this->respond(false, 'BOM not found.');
+        }
+
+        $user_id   = $this->current_user_id();
+        $user_name = $this->current_user_name();
+        $comment   = trim((string) $this->input->post('comment'));
+
+        if ($what === 'advance') {
+            $t = $this->Abom_approval_model->next_transition($bom->status);
+            if (!$t) {
+                $this->output->set_status_header(422);
+                $this->respond(false, 'There is no next stage from "'
+                    . abom_status_label($bom->status) . '".');
+            }
+            if (!$this->has_perm($t['permission'])) {
+                $this->output->set_status_header(403);
+                $this->respond(false, 'You do not have permission to ' . strtolower($t['label']) . '.');
+            }
+            $r = $this->Abom_approval_model->advance($bom, $user_id, $user_name, $comment);
+
+        } elseif ($what === 'reject') {
+            $r = $this->Abom_approval_model->reject($bom, $user_id, $user_name, $comment);
+
+        } elseif ($what === 'reopen') {
+            $r = $this->Abom_approval_model->reopen($bom, $user_id, $user_name, $comment);
+
+        } else {
+            if (!$this->has_perm('save')) {
+                $this->output->set_status_header(403);
+                $this->respond(false, 'You do not have permission to create a revision.');
+            }
+            $r = $this->Abom_approval_model->create_revision($bom, $user_id, $user_name, $comment);
+            if (!$r['ok']) {
+                $this->output->set_status_header(422);
+                $this->respond(false, implode(' ', $r['errors']));
+            }
+            $this->respond(true, 'Revision created.', array(
+                'bom_id'   => $r['bom_id'],
+                'redirect' => page_url . 'abom/view/' . $r['bom_id'],
+            ));
+        }
+
+        if (!$r['ok']) {
+            $this->output->set_status_header(422);
+            $this->respond(false, implode(' ', $r['errors']), array('errors' => $r['errors']));
+        }
+
+        $this->respond(true, 'BOM is now ' . abom_status_label($r['status']) . '.', array(
+            'status'       => $r['status'],
+            'status_label' => abom_status_label($r['status']),
+            'redirect'     => page_url . 'abom/view/' . (int) $bom->id,
+        ));
+    }
+
+    // -----------------------------------------------------------------
+    // EXPORT  (build order step 7)
+    // -----------------------------------------------------------------
+
+    /**
+     * @param string $format  csv|xlsx|pdf
+     * @param int    $bom_id
+     */
+    public function export($format = 'csv', $bom_id = 0)
+    {
+        if (!$this->require_tables()) { return; }
+
+        $this->load->model('Abom_model');
+        $bom = $this->Abom_model->get_bom((int) $bom_id);
+
+        if (!$bom) { show_404(); return; }
+
+        $lines = $this->Abom_model->get_lines((int) $bom_id);
+
+        $this->load->library('Abom_exporter', null, 'abom_exporter');
+
+        switch (strtolower($format)) {
+            case 'xlsx':
+                try {
+                    $out = $this->abom_exporter->xlsx($bom, $lines);
+                } catch (RuntimeException $e) {
+                    // A missing server extension is an operator problem,
+                    // not a stack trace.
+                    $this->output->set_status_header(503);
+                    $this->load->view('abom/export_unavailable', array(
+                        'format'  => 'Excel (XLSX)',
+                        'message' => $e->getMessage(),
+                        'bom'     => $bom,
+                    ));
+                    return;
+                }
+                $this->stream_file($out['filename'],
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    file_get_contents($out['path']));
+                @unlink($out['path']);
+                return;
+
+            case 'pdf':
+                $out = $this->abom_exporter->pdf($bom, $lines);
+                $this->stream_file($out['filename'], 'application/pdf', $out['body']);
+                return;
+
+            case 'csv':
+            default:
+                $out = $this->abom_exporter->csv($bom, $lines);
+                $this->stream_file($out['filename'], 'text/csv; charset=UTF-8', $out['body']);
+                return;
+        }
+    }
+
+    /**
+     * @param string $filename
+     * @param string $mime
+     * @param string $body
+     */
+    private function stream_file($filename, $mime, $body)
+    {
+        $this->output
+            ->set_content_type($mime)
+            ->set_header('Content-Disposition: attachment; filename="' . $filename . '"')
+            ->set_header('Content-Length: ' . strlen($body))
+            ->set_output($body);
+    }
+
+    /**
+     * Everything the approval panel needs: the next transition, whether
+     * this user may perform it, what is currently blocking it, the
+     * trail, and whether the ACL is even configured.
+     *
+     * @param  object $bom
+     * @return array
+     */
+    private function workflow_state($bom)
+    {
+        $state = array(
+            'enabled'      => false,
+            'configured'   => false,
+            'problems'     => array(),
+            'next'         => null,
+            'may'          => false,
+            'blockers'     => array(),
+            'trail'        => array(),
+            'can_reject'   => false,
+            'can_reopen'   => false,
+            'can_revise'   => false,
+            'status_label' => abom_status_label(isset($bom->status) ? $bom->status : ''),
+        );
+
+        if (empty($bom->id)) {
+            return $state;              // unsaved preview has no workflow
+        }
+
+        $state['enabled'] = true;
+
+        $this->load->library('Abom_permission_guard', null, 'abom_permission_guard');
+        $state['configured'] = $this->abom_permission_guard->is_configured();
+        $state['problems']   = $this->abom_permission_guard->problems();
+
+        $this->load->model('Abom_approval_model');
+        $user_id = $this->current_user_id();
+
+        $state['next']     = $this->Abom_approval_model->next_transition($bom->status);
+        $state['blockers'] = $this->Abom_approval_model->blockers($bom, $user_id);
+        $state['trail']    = $this->Abom_approval_model->trail((int) $bom->id);
+
+        if ($state['configured'] && $state['next']) {
+            $state['may'] = $this->has_perm($state['next']['permission']);
+        }
+
+        $state['can_reject'] = $state['configured']
+            && in_array($bom->status, array('submitted', 'checked', 'eng_approved'), true);
+        $state['can_reopen'] = ($bom->status === 'rejected');
+        $state['can_revise'] = $state['configured'] && ($bom->status === 'approved');
+
+        return $state;
+    }
+
+    /**
+     * @return string
+     */
+    private function current_user_name()
+    {
+        $session = $this->session->userdata('logged_in');
+        $name = trim(
+            (isset($session['first_name']) ? $session['first_name'] : '') . ' ' .
+            (isset($session['last_name']) ? $session['last_name'] : '')
+        );
+
+        return $name !== '' ? $name : 'User ' . $this->current_user_id();
+    }
+
     /**
      * Saved BOMs.
      */
@@ -459,6 +754,7 @@ class Abom extends CI_Controller
             'qty_editable'       => (bool) $qty_editable,
             'qty_locked_reason'  => $this->qty_locked_reason($bom, $editable),
             'presets'            => $this->reference_presets(),
+            'workflow'           => $this->workflow_state($bom),
             'chips'              => $this->header_chips($bom, $family_code, $defaults['panel_location']),
             'family_code'        => $family_code,
             'family_explanation' => ($result !== null && isset($result['family']['explanation']))
@@ -910,54 +1206,50 @@ class Abom extends CI_Controller
     }
 
     /**
-     * Permission check against the project's module_capablity ACL.
-     * moduleid 4 (BOM CORRECTION TOOL); submodules 74 / 75 / 76.
+     * Permission check, delegated to Abom_permission_guard.
      *
-     * Mirrors Master_profile_guard's own behaviour: if the module has
-     * not been provisioned yet — that is, the submodule row does not
-     * exist because Database/abom_003_permissions.sql has not been run —
-     * access is allowed, so installing the module does not lock every
-     * role out before the permission rows land.
+     * The guard also validates that the configured submodule ids exist
+     * and belong to module 4, so an unconfigured module reports itself
+     * as a configuration problem rather than as an access denial.
      *
-     * @param  string $perm_key  generate|save|check|eng_approve|proc_approve|master_edit
+     * @param  string $action
      * @return bool
      */
-    private function has_perm($perm_key)
+    private function has_perm($action)
     {
-        $perms = $this->abom('abom_perms');
+        $this->load->library('Abom_permission_guard', null, 'abom_permission_guard');
 
-        if (!isset($perms[$perm_key])) {
-            return false;
-        }
+        return $this->abom_permission_guard->allows($action);
+    }
 
-        $moduleid    = (int) $perms[$perm_key]['moduleid'];
-        $submoduleid = (int) $perms[$perm_key]['submoduleid'];
+    /**
+     * Renders the ACL diagnostic and returns FALSE when the module's
+     * permission wiring is not configured. Same spirit as
+     * require_tables().
+     *
+     * @return bool
+     */
+    private function require_permissions_configured()
+    {
+        $this->load->library('Abom_permission_guard', null, 'abom_permission_guard');
 
-        if (!$this->db->table_exists('submodule') || !$this->db->table_exists('module_capablity')) {
+        if ($this->abom_permission_guard->is_configured()) {
             return true;
         }
 
-        $provisioned = $this->db->from('submodule')
-            ->where('id', $submoduleid)
-            ->count_all_results();
+        $problems = $this->abom_permission_guard->problems();
 
-        if ($provisioned === 0) {
-            return true;                      // not provisioned yet
-        }
-
-        $session = $this->session->userdata('logged_in');
-        $role_id = !empty($session['role']) ? (int) $session['role'] : 0;
-
-        if ($role_id <= 0) {
+        if ($this->input->is_ajax_request()) {
+            $this->output->set_status_header(503);
+            $this->output->set_content_type('application/json');
+            echo json_encode(array('status' => 0,
+                'message' => 'Automation BOM permissions are not configured: ' . implode(' ', $problems)));
             return false;
         }
 
-        return $this->db->from('module_capablity')
-            ->where('role_id', $role_id)
-            ->where('moduleid', $moduleid)
-            ->where('submoduleid', $submoduleid)
-            ->where('submodule_access', 1)
-            ->count_all_results() > 0;
+        $this->load->view('abom/not_configured', array('problems' => $problems));
+
+        return false;
     }
 
     /**

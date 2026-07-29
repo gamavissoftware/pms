@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo sitetitle; ?> Automation BOM <?php echo abom_e($bom->bom_no); ?></title>
+    <title><?php echo sitetitle; ?> Automation BOM — configuration</title>
     <link rel="shortcut icon" href="<?php echo assets_url; ?>images/favicon.ico">
     <link href="<?php echo assets_url; ?>css/bootstrap.min.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/core.css" rel="stylesheet">
@@ -14,7 +14,6 @@
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>abom/abom.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom-print.css" rel="stylesheet" media="all">
 </head>
 <body>
 
@@ -22,23 +21,23 @@
 <?php $this->load->view('common/info-section.php'); ?>
 
 <div class="abom-wrap">
-  <?php $this->load->view('abom/_document'); ?>
+  <div class="abom-guard">
+    <h3>&#9888;&#65039; Automation BOM permissions are not configured</h3>
+    <p>The module is installed, but its ACL wiring has not been completed. This is a
+      <strong>configuration</strong> problem, not a permissions one — nobody is being denied
+      access; the module does not yet know which submodule ids to check.</p>
+    <?php foreach ($problems as $problem): ?>
+      <p style="margin-top:10px;">&bull; <?php echo abom_e($problem); ?></p>
+    <?php endforeach; ?>
+    <p style="margin-top:12px;">Run <code>Database/abom_003_permissions.sql</code>, note the
+      submodule ids it creates, then set them in
+      <code>application/config/abom.php</code> under
+      <code>$config['abom_submodule_ids']</code>.</p>
+    <p style="margin-top:10px;font-size:11px;">Generating and viewing BOMs is unaffected.
+      Only the approval controls are withheld.</p>
+  </div>
 </div>
 
 <?php $this->load->view('common/footer'); ?>
-
-<script src="<?php echo assets_url; ?>js/jquery.min.js"></script>
-<script src="<?php echo assets_url; ?>js/bootstrap.min.js"></script>
-<script src="<?php echo assets_url; ?>js/jquery.core.js"></script>
-<script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
-<script>
-window.ABOM_LINE_QTY_URL = "<?php echo page_url; ?>abom/save_line_qty";
-window.ABOM_BOM_ID       = <?php echo (int) $bom->id; ?>;
-window.ABOM_WF_ADVANCE_URL  = "<?php echo page_url; ?>abom/approve";
-window.ABOM_WF_REJECT_URL   = "<?php echo page_url; ?>abom/reject";
-window.ABOM_WF_REOPEN_URL   = "<?php echo page_url; ?>abom/reopen";
-window.ABOM_WF_REVISION_URL = "<?php echo page_url; ?>abom/create_revision";
-</script>
-<script src="<?php echo assets_url; ?>abom/abom.js"></script>
 </body>
 </html>

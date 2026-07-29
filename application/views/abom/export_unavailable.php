@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo sitetitle; ?> Automation BOM <?php echo abom_e($bom->bom_no); ?></title>
+    <title><?php echo sitetitle; ?> Automation BOM — export unavailable</title>
     <link rel="shortcut icon" href="<?php echo assets_url; ?>images/favicon.ico">
     <link href="<?php echo assets_url; ?>css/bootstrap.min.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/core.css" rel="stylesheet">
@@ -14,7 +14,6 @@
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>abom/abom.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom-print.css" rel="stylesheet" media="all">
 </head>
 <body>
 
@@ -22,23 +21,20 @@
 <?php $this->load->view('common/info-section.php'); ?>
 
 <div class="abom-wrap">
-  <?php $this->load->view('abom/_document'); ?>
+  <div class="abom-guard">
+    <h3>&#9888;&#65039; <?php echo abom_e($format); ?> export is unavailable on this server</h3>
+    <p><?php echo abom_e($message); ?></p>
+    <p style="margin-top:12px;">The other formats are unaffected:</p>
+    <p style="margin-top:6px;">
+      <a class="btn-sm btn-export" href="<?php echo page_url; ?>abom/export/csv/<?php echo (int) $bom->id; ?>">Export CSV</a>
+      &nbsp;
+      <a class="btn-sm btn-export" href="<?php echo page_url; ?>abom/export/pdf/<?php echo (int) $bom->id; ?>">Export PDF</a>
+      &nbsp;
+      <a class="btn-sm btn-print" href="<?php echo page_url; ?>abom/view/<?php echo (int) $bom->id; ?>">Back to the BOM</a>
+    </p>
+    </div>
 </div>
 
 <?php $this->load->view('common/footer'); ?>
-
-<script src="<?php echo assets_url; ?>js/jquery.min.js"></script>
-<script src="<?php echo assets_url; ?>js/bootstrap.min.js"></script>
-<script src="<?php echo assets_url; ?>js/jquery.core.js"></script>
-<script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
-<script>
-window.ABOM_LINE_QTY_URL = "<?php echo page_url; ?>abom/save_line_qty";
-window.ABOM_BOM_ID       = <?php echo (int) $bom->id; ?>;
-window.ABOM_WF_ADVANCE_URL  = "<?php echo page_url; ?>abom/approve";
-window.ABOM_WF_REJECT_URL   = "<?php echo page_url; ?>abom/reject";
-window.ABOM_WF_REOPEN_URL   = "<?php echo page_url; ?>abom/reopen";
-window.ABOM_WF_REVISION_URL = "<?php echo page_url; ?>abom/create_revision";
-</script>
-<script src="<?php echo assets_url; ?>abom/abom.js"></script>
 </body>
 </html>

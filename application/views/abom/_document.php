@@ -90,6 +90,8 @@ $editable = isset($editable) ? (bool) $editable : false;
           <?php $this->load->view('abom/_table', array('qty_editable' => !empty($qty_editable))); ?>
         </div>
 
+        <?php $this->load->view('abom/_workflow'); ?>
+
         <?php $this->load->view('abom/_approval_block'); ?>
 
       </div>

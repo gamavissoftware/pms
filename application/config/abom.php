@@ -61,20 +61,55 @@ $config['abom_stages'] = array('prepare', 'check', 'eng_approve', 'proc_approve'
 //                (Engineering) and Approved By (Procurement) split out.
 $config['abom_signoff_mode'] = 'customer';
 
-// Permission keys, mapped onto the project's module_capablity ACL.
+// ---------------------------------------------------------------------
+// PERMISSIONS — module_capablity ACL wiring
+// ---------------------------------------------------------------------
 // moduleid 4 = BOM CORRECTION TOOL.
-//   submodule 74 AUTOMATION BOM GENERATOR    -> generate, save
-//   submodule 75 AUTOMATION BOM APPROVALS    -> check, eng_approve, proc_approve
-//   submodule 76 AUTOMATION BOM MASTER ITEMS -> master_edit
+//
+// The three submodule ids are DELIBERATELY UNSET. They must be filled in
+// with the real numbers from the live `submodule` table after
+// Database/abom_003_permissions.sql has been run there.
+//
+// Shipping them unset is intentional. If this file carried guessed ids
+// and the live table used different ones, every permission check would
+// return false, the approval buttons would silently vanish, and it would
+// look like a permissions problem rather than a configuration one.
+// Abom_permission_guard verifies each configured id actually exists and
+// is attached to module 4, and refuses to render the approval controls
+// with a specific diagnostic if it does not. See abom_submodule_ids
+// below — leave a value NULL and the guard tells the operator exactly
+// which one to set and where.
 $config['abom_module_id'] = 4;
-$config['abom_perms'] = array(
-    'generate'     => array('moduleid' => 4, 'submoduleid' => 74),
-    'save'         => array('moduleid' => 4, 'submoduleid' => 74),
-    'check'        => array('moduleid' => 4, 'submoduleid' => 75),
-    'eng_approve'  => array('moduleid' => 4, 'submoduleid' => 75),
-    'proc_approve' => array('moduleid' => 4, 'submoduleid' => 75),
-    'master_edit'  => array('moduleid' => 4, 'submoduleid' => 76),
+
+$config['abom_submodule_ids'] = array(
+    'generator'    => null,   // AUTOMATION BOM GENERATOR
+    'approvals'    => null,   // AUTOMATION BOM APPROVALS
+    'master_items' => null,   // AUTOMATION BOM MASTER ITEMS
 );
+
+// Action -> submodule group. The ids come from abom_submodule_ids above.
+$config['abom_perms'] = array(
+    'generate'     => 'generator',
+    'save'         => 'generator',
+    'check'        => 'approvals',
+    'eng_approve'  => 'approvals',
+    'proc_approve' => 'approvals',
+    'master_edit'  => 'master_items',
+);
+
+// ---------------------------------------------------------------------
+// EXPORT
+// ---------------------------------------------------------------------
+// TCPDF core fonts (helvetica and friends) are NOT Unicode. The seed
+// contains Ω (U+03A9) and the design depends on ✎ (U+270E); rendered
+// with a core font both come out as '?'. Verified by
+// BOMMODULEDEVELOPMENT/tests/pdf_glyph_probe.php — dejavusans renders
+// Ω ✎ — – ° ⚠ · − correctly, helvetica mangles four of them.
+// Do not change this to a core font.
+$config['abom_pdf_font']       = 'dejavusans';
+$config['abom_pdf_font_size']  = 7;
+$config['abom_pdf_orientation'] = 'L';
+$config['abom_pdf_format']     = 'A4';
 
 // Tables the module owns. Used by the tables_ready() guard.
 $config['abom_tables'] = array(

@@ -38,7 +38,8 @@
   .abom-wrap .btn-sm,
   .abom-wrap .app-header .badge,
   .abom-wrap .abom-guard,
-  .abom-wrap .qty-lock-note { display: none !important; }
+  .abom-wrap .qty-lock-note,
+  .abom-wrap .abom-workflow { display: none !important; }
 
   .abom-wrap .layout { display: block; }
   .abom-wrap .main { overflow: visible; }
