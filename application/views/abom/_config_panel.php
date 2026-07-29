@@ -29,6 +29,7 @@ $families           = isset($families) ? $families : array();
 $features           = isset($features) ? $features : array();
 $active_features    = isset($active_features) ? $active_features : array();
 $family_explanation = isset($family_explanation) ? $family_explanation : '';
+$presets            = isset($presets) ? $presets : array();
 
 $ro   = $editable ? '' : ' class="ro" readonly';
 $roc  = $editable ? '' : ' ro';
@@ -49,6 +50,33 @@ function abom_inv($errors, $field)
 <aside class="sidebar">
   <div class="sidebar-title">&#128295; Machine Configuration</div>
   <div class="sidebar-body">
+
+    <?php if ($editable && !empty($presets)): ?>
+      <?php
+      // CONFIGURATION presets, not data loaders. Each fills the panel
+      // with a known machine configuration; the engine then generates
+      // from those inputs like any other configuration. That gives a
+      // one-click starting point and doubles as a live regression check
+      // against the 29 / 42 counts.
+      ?>
+      <div class="form-group">
+        <label>Load Reference Configuration</label>
+        <?php foreach ($presets as $key => $preset): ?>
+          <button type="button" class="preset-card" data-preset="<?php echo abom_e($key); ?>"
+                  data-cfg="<?php echo abom_e(json_encode($preset['cfg'])); ?>"
+                  data-dfref="<?php echo abom_e($preset['df_ref']); ?>">
+            <span class="pc-df"><?php echo abom_e($preset['title']); ?></span>
+            <span class="pc-line"><?php echo abom_e($preset['summary']); ?><br><?php echo abom_e($preset['panel']); ?></span>
+            <span class="pc-tags">
+              <?php foreach ($preset['tags'] as $tag): ?>
+                <span class="pc-tag pc-<?php echo abom_e($tag[0]); ?>"><?php echo abom_e($tag[1]); ?></span>
+              <?php endforeach; ?>
+            </span>
+          </button>
+        <?php endforeach; ?>
+      </div>
+      <hr class="divider">
+    <?php endif; ?>
 
     <div id="cfgFields">
       <div class="cfg-2col">
@@ -230,6 +258,6 @@ function abom_inv($errors, $field)
       <hr class="divider">
     </div>
 
-    <?php $this->load->view('bom/_legend'); ?>
+    <?php $this->load->view('abom/_legend'); ?>
   </div>
 </aside>

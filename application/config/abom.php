@@ -14,6 +14,21 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 $config['abom_table_prefix']   = 'abom_';
 $config['abom_default_uom']    = 'NOS';
 
+// UOM presentation map. The STORED value stays canonical ('NOS') — it is
+// what an ERP UOM master expects and what any machine-readable or
+// ERP-bound export must emit. The printed document has to read 'NO(S)'
+// because procurement and the customer put it side by side with the
+// released DF. Applied in the view, print, PDF and XLSX renderers only.
+// A UOM not in this map falls through unchanged.
+$config['abom_uom_display'] = array(
+    'NOS' => 'NO(S)',
+);
+
+// Workflow states in which a line quantity may still be edited.
+// Once a BOM is engineering-approved the printed quantities must not be
+// typeable over — see abom_qty_editable() in helpers/bom_helper.php.
+$config['abom_qty_editable_status'] = array('draft', 'submitted', 'checked', 'rejected');
+
 // Own numbering series. The existing DF register (DF_revision,
 // Df_change_control, Df_dispatch_plan) owns the "DF-" namespace; this
 // module must not mint into it. A generated BOM may still REFERENCE a

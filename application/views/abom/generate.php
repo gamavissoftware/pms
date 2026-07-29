@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo sitetitle; ?> Automation BOM <?php echo abom_e($bom->bom_no); ?></title>
+    <title><?php echo sitetitle; ?> Automation BOM Generator</title>
     <link rel="shortcut icon" href="<?php echo assets_url; ?>images/favicon.ico">
     <link href="<?php echo assets_url; ?>css/bootstrap.min.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/core.css" rel="stylesheet">
@@ -22,7 +22,7 @@
 <?php $this->load->view('common/info-section.php'); ?>
 
 <div class="abom-wrap">
-  <?php $this->load->view('bom/_document'); ?>
+  <?php $this->load->view('abom/_document'); ?>
 </div>
 
 <?php $this->load->view('common/footer'); ?>
@@ -32,5 +32,7 @@
 <script src="<?php echo assets_url; ?>js/jquery.core.js"></script>
 <script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
 <script src="<?php echo assets_url; ?>bom/bom.js"></script>
+<script src="<?php echo assets_url; ?>bom/bom-generate.js"></script>
+<script>window.ABOM_GENERATE_URL = "<?php echo page_url; ?>abom/generate_ajax";</script>
 </body>
 </html>

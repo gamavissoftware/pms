@@ -25,6 +25,67 @@ if (!function_exists('abom_e')) {
     }
 }
 
+if (!function_exists('abom_uom')) {
+    /**
+     * UOM for HUMAN-READABLE output: screen, print, PDF, XLSX.
+     *
+     * Maps the canonical stored code to what the released DF prints —
+     * 'NOS' becomes 'NO(S)'. Anything not in the map passes through
+     * unchanged.
+     *
+     * Machine-readable and ERP-bound exports MUST use the raw stored
+     * value and must not call this.
+     *
+     * @param  string $uom
+     * @return string
+     */
+    function abom_uom($uom)
+    {
+        $uom = (string) $uom;
+        $map = get_instance()->config->item('abom_uom_display', 'abom');
+
+        if (is_array($map) && isset($map[$uom])) {
+            return $map[$uom];
+        }
+
+        return $uom;
+    }
+}
+
+if (!function_exists('abom_qty_editable')) {
+    /**
+     * May line quantities be edited on this BOM?
+     *
+     * Driven by workflow state, never by a default. An engineering- or
+     * procurement-approved BOM is the document someone is about to print
+     * and send: its quantities must not be typeable over.
+     *
+     *   draft / submitted / checked / rejected -> editable
+     *   eng_approved / approved / superseded   -> locked
+     *
+     * An unsaved BOM (id 0, generator screen) is editable: its
+     * quantities are form state that will be posted on save.
+     *
+     * @param  object $bom
+     * @return bool
+     */
+    function abom_qty_editable($bom)
+    {
+        $status = isset($bom->status) ? (string) $bom->status : '';
+
+        if ($status === '') {
+            return true;                      // unsaved / generator
+        }
+
+        $allowed = get_instance()->config->item('abom_qty_editable_status', 'abom');
+        if (!is_array($allowed)) {
+            $allowed = array('draft', 'submitted', 'checked', 'rejected');
+        }
+
+        return in_array($status, $allowed, true);
+    }
+}
+
 if (!function_exists('abom_row_class')) {
     /**
      * Modifier class for a data-row. Comes straight from the engine.

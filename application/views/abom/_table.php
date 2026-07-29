@@ -11,17 +11,22 @@
  *   S.NO. | ERP CODE | DESCRIPTION | MODEL NO. / PART NO. | MANUFACTURER
  *   | QTY. | UOM | REMARKS | STATUS
  *
- * $qty_editable defaults to TRUE and stays TRUE on the view page. The
- * design document keeps its quantity inputs live on the released-BOM
- * view — "Quantities in the table remain editable for review markups" —
- * and that is where the ✎ marker comes from. It is separate from
- * $editable, which governs the configuration panel only.
+ * $qty_editable is decided by the CALLER from workflow state via
+ * abom_qty_editable() — never by a default here. The design keeps its
+ * quantity inputs live for review markups, and that is where the ✎
+ * marker comes from, but an engineering- or procurement-approved BOM is
+ * the document someone is about to print and send: it renders a static
+ * quantity with no edit affordance. It is separate from $editable, which
+ * governs the configuration panel only.
+ *
+ * Defaults to FALSE. A caller that forgets to pass it gets the safe,
+ * read-only rendering rather than an editable released document.
  *
  * @var array $lines
- * @var bool  $qty_editable  optional, default true
+ * @var bool  $qty_editable  required; defaults to FALSE if omitted
  */
 
-$qty_editable = isset($qty_editable) ? (bool) $qty_editable : true;
+$qty_editable = isset($qty_editable) ? (bool) $qty_editable : false;
 
 // Line counts per section, for the "(n items)" caption on each sec-row.
 $section_counts = array();
@@ -78,7 +83,7 @@ $current_section = null;
           <td class="part-cell"><?php echo $line->part_no !== '' ? abom_e($line->part_no) : '&mdash;'; ?></td>
           <td style="text-align:center;"><?php echo $line->manufacturer !== '' ? abom_e($line->manufacturer) : '&mdash;'; ?></td>
           <td style="text-align:center;"><?php echo abom_qty_cell($line, $qty_editable); ?></td>
-          <td style="text-align:center;"><?php echo abom_e($line->uom); ?></td>
+          <td style="text-align:center;"><?php echo abom_e(abom_uom($line->uom)); ?></td>
           <td class="remarks-cell"><?php echo abom_remarks_cell($line); ?></td>
           <td style="text-align:center;"><?php echo abom_status_badges($line); ?></td>
         </tr>

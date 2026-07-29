@@ -209,16 +209,55 @@ class Abom_stub_item_model
     }
 }
 
+/**
+ * Stands in for CI_Config. Reads the REAL application/config/abom.php so
+ * the helper's UOM map and quantity-lock rules are the shipped ones, not
+ * a copy that can drift.
+ */
+class Abom_stub_config
+{
+    private $values = array();
+
+    public function __construct($root)
+    {
+        $config = array();
+        $file   = $root . '/application/config/abom.php';
+
+        if (is_readable($file)) {
+            defined('BASEPATH') OR define('BASEPATH', true);
+            include $file;
+        }
+
+        $this->values = $config;
+    }
+
+    public function item($key, $section = '')
+    {
+        return isset($this->values[$key]) ? $this->values[$key] : null;
+    }
+
+    public function set_item($key, $value)
+    {
+        $this->values[$key] = $value;
+    }
+}
+
 /** Stands in for the CI super-object returned by get_instance(). */
 class Abom_stub_ci
 {
     public $load;
+    public $config;
     public $Bom_master_model;
     public $Bom_item_model;
 
-    public function __construct(Abom_seed_parser $seed)
+    public function __construct(Abom_seed_parser $seed, $root = null)
     {
+        if ($root === null) {
+            $root = dirname(dirname(__DIR__));
+        }
+
         $this->load             = new Abom_stub_loader();
+        $this->config           = new Abom_stub_config($root);
         $this->Bom_master_model = new Abom_stub_master_model($seed);
         $this->Bom_item_model   = new Abom_stub_item_model($seed);
     }

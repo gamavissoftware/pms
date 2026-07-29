@@ -37,7 +37,8 @@
   .abom-wrap .btn-reset,
   .abom-wrap .btn-sm,
   .abom-wrap .app-header .badge,
-  .abom-wrap .abom-guard { display: none !important; }
+  .abom-wrap .abom-guard,
+  .abom-wrap .qty-lock-note { display: none !important; }
 
   .abom-wrap .layout { display: block; }
   .abom-wrap .main { overflow: visible; }

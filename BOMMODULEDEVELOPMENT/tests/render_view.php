@@ -3,7 +3,7 @@
  * render_view.php
  *
  * Renders the module's read-only document view (the .abom-wrap block of
- * application/views/bom/view.php) with no CodeIgniter bootstrap and no
+ * application/views/abom/view.php) with no CodeIgniter bootstrap and no
  * database, so the output can be diffed against the approved design
  * document.
  *
@@ -72,11 +72,15 @@ class Abom_render_loader
 $engine = new Bom_engine();
 $master = $GLOBALS['ABOM_STUB_CI']->Bom_master_model;
 
-$which = isset($argv[1]) ? strtolower($argv[1]) : 'iqr';
+$which    = isset($argv[1]) ? strtolower($argv[1]) : 'iqr';
+$editable = isset($argv[2]) && $argv[2] === 'generate';
 
 $presets = array(
     'fx5' => array(
         'bom_no' => 'ABOM-REF-FX5', 'df_ref' => 'DF-1827', 'revision' => '',
+        'title' => 'DF-1827', 'summary' => 'SPM1200L · 8 Axis · 12 Track · 140 PPM · LHS',
+        'panel' => 'Panel With Machine · expect 29 line items',
+        'tags' => array(array('fx5','FX5'), array('int','Intermittent')),
         'cfg' => array(
             'axes' => 8, 'tracks' => 12, 'speed_ppm' => 140,
             'motion_type' => 'Intermittent', 'machine_model' => 'SPM1200L',
@@ -86,6 +90,9 @@ $presets = array(
     ),
     'iqr' => array(
         'bom_no' => 'ABOM-REF-IQR', 'df_ref' => 'DF-1826', 'revision' => '02',
+        'title' => 'DF-1826 · REV.02', 'summary' => 'SPM1200L · 15 Axis · 12 Track · 180 PPM',
+        'panel' => 'Standalone Panel · expect 42 line items',
+        'tags' => array(array('iqr','iQ-R'), array('cont','Continuous')),
         'cfg' => array(
             'axes' => 15, 'tracks' => 12, 'speed_ppm' => 180,
             'motion_type' => 'Continuous', 'machine_model' => 'SPM1200L',
@@ -148,15 +155,35 @@ foreach ($conflict as $erp => $where) {
     }
 }
 
+$chips = array();
+$chips[] = array('class' => '', 'label' => $bom->bom_no . ($bom->revision !== '' ? ' · REV.' . $bom->revision : ''));
+$chips[] = array('class' => 'lite', 'label' => $bom->machine_model);
+$chips[] = array('class' => 'lite', 'label' => $bom->axes . ' Axis');
+$chips[] = array('class' => 'lite', 'label' => $bom->tracks . ' Track');
+$chips[] = array('class' => 'lite', 'label' => $bom->speed_ppm . ' PPM');
+if ($bom->machine_side !== '' && $bom->machine_side !== 'N/A') { $chips[] = array('class' => 'lite', 'label' => $bom->machine_side); }
+$chips[] = array('class' => 'cont', 'label' => $bom->motion_type);
+foreach ($master->get_features() as $code => $feature) {
+    if (!empty($cfg['features'][$code])) { $chips[] = array('class' => 'cont', 'label' => $feature->label); }
+}
+$chips[] = array('class' => ($result['family']['code'] === 'FX5' ? 'fx5' : 'iqr'),
+                 'label' => ($result['family']['code'] === 'FX5' ? 'FX5 Series' : 'iQ-R Series'));
+if ($defaults['panel_location'] !== '') { $chips[] = array('class' => 'lite', 'label' => $defaults['panel_location']); }
+$chips[] = array('class' => 'lite', 'label' => 'Draft');
+
+foreach ($presets as $k => $pv) {
+    $presets[$k]['cfg'] = $pv['cfg'];
+}
+
 $loader = new Abom_render_loader($root);
 
 ob_start();
-$loader->view('bom/_document', array(
+$loader->view('abom/_document', array(
     'bom'                => $bom,
     'lines'              => $result['lines'],
     'sections'           => $result['sections'],
     'stats'              => $result['stats'],
-    'editable'           => false,
+    'editable'           => $editable,
     'family_code'        => $result['family']['code'],
     'family_explanation' => $result['family']['explanation'],
     'overridden'         => !empty($result['overridden']),
@@ -166,6 +193,10 @@ $loader->view('bom/_document', array(
     'active_features'    => $cfg['features'],
     'errors'             => array(),
     'notes'              => $notes,
+    'qty_editable'       => $editable,
+    'qty_locked_reason'  => $editable ? '' : 'Quantity editing is disabled until the save path is in place, so that no markup can be lost on refresh.',
+    'presets'            => $presets,
+    'chips'              => $chips,
     'signoff_mode'       => 'customer',
     'signoff_names'      => array(),
     'models'             => array('SPM1200L', 'SPM1250P'),

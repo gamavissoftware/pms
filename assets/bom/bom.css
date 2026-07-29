@@ -93,8 +93,8 @@
 .abom-wrap .preset-card:hover { border-color: var(--blue); }
 .abom-wrap .preset-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .abom-wrap .preset-card.active { border-color: var(--navy); background: var(--lblue); }
-.abom-wrap .preset-card .pc-df { font-size: 13px; font-weight: 700; color: var(--navy); }
-.abom-wrap .preset-card .pc-line { font-size: 11px; color: var(--dgray); margin-top: 3px; line-height: 1.5; }
+.abom-wrap .preset-card .pc-df { display: block; font-size: 13px; font-weight: 700; color: var(--navy); }
+.abom-wrap .preset-card .pc-line { display: block; font-size: 11px; color: var(--dgray); margin-top: 3px; line-height: 1.5; }
 .abom-wrap .preset-card .pc-tags { margin-top: 6px; display: flex; gap: 5px; flex-wrap: wrap; }
 .abom-wrap .pc-tag {
   font-size: 9px; font-weight: 700; letter-spacing: .4px;
@@ -106,10 +106,14 @@
 .abom-wrap .pc-int  { background: #EEE; color: #555; }
 
 .abom-wrap .form-group { margin-bottom: 12px; }
-.abom-wrap .form-group label {
+.abom-wrap .form-group > label {
   display: block; font-size: 11px; font-weight: 700;
   color: var(--navy); margin-bottom: 4px; text-transform: uppercase;
   letter-spacing: .4px;
+}
+.abom-wrap .form-group label.feature-item {
+  font-size: 11.5px; font-weight: 400; color: #333;
+  text-transform: none; letter-spacing: 0; margin-bottom: 0;
 }
 .abom-wrap .form-group input,
 .abom-wrap .form-group select {
@@ -399,4 +403,14 @@
 
 @media (prefers-reduced-motion: reduce) {
   .abom-wrap * { transition: none !important; }
+}
+
+/* ── QTY LOCK NOTICE ──────────────────────────────────────────────── */
+/* Shown when line quantities are read-only, so the reason is explicit
+   rather than the input silently being absent. */
+.abom-wrap .qty-lock-note {
+  background: var(--gray); border: 1.5px solid var(--border);
+  border-left: 4px solid var(--dgray); border-radius: 6px;
+  padding: 8px 12px; margin-bottom: 12px;
+  font-size: 11px; color: var(--dgray);
 }

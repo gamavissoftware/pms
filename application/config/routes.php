@@ -55,3 +55,20 @@ $route['translate_uri_dashes'] = FALSE;
 $route['generate-barcode'] = 'BarcodeController/generate';
 $route['scan-barcode'] = 'BarcodeController/scan';
 $route['update-record'] = 'BarcodeController/update_record';
+
+/*
+| -------------------------------------------------------------------------
+| Automation BOM Generator  (application/controllers/Abom.php)
+| -------------------------------------------------------------------------
+| Own URL namespace: /abom/... . The class is named Abom, not Bom, so it
+| cannot collide with the BOM controller that Leads.php links to, and so
+| CI's default routing does not expose a second /bom/... namespace.
+| The existing DF register (DF_revision, Df_change_control,
+| Df_dispatch_plan) and the Store/FMS BOM screens are untouched.
+*/
+$route['abom']                  = 'abom/index';
+$route['abom/generate']         = 'abom/generate';
+$route['abom/generate_ajax']    = 'abom/generate_ajax';      // POST, AJAX
+$route['abom/reference/(:any)'] = 'abom/reference/$1';
+$route['abom/view/(:num)']      = 'abom/view/$1';
+$route['abom/print/(:num)']     = 'abom/printable/$1';

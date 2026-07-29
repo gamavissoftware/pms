@@ -2,7 +2,7 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * Bom — Automation BOM Generator
+ * Abom — Automation BOM Generator
  *
  * Conventions match application/controllers/Df_dispatch_plan.php: the
  * session logged_in check in the constructor, the json_only()/respond()
@@ -13,14 +13,20 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * CSRF is left exactly as the project has it ($config['csrf_protection']
  * is FALSE application-wide); no tokens are introduced here.
  *
- * URLs are /abom/... — see application/config/routes.php. The class
- * keeps the spec's file name (section 4) while the routes give the
- * module its own URL namespace, away from the existing DF register and
- * the Store/FMS BOM screens.
+ * URLs are /abom/... — see application/config/routes.php.
+ *
+ * The class is deliberately NOT named Bom. Leads.php links to a `BOM`
+ * controller (BOM/pis, BOM/bom, BOM/edit_bom_testing, ...) and loads
+ * BOM/* views. Neither exists in this working copy, but this copy is
+ * partial — system/ is absent too — so they may well exist in
+ * production. On a case-insensitive filesystem Bom.php and BOM.php are
+ * the SAME FILE. Naming this class Abom removes both the collision risk
+ * and the second live /bom/... URL namespace that CI's default routing
+ * would otherwise expose.
  *
  * PHP 7.4 compatible (production runs ea-php74).
  */
-class Bom extends CI_Controller
+class Abom extends CI_Controller
 {
     public function __construct()
     {
@@ -41,9 +47,114 @@ class Bom extends CI_Controller
     // SCREENS
     // -----------------------------------------------------------------
 
+    /**
+     * Line-quantity edits are only offered where they can be PERSISTED.
+     *
+     * On the generator screen a quantity is form state — nothing is
+     * saved yet, and the override travels with the save request.
+     *
+     * On the view screen a quantity edit must reach abom_bom_line with
+     * is_overridden set, plus a row in abom_audit_log. That write path
+     * lands with build order step 5. Until it does, this flag keeps the
+     * released document read-only: an edit that vanishes on refresh is
+     * worse than no edit, because someone would mark up the sheet, print
+     * it, and not notice the print came from unedited server state.
+     *
+     * Flip to TRUE in the same commit that adds Abom::save_line_qty().
+     */
+    const QTY_OVERRIDE_PERSISTENCE_AVAILABLE = false;
+
     public function index()
     {
-        redirect(page_url . 'abom/reference/iqr');
+        redirect(page_url . 'abom/generate');
+    }
+
+    /**
+     * The generator screen. Editable configuration panel; the table
+     * below is re-rendered by generate_ajax() without a page reload.
+     */
+    public function generate()
+    {
+        if (!$this->require_tables()) {
+            return;
+        }
+
+        $cfg = $this->config_from_input($this->default_config());
+        $this->load->library('Bom_engine');
+
+        $errors = $this->validate_config($cfg);
+        if (!empty($errors)) {
+            $cfg = $this->default_config();
+            $errors = array();
+        }
+
+        $result = $this->Bom_engine->generate($cfg);
+
+        $bom = $this->bom_header_from_config($cfg, $result);
+        $this->load->model('Bom_model');
+        $bom->bom_no = $this->Bom_model->next_bom_no();
+
+        $this->render_document($bom, $result['lines'], true, $result, $errors);
+    }
+
+    /**
+     * POST, AJAX. Returns JSON. Called on every sidebar change, so it
+     * MUST be fast and MUST NOT write to the database (spec 6.2).
+     */
+    public function generate_ajax()
+    {
+        $this->json_only();
+
+        if (!$this->require_tables()) {
+            return;
+        }
+
+        $cfg    = $this->config_from_input($this->default_config());
+        $errors = $this->validate_config($cfg);
+
+        // Out-of-range values are rejected with a field-level message.
+        // They are never silently clamped.
+        if (!empty($errors)) {
+            $this->output->set_status_header(422);
+            $this->respond(false, 'Please correct the highlighted fields.', array(
+                'errors' => $errors,
+            ));
+        }
+
+        $this->load->library('Bom_engine');
+        $result = $this->Bom_engine->generate($cfg);
+
+        $bom = $this->bom_header_from_config($cfg, $result);
+        $this->load->model('Bom_model');
+        $bom->bom_no = $this->Bom_model->next_bom_no();
+
+        $family_code = $this->Bom_master_model->family_code((int) $result['family_id']);
+        $defaults    = $this->Bom_master_model->family_defaults((int) $result['family_id']);
+
+        // The rendered partial is returned rather than raw rows, so the
+        // row-class precedence stays in one place instead of being
+        // duplicated in JavaScript (spec 6.2).
+        $html = $this->load->view('abom/_table', array(
+            'lines'        => $result['lines'],
+            'qty_editable' => true,
+        ), true);
+
+        $this->respond(true, '', array(
+            'family' => array(
+                'code'        => $family_code,
+                'explanation' => $result['family']['explanation'],
+                'detected'    => $result['family']['code'],
+                'overridden'  => (bool) $result['overridden'],
+                'badge_class' => abom_plc_badge_class($family_code),
+                'chip_class'  => abom_chip_class($family_code),
+            ),
+            'defaults' => $defaults,
+            'stats'    => $result['stats'],
+            'sections' => $result['sections'],
+            'chips'    => $this->header_chips($bom, $family_code, $defaults['panel_location']),
+            'bom_no'   => $bom->bom_no,
+            'html'     => $html,
+        ));
     }
 
     /**
@@ -119,10 +230,11 @@ class Bom extends CI_Controller
     /**
      * @param object $bom
      * @param array  $lines
-     * @param bool   $editable
-     * @param array  $result   optional engine result (reference/generate)
+     * @param bool   $editable  configuration panel editable?
+     * @param array  $result    optional engine result (reference/generate)
+     * @param array  $errors    field => message
      */
-    private function render_document($bom, $lines, $editable, $result = null)
+    private function render_document($bom, $lines, $editable, $result = null, $errors = array())
     {
         $this->load->library('Bom_engine');
 
@@ -150,12 +262,21 @@ class Bom extends CI_Controller
             $active_features = $this->Bom_master_model->default_features();
         }
 
+        // Quantity editability is decided by workflow state, and only
+        // offered at all where the edit can actually be persisted.
+        $qty_editable = $editable
+            || (abom_qty_editable($bom) && self::QTY_OVERRIDE_PERSISTENCE_AVAILABLE);
+
         $data = array(
             'bom'                => $bom,
             'lines'              => $lines,
             'sections'           => $sections,
             'stats'              => $stats,
             'editable'           => (bool) $editable,
+            'qty_editable'       => (bool) $qty_editable,
+            'qty_locked_reason'  => $this->qty_locked_reason($bom, $editable),
+            'presets'            => $this->reference_presets(),
+            'chips'              => $this->header_chips($bom, $family_code, $defaults['panel_location']),
             'family_code'        => $family_code,
             'family_explanation' => ($result !== null && isset($result['family']['explanation']))
                                         ? $result['family']['explanation'] : '',
@@ -165,7 +286,7 @@ class Bom extends CI_Controller
             'families'           => $this->Bom_master_model->get_families(),
             'features'           => $features,
             'active_features'    => $active_features,
-            'errors'             => array(),
+            'errors'             => is_array($errors) ? $errors : array(),
             'notes'              => $this->document_notes($lines),
             'signoff_mode'       => $this->abom('abom_signoff_mode'),
             'signoff_names'      => $this->signoff_names($bom),
@@ -180,7 +301,7 @@ class Bom extends CI_Controller
             'speed_max'          => $this->abom('abom_speed_max'),
         );
 
-        $this->load->view('bom/view', $data);
+        $this->load->view($editable ? 'abom/generate' : 'abom/view', $data);
     }
 
     /**
@@ -304,7 +425,209 @@ class Bom extends CI_Controller
     }
 
     /**
-     * The two spec Appendix B configurations.
+     * Starting configuration for a fresh generator screen.
+     *
+     * @return array
+     */
+    private function default_config()
+    {
+        $presets = $this->reference_presets();
+
+        return $presets['iqr']['cfg'];
+    }
+
+    /**
+     * Reads a configuration off the request, falling back to $base for
+     * anything absent. Nothing here computes a quantity or picks a
+     * family — that is Bom_engine's job alone.
+     *
+     * @param  array $base
+     * @return array
+     */
+    private function config_from_input(array $base)
+    {
+        $cfg = $base;
+
+        $ints = array('axes', 'tracks', 'speed_ppm', 'j4_units', 'battery_qty');
+        foreach ($ints as $key) {
+            $raw = $this->input->post($key);
+            if ($raw === null) {
+                $raw = $this->input->get($key);
+            }
+            if ($raw !== null && $raw !== '') {
+                $cfg[$key] = (int) $raw;
+            }
+        }
+
+        $strings = array('motion_type', 'machine_model', 'machine_side', 'df_ref');
+        foreach ($strings as $key) {
+            $raw = $this->input->post($key);
+            if ($raw === null) {
+                $raw = $this->input->get($key);
+            }
+            if ($raw !== null && $raw !== '') {
+                $cfg[$key] = trim((string) $raw);
+            }
+        }
+
+        $family = $this->input->post('plc_family_id');
+        $cfg['plc_family_id'] = ($family !== null && $family !== '') ? (int) $family : null;
+
+        // Absent features array means "none ticked", not "use defaults" —
+        // an unchecked box posts nothing.
+        $posted = $this->input->post('features');
+        if (is_array($posted)) {
+            $features = array();
+            foreach ($this->Bom_master_model->get_features() as $code => $feature) {
+                $features[$code] = !empty($posted[$code]) ? 1 : 0;
+            }
+            $cfg['features'] = $features;
+        }
+
+        return $cfg;
+    }
+
+    /**
+     * Guard rails from application/config/abom.php. Out-of-range values
+     * are REJECTED with a field-level message, never silently clamped
+     * (spec 6.2).
+     *
+     * @param  array $cfg
+     * @return array  field => message
+     */
+    private function validate_config(array $cfg)
+    {
+        $errors = array();
+
+        $ranges = array(
+            'axes'      => array($this->abom('abom_axes_min'),   $this->abom('abom_axes_max'),   'Axes'),
+            'tracks'    => array($this->abom('abom_tracks_min'), $this->abom('abom_tracks_max'), 'Tracks'),
+            'speed_ppm' => array($this->abom('abom_speed_min'),  $this->abom('abom_speed_max'),  'Speed (PPM)'),
+        );
+
+        foreach ($ranges as $field => $spec) {
+            list($min, $max, $label) = $spec;
+            $value = isset($cfg[$field]) ? (int) $cfg[$field] : 0;
+
+            if ($value < (int) $min || $value > (int) $max) {
+                $errors[$field] = $label . ' must be between ' . (int) $min . ' and ' . (int) $max . '.';
+            }
+        }
+
+        foreach (array('j4_units' => 'MR-J4 units', 'battery_qty' => 'Battery quantity') as $field => $label) {
+            $value = isset($cfg[$field]) ? (int) $cfg[$field] : 0;
+            if ($value < 0 || $value > 99) {
+                $errors[$field] = $label . ' must be between 0 and 99.';
+            }
+        }
+
+        if (!in_array($cfg['motion_type'], $this->abom('abom_motion_types'), true)) {
+            $errors['motion_type'] = 'Unknown motion type.';
+        }
+
+        if (!in_array($cfg['machine_model'], $this->abom('abom_models'), true)) {
+            $errors['machine_model'] = 'Unknown machine model.';
+        }
+
+        if (!in_array($cfg['machine_side'], $this->abom('abom_sides'), true)) {
+            $errors['machine_side'] = 'Unknown machine side.';
+        }
+
+        return $errors;
+    }
+
+    /**
+     * The topbar chip row. Carries the configuration, the PLC family,
+     * the panel location, every ENABLED feature gate, and the workflow
+     * status — so the header states what the BOM was generated with.
+     *
+     * @param  object $bom
+     * @param  string $family_code
+     * @param  string $panel_location
+     * @return array
+     */
+    private function header_chips($bom, $family_code, $panel_location)
+    {
+        $chips = array();
+
+        $chips[] = array('class' => '', 'label' => $bom->bom_no
+            . ($bom->revision !== '' ? ' · REV.' . $bom->revision : ''));
+        $chips[] = array('class' => 'lite', 'label' => $bom->machine_model);
+        $chips[] = array('class' => 'lite', 'label' => (int) $bom->axes . ' Axis');
+        $chips[] = array('class' => 'lite', 'label' => (int) $bom->tracks . ' Track');
+        $chips[] = array('class' => 'lite', 'label' => (int) $bom->speed_ppm . ' PPM');
+
+        if (!empty($bom->machine_side) && $bom->machine_side !== 'N/A') {
+            $chips[] = array('class' => 'lite', 'label' => $bom->machine_side);
+        }
+
+        $chips[] = array('class' => 'cont', 'label' => $bom->motion_type);
+
+        // One chip per enabled feature gate — this is the information
+        // the design document's "High Speed" chip was carrying.
+        $active = array();
+        if (!empty($bom->features_json)) {
+            $decoded = json_decode($bom->features_json, true);
+            if (is_array($decoded)) {
+                $active = $decoded;
+            }
+        }
+        foreach ($this->Bom_master_model->get_features() as $code => $feature) {
+            if (!empty($active[$code])) {
+                $chips[] = array('class' => 'cont', 'label' => $feature->label);
+            }
+        }
+
+        $chips[] = array(
+            'class' => abom_chip_class($family_code),
+            'label' => ($family_code === 'FX5') ? 'FX5 Series' : 'iQ-R Series',
+        );
+
+        if (!empty($bom->plc_family_locked)) {
+            $chips[] = array('class' => 'alert', 'label' => 'Family overridden');
+        }
+
+        if ($panel_location !== '') {
+            $chips[] = array('class' => 'lite', 'label' => $panel_location);
+        }
+
+        if (!empty($bom->status)) {
+            $chips[] = array('class' => 'lite', 'label' => abom_status_label($bom->status));
+        }
+
+        return $chips;
+    }
+
+    /**
+     * Why the quantity column is read-only, for the operator.
+     *
+     * @param  object $bom
+     * @param  bool   $editable
+     * @return string  '' when quantities are editable
+     */
+    private function qty_locked_reason($bom, $editable)
+    {
+        if ($editable) {
+            return '';
+        }
+
+        if (!abom_qty_editable($bom)) {
+            return 'Quantities are locked because this BOM is ' . abom_status_label($bom->status) . '.';
+        }
+
+        if (!self::QTY_OVERRIDE_PERSISTENCE_AVAILABLE) {
+            return 'Quantity editing is disabled until the save path is in place, '
+                 . 'so that no markup can be lost on refresh.';
+        }
+
+        return '';
+    }
+
+    /**
+     * The two spec Appendix B configurations. On the generator screen
+     * these are offered as CONFIGURATION presets — they fill the panel
+     * and the engine then generates from those inputs like any other
+     * configuration. They are not data loaders.
      *
      * @return array
      */
@@ -317,6 +640,10 @@ class Bom extends CI_Controller
                 'bom_no'   => 'ABOM-REF-FX5',
                 'df_ref'   => 'DF-1827',
                 'revision' => '',
+                'title'    => 'DF-1827',
+                'summary'  => 'SPM1200L · 8 Axis · 12 Track · 140 PPM · LHS',
+                'panel'    => 'Panel With Machine · expect 29 line items',
+                'tags'     => array(array('fx5', 'FX5'), array('int', 'Intermittent')),
                 'cfg'      => array(
                     'axes' => 8, 'tracks' => 12, 'speed_ppm' => 140,
                     'motion_type' => 'Intermittent', 'machine_model' => 'SPM1200L',
@@ -328,6 +655,10 @@ class Bom extends CI_Controller
                 'bom_no'   => 'ABOM-REF-IQR',
                 'df_ref'   => 'DF-1826',
                 'revision' => '02',
+                'title'    => 'DF-1826 · REV.02',
+                'summary'  => 'SPM1200L · 15 Axis · 12 Track · 180 PPM',
+                'panel'    => 'Standalone Panel · expect 42 line items',
+                'tags'     => array(array('iqr', 'iQ-R'), array('cont', 'Continuous')),
                 'cfg'      => array(
                     'axes' => 15, 'tracks' => 12, 'speed_ppm' => 180,
                     'motion_type' => 'Continuous', 'machine_model' => 'SPM1200L',
@@ -385,7 +716,7 @@ class Bom extends CI_Controller
             return false;
         }
 
-        $this->load->view('bom/not_installed', array('missing' => $missing));
+        $this->load->view('abom/not_installed', array('missing' => $missing));
 
         return false;
     }

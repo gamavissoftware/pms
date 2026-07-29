@@ -40,28 +40,20 @@ $editable = isset($editable) ? (bool) $editable : false;
 
 <div class="layout">
 
-  <?php $this->load->view('bom/_config_panel'); ?>
+  <?php $this->load->view('abom/_config_panel'); ?>
 
   <main class="main">
 
     <div class="bom-topbar" id="configBar">
+      <?php
+      // One chip per configuration value, per ENABLED feature gate, and
+      // for the workflow status — built in the controller so the AJAX
+      // response can replace the whole row.
+      ?>
       <span id="chipRow" style="display:contents;">
-        <span class="config-chip"><?php echo abom_e($bom->bom_no); ?><?php echo $bom->revision !== '' ? ' &middot; REV.' . abom_e($bom->revision) : ''; ?></span>
-        <span class="config-chip lite"><?php echo abom_e($bom->machine_model); ?></span>
-        <span class="config-chip lite"><?php echo (int) $bom->axes; ?> Axis</span>
-        <span class="config-chip lite"><?php echo (int) $bom->tracks; ?> Track</span>
-        <span class="config-chip lite"><?php echo (int) $bom->speed_ppm; ?> PPM</span>
-        <?php if (!empty($bom->machine_side) && $bom->machine_side !== 'N/A'): ?>
-          <span class="config-chip lite"><?php echo abom_e($bom->machine_side); ?></span>
-        <?php endif; ?>
-        <span class="config-chip cont"><?php echo abom_e($bom->motion_type); ?></span>
-        <span class="config-chip <?php echo abom_chip_class($family_code); ?>">
-          <?php echo abom_e($family_code === 'FX5' ? 'FX5 Series' : 'iQ-R Series'); ?>
-        </span>
-        <span class="config-chip lite"><?php echo abom_e($panel_location); ?></span>
-        <?php if (!empty($bom->status)): ?>
-          <span class="config-chip lite"><?php echo abom_e(abom_status_label($bom->status)); ?></span>
-        <?php endif; ?>
+        <?php foreach ($chips as $chip): ?>
+          <span class="config-chip <?php echo abom_e($chip['class']); ?>"><?php echo abom_e($chip['label']); ?></span>
+        <?php endforeach; ?>
       </span>
       <div class="bom-actions">
         <?php if ($editable): ?>
@@ -77,7 +69,7 @@ $editable = isset($editable) ? (bool) $editable : false;
     <div class="bom-area">
       <div id="bomContent">
 
-        <?php $this->load->view('bom/_doc_header'); ?>
+        <?php $this->load->view('abom/_doc_header'); ?>
 
         <div class="filter-pills" id="sectionPills">
           <button type="button" class="pill active" data-filter="ALL">All (<?php echo count($lines); ?>)</button>
@@ -88,11 +80,15 @@ $editable = isset($editable) ? (bool) $editable : false;
           <?php endforeach; ?>
         </div>
 
+        <?php if (!empty($qty_locked_reason)): ?>
+          <div class="qty-lock-note" id="qtyLockNote">&#128274; <?php echo abom_e($qty_locked_reason); ?></div>
+        <?php endif; ?>
+
         <div id="bomTableHost">
-          <?php $this->load->view('bom/_table'); ?>
+          <?php $this->load->view('abom/_table', array('qty_editable' => !empty($qty_editable))); ?>
         </div>
 
-        <?php $this->load->view('bom/_approval_block'); ?>
+        <?php $this->load->view('abom/_approval_block'); ?>
 
       </div>
     </div>
