@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+
+<html>
+
+    <head>
+
+        <meta charset="utf-8">
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <meta name="description" content="">
+
+        <meta name="author" content="<?php echo copyright;?>">
+
+
+
+        <link rel="shortcut icon" href="<?php echo assets_url;?>images/favicon.ico">
+
+
+
+        <title><?php echo sitetitle;?></title>
+
+
+
+        <!-- Table Responsive css -->
+
+        <script src="<?php echo assets_url;?>js/angular.min.js"></script>
+
+         <!-- DataTables -->
+
+        <link href="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>plugins/datatables/fixedHeader.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>plugins/datatables/scroller.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
+
+
+
+        <link href="<?php echo assets_url;?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/core.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/components.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/icons.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/pages.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/menu.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/responsive.css" rel="stylesheet" type="text/css" />
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.7.1/css/bootstrap-datepicker.min.css">
+        <link href="<?php echo assets_url;?>plugins/newselect2/select2.min.css" rel="stylesheet" type="text/css">
+
+        <!-- HTML5 Shiv and Respond.js IE8 support of HTML5 elements and media queries -->
+
+        <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+
+        <!--[if lt IE 9]>
+
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+
+        <![endif]-->
+            
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+ <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" />
+ <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>   
+
+
+        <style>
+
+        table.manglesh thead th {
+
+                background: <?php echo $LOGO->colorcode;?>;
+
+                color:#fff;
+
+                font-weight:bold;
+
+                text-align:center;
+
+            }
+                table.manglesh tbody td {
+                    text-align:center;
+                }
+
+        </style>
+ 
+    </head>
+    <body>
+
+        <!-- Navigation Bar-->
+
+        <header id="topnav">
+
+          <?php $this->load->view('common/nav-menu');?>
+
+        </header>
+
+        <!-- End Navigation Bar-->
+
+
+
+        <?php $this->load->view('common/info-section.php');?>
+
+        <div class="wrapper">
+
+            <div class="container">
+
+
+
+                <!-- Page-Title -->
+
+                <div class="row" style="margin-top:20px;">
+
+                    <div class="col-sm-12 col-xs-12 col-md-12 col-lg-12">
+
+                        <div class="page-title-box">
+
+                         <!-- <div class="btn-group pull-right">
+
+                          <button class="btn btn-success waves-effect waves-light" data-toggle="modal" data-target="#con-close-modal" style="background-color: ;">ADD NEW DEPARTMENT</button>
+
+                               
+
+                            </div> -->
+
+                           
+
+                            <h4 class="page-title text-center">PRODUCT SALES STATISTICS (QTY WISE)</h4><hr>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- end page title end breadcrumb -->
+                <?php 
+                $startdate=$this->uri->segment(3);
+                $enddate=$this->uri->segment(4);
+                $data_type=$this->uri->segment(6);
+                if($this->uri->segment(5)<>'ALL')
+                {
+                $prd=base64_decode($this->uri->segment(5));
+                if($prd=="ALL")
+                {
+                    $prd="ALL";
+                }else
+                {
+
+                   
+                   $pr1=explode(',',$prd);
+                }
+            }else
+            {
+                $prd="ALL";
+            }
+                if($startdate<>'' && $enddate<>'')
+                {
+                $dateone=date('d-m-Y',strtotime($startdate));
+                $datetwo=date('d-m-Y',strtotime($enddate));
+                }else
+                {
+                  $dateone='';
+                $datetwo='';
+                }
+        
+                ?>
+                <span style="color:red;"><?php echo $this->session->flashdata('message'); ?></span>
+                <div class="row">
+                  <div class="col-sm-12 col-xs-12 col-md-12 col-lg-12">
+                    <div class="card-box">
+                        <form action="<?php echo page_url; ?>Sales_stats_reporting/get_product_sale_stats" method="post">
+                      <div class="row">
+                         
+                    
+                        <div class="col-sm-6">
+                        <div class="form-group">
+                          <label for="field-1" class="control-label">PRODUCT</label>
+                          <span style="color:red;">*</span>
+                          <select name="product[]" id="product" class="form-control select2" multiple required>
+                            <option value="ALL" <?php if($prd=='ALL'){?> selected <?php } ?>>ALL</option>
+                            <?php 
+                            $a='';
+                            $reste=$this->db->select('id,instruments_name,pack_size')->from('presto_instruments')->where('status',1)->get();
+                            if($reste->num_rows()>0)
+                            {
+                                foreach($reste->result() as $roww)
+                                {
+                                    if(count($pr1)>0)
+                                    {
+                                       
+                                        if(in_array($roww->id,$pr1))
+                                        {
+                                            $a="selected";
+                                        }else
+                                        {
+                                            $a='';
+                                        }
+                                    }
+                                ?>
+                                <option value="<?php echo $roww->id;?>" <?php echo $a;?>><?php echo $roww->instruments_name;?>-<?php echo $roww->pack_size;?></option>
+                            <?php } } ?>
+                          </select>
+                        </div>
+                      </div>
+
+
+                      <div class="col-sm-3">
+                        <div class="form-group">
+                          <label for="field-1" class="control-label">START DATE</label>
+                          <span style="color:red;">*</span>
+                          <input type="text" name="startdate" id="startdate" value="<?php echo $dateone; ?>" class="form-control datepicker" required >
+                        </div>
+                      </div>
+                      <div class="col-sm-3">
+                        <div class="form-group">
+                          <label for="field-1" class="control-label">END DATE</label>
+                          <span style="color:red;">*</span>
+                          <input type="text" name="enddate" id="enddate" value="<?php echo $datetwo; ?>" class="form-control datepicker" required >
+                        </div>
+                      </div>
+
+                      
+                      
+                    </div>
+                    <div class="row">
+                      <div class="col-sm-12 text-center">
+                          <div class="form-group">
+                            <button type="submit" style="margin-top: 25px;"class="btn btn-info btn-sm">Submit</button>
+                          </div>
+                      </div>
+                    </div>
+                  </form>
+                    </div>
+                  </div>
+                  
+                </div>
+                
+                <div class="row">
+            
+  
+  
+
+ <div class="col-sm-12">
+    <div class="card-box" > 
+
+    <div class="tablebutton">
+  <button class="gridlist" onclick="opengrid(event, 'graph-btn')" id="defaultopen"><i class="fa fa-pie-chart" aria-hidden="true"></i></button>
+  <button class="gridlist" onclick="opengrid(event, 'table-btn')"><i class="fa fa-table" aria-hidden="true"></i></button>
+</div>
+
+<div id="graph-btn" class="gridcontent">
+
+  <div class="ribbon11-wrapper">
+  <h5 class="ribbon11 text-center"><b>Product Sales Statistics (QTY Wise)
+  </b></h5><b>
+ </b><p> <?php
+if($dateone<>'' && $datetwo<>'')
+{
+?>
+   BETWEEN </b> <?php echo $dateone; ?> to <?php echo $datetwo; ?>
+ <br/></p>
+ <?php 
+}
+?> 
+
+</div>
+<?php 
+if($prd=='ALL'){?>
+<p style="color:red;font-weight: bold;text-align: center;">Showing top 5 products for whole list refer to tabular format</p>
+<?php } ?>
+
+
+
+
+<div class="row">
+  <div id="chart_area2" style="width: 100%; height: 420px;"></div>
+
+  </div>
+</div>
+<div id="table-btn" class="gridcontent table-graph">
+  
+<div class="row" style="margin-bottom: 15px;">
+  <div class="col-md-12">
+     <h4 class="ribbon11 text-center"><b>PRODUCT SALES TREND (QTY Wise)
+<?php
+if($dateone<>'' && $datetwo<>'')
+{
+?>
+   BETWEEN </b> <?php echo $dateone; ?> to <?php echo $datetwo; ?>
+<?php 
+}
+?>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-12">
+    <div class="col-md-1"></div>
+      <div class="col-md-10" id="tabledata">
+    
+         
+        </div>
+      </div>
+    </div>
+</div>
+
+
+
+<script>
+function opengrid(evt, cityName) {
+  var i, gridcontent, gridlist;
+  gridcontent = document.getElementsByClassName("gridcontent");
+  for (i = 0; i < gridcontent.length; i++) {
+    gridcontent[i].style.display = "none";
+  }
+  gridlist = document.getElementsByClassName("gridlist");
+  for (i = 0; i < gridlist.length; i++) {
+    gridlist[i].className = gridlist[i].className.replace(" active", "");
+  }
+  document.getElementById(cityName).style.display = "block";
+  evt.currentTarget.className += " active";
+}
+document.getElementById("defaultopen").click();
+</script>
+    </div>
+  </div>
+                  
+                  
+                 
+                  
+                  
+                </div>
+                <!-- Footer -->
+
+<?php $this->load->view('common/footer');?>
+
+                <!-- End Footer -->
+
+
+
+            </div> <!-- end container -->
+
+        </div>
+
+
+
+         <!-- jQuery  -->
+
+         <script src="<?php echo assets_url;?>plugins/newselect2/select2.min.js" type="text/javascript"></script>
+        <script src="<?php echo assets_url;?>js/bootstrap.min.js"></script>
+
+        <script src="<?php echo assets_url;?>js/detect.js"></script>
+
+        <script src="<?php echo assets_url;?>js/fastclick.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.slimscroll.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.blockUI.js"></script>
+
+        <script src="<?php echo assets_url;?>js/waves.js"></script>
+
+        <script src="<?php echo assets_url;?>js/wow.min.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.nicescroll.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.scrollTo.min.js"></script>
+
+        <!-- App js -->
+
+        <script src="<?php echo assets_url;?>js/jquery.core.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.app.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.7.1/js/bootstrap-datepicker.min.js"></script>
+<script>
+    $('.datepicker').datepicker({
+     autoclose: true,
+ format:'dd-mm-yyyy'
+   });
+
+    $('.select2').select2({ });
+
+
+
+</script>
+
+
+ <script type="text/javascript">
+      google.charts.load('current', {'packages':['corechart']});
+      google.charts.setOnLoadCallback(drawChart1);
+
+        function drawChart1() {
+        //alert('hi sele');
+        $.ajax({
+        url: "<?php echo page_url; ?>Sales_stats_reporting/get_product_sales_qty_data/<?php echo $startdate; ?>/<?php echo $enddate;?>/<?php echo $this->uri->segment(5);?>/<?php echo $this->uri->segment(6);?>",
+        method: "GET",
+        success: function(data) {
+        //alert(data);
+        drawMonthwiseChart8(data);
+        gettabular_product_sales_data();
+        }
+
+        });
+
+        }
+
+
+function gettabular_product_sales_data()
+{
+
+    $.ajax({
+        url: "<?php echo page_url; ?>Sales_stats_reporting/get_product_sales_data_tabular/<?php echo $startdate; ?>/<?php echo $enddate;?>/<?php echo $this->uri->segment(5);?>",
+        method: "GET",
+        success: function(data) {
+        $("#tabledata").html(data);
+       
+        }
+
+        }); 
+}
+          
+      function drawMonthwiseChart8(chart_data)
+{
+    var jsonData = chart_data;
+    var data = new google.visualization.DataTable();
+    data.addColumn('string', 'Product');
+    data.addColumn('number', 'Sales in ₹');
+    data.addColumn({type:'number', role:'annotation'});
+    data.addColumn({type:'string', role:'tooltip'});
+  
+
+    $.each(JSON.parse(jsonData), function(i, jsonData){
+        var industry = jsonData.indus;
+        var leads = parseFloat($.trim(jsonData.count));
+        var labels = parseFloat($.trim(jsonData.labels));
+        var tools = jsonData.tool;
+
+        data.addRows([[industry, leads,labels,tools]]);
+    });
+
+    var options = {
+          tooltip: {isHtml: true},
+        colors: ['red','blue','orange'],
+        hAxis: {
+            title: "Product"
+        },
+        vAxis: {
+            title: 'Sale QTY (in LTR/KG)',
+            format: '0'
+        },
+        chartArea:{width:'80%',height:'60%'}
+
+       
+    }
+      var chart = new google.visualization.ColumnChart(document.getElementById('chart_area2'));
+
+     
+      chart.draw(data, options);
+
+       google.visualization.events.addListener(chart, 'select', clickme);
+
+      
+        function clickme()
+{
+   var selection = chart.getSelection();
+
+   for (var i = 0; i < selection.length; i++) {
+    var item = selection[i];
+    var redata=data.getValue(chart.getSelection()[0].row, 0);
+     $.ajax({
+        url: "<?php echo page_url; ?>Sales_stats_reporting/get_product_and_range",
+        method: "POST",
+        data:"product="+redata,
+        success: function(data) {
+            if(data>0)
+            {
+            window.open("<?php echo page_url;?>Sales_stats_reporting/customer_wise_product_consumption/"+data+"/<?php echo $startdate;?>/<?php echo $enddate;?>", "_blank");
+            }
+
+        }
+
+        });
+
+
+}
+}
+
+
+      }
+      
+
+
+    </script>
+
+
+
+
+    </body>
+
+</html>
+

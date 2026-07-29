@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+
+
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat&display=swap" rel="stylesheet">
+
+</head>
+
+<style>
+    body {
+        font-family: 'Montserrat', sans-serif;
+    }
+    
+    .pis {
+        border: 1px dotted black;
+        padding: 20px;
+        height: auto;
+    }
+    
+    .pis input {
+        border: 1px solid lightgrey;
+        outline: none;
+        width: 100%;
+        font-size: 12px;
+        padding: 5px;
+    }
+    
+    .pis textarea {
+        border: 1px solid lightgrey;
+        outline: none;
+        width: 100%;
+        font-size: 12px;
+    }
+    
+    .pis label {
+        font-weight: 600;
+        margin-top: 20px;
+        font-size: 12px;
+    }
+    
+    .pis select {
+        width: 100%;
+        border: 1px solid lightgrey;
+        outline: none;
+        font-size: 12px;
+        padding: 5px 0px;
+    }
+    
+    .pis p {
+        font-size: 12px;
+    }
+    
+    .pis h2 {
+        font-size: 15px;
+        font-weight: 600;
+        margin-top: 20px;
+    }
+    
+    .pis h1 {
+        text-align: center;
+        font-size: 22px;
+        font-weight: 600;
+        background-color: lightgray;
+        padding: 4px;
+    }
+    
+    .pis img {
+        width: 130px;
+        float: right;
+    }
+</style>
+
+<body>
+    <div class="container">
+        <div class="row">
+
+            <div class="col-sm-2"></div>
+            <div class="col-sm-8">
+                <div style="margin-bottom: 50px; margin-top: 50px;">
+                    <form>
+                        <div class="pis">
+                            <div class="row no-gutters">
+                                <div class="col-sm-9">
+                                    <h1>PROJECT INFORMATION SHEET</h1>
+                                </div>
+                                <div class="col-sm-3">
+                                    <img src="logo_hong.png">
+                                </div>
+                            </div>
+                            <h2>CLIENT INFROMATION</h2>
+                            <hr>
+
+                            <!-- <div class="row"> -->
+                            <!-- <div class="col-sm-6"> -->
+                            <label for="fname">Project Name <span style="color: red;">*</span></label>
+                            <input type="text" id="fname" name="firstname" placeholder="">
+                            <!-- </div> -->
+                            <!-- <div class="col-sm-6"> -->
+                            <label for="fname">Company Name <span style="color: red;">*</span></label>
+                            <input type="text" id="fname" name="firstname" placeholder="">
+                            <!-- </div> -->
+                            <label for="fname">Client Name <span style="color: red;">*</span></label>
+                            <input type="text" id="fname" name="firstname" placeholder="">
+
+                            <label for="fname">Client Mobile No. <span style="color: red;">*</span></label>
+                            <input type="" id="fnumber" name="number" placeholder="">
+
+                            <label for="fname">Client Email Id <span style="color: red;">*</span></label>
+                            <input type="text" id="femail" name="email" placeholder="">
+
+                            <label>Company Website</label>
+                            <div class="row">
+                                <div class="col-sm-4">
+
+
+                                    <input type="radio" id="chkYes" name="chk" onclick="ShowHideDiv()" style="    width: 20px;">
+                                    <label for="chkYes">Yes</label>
+
+                                    <input type="radio" id="chkNo" name="chk" onclick="ShowHideDiv()" style="    width: 20px;">
+                                    <label for="chkNo">No</label>
+                                </div>
+                                <div class="col-sm-8">
+                                    <div id="dvtext" style="display: none">
+
+                                        <input type="text" id="fname" name="firstname" placeholder="www.example.com">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <label for="fname">Client Type</label>
+                            <input type="text" id="" name="" placeholder="">
+
+                            <label for="fname">Delivery Address</label>
+                            <textarea id="subject" name="subject" placeholder="" style="height:100px; width: 100%;"></textarea>
+
+                            <label for="fname">Billing Address</label>
+                            <textarea id="subject" name="subject" placeholder="" style="height:100px; width: 100%;"></textarea>
+                            <!-- </div> -->
+
+
+                        </div>
+                        <hr style="border-top: 2px dotted red;
+                 margin-top: 20px; margin-bottom: 20px;">
+                        <div class="pis">
+
+                            <h2>PROJECT INFROMATION</h2>
+                            <hr>
+
+                            <!-- <div class="row"> -->
+                            <!-- <div class="col-sm-6"> -->
+                            <label>Product Design
+                                Requirements</label>
+
+                            <div class="row">
+                                <div class="col-sm-4">
+
+
+                                    <input type="radio" id="chkYes1" name="chk" onclick="ShowHideDiv1()" style="    width: 20px;">
+                                    <label for="chkYes1">Yes</label>
+
+                                    <input type="radio" id="chkNo2" name="chk" onclick="ShowHideDiv1()" style="    width: 20px;">
+                                    <label for="chkNo2">No</label>
+                                </div>
+                                <div class="col-sm-8">
+                                    <div id="dvtext1" style="display: none">
+
+                                        <select>
+                                                <option>Select</option>
+                                                <option>REVERSE
+                                                    ENGINEERING</option>
+                                                    <option>NEW PRODUCT
+                                                        DESIGN BASED
+                                                        ON
+                                                        BENCH MARKED
+                                                        SAMPES</option>
+                                                        <option>RE + PRODUCT
+                                                            STYLING BOTH</option>
+                        
+                                            </select>
+                                    </div>
+
+                                    <div id="dvtext2" style="display: none">
+                                        <p>Means customer will provide the Part Design</p>
+                                    </div>
+                                </div>
+                            </div>
+
+
+
+                            <!-- <select id="selectBox1" onchange="changeFunc1();">
+                                <option>Select</option>
+                                <option value="not_listed1">Yes</option>
+                                <option value="not_listed2">No</option>
+                            </select>
+                        <select style="display: none" id="textboxes1">
+                                <option>Select</option>
+                                <option>REVERSE
+                                    ENGINEERING</option>
+                                    <option>NEW PRODUCT
+                                        DESIGN BASED
+                                        ON
+                                        BENCH MARKED
+                                        SAMPES</option>
+                                        <option>RE + PRODUCT
+                                            STYLING BOTH</option>
+        
+                            </select>
+
+                        <p style="display: none" id="textboxes2">Means customer will provide the Part Design</p> -->
+                            <!-- </div> -->
+                            <!-- <div class="col-sm-6"> -->
+
+                            <label>Input Type</label>
+                            <select id="selectBox01" onchange="changeFunc01();">
+                        <option>Select</option>
+                        <option value="not_listed01">Physical Samples</option>
+                        <option value="not_listed02">CAD Data</option>
+                    </select>
+
+
+                            <select style="display: none; margin-top:10px;" id="textboxes01">
+                        <option>Select</option>
+                        <option>Available</option>
+                            <option>To Be Prepared</option>
+</select>
+                            <select style="display: none; margin-top:10px;" id="textboxes02">
+                                <option>Select</option>
+                                <option value="not_listed03">3D CAD Data</option>
+                                    <option>3D CAD data with 2D Drawing (GT&D)</option>
+                    </select>
+
+                            <select style="display: none; margin-top:10px;" id="textboxes03">
+                        <option value="">Select</option>
+                        <option value="">Parasolit (x_t)</option>
+                        <option value="">STEP (stp)</option>
+                        <option value="">Unigraphics /NX (prt)</option>
+                        <option value="">VISI (wkf)</option>
+                    </select>
+
+
+
+
+
+
+
+                            <label>Do you need
+                        Batch Production</label>
+                            <div class="row">
+                                <div class="col-sm-4">
+
+
+                                    <input type="radio" id="chkYes3" name="chk" onclick="ShowHideDiv3()" style="    width: 20px;">
+                                    <label for="chkYes">Yes</label>
+
+                                    <input type="radio" id="chkNo3" name="chk" onclick="ShowHideDiv3()" style="    width: 20px;">
+                                    <label for="chkNo3">No</label>
+                                </div>
+                                <div class="col-sm-8">
+                                    <div id="dvtext3" style="display: none">
+
+                                        <input type="text" id="fname" name="firstname" placeholder="">
+                                    </div>
+                                </div>
+                            </div>
+
+
+                            <label>Do you or the place where you will run the moulds, have moulds maintenance Facilities?</label>
+                            <div class="row">
+                                <div class="col-sm-4">
+
+
+                                    <input type="radio" id="chkYes4" name="chk" onclick="ShowHideDiv4()" style="    width: 20px;">
+                                    <label for="chkYes4">Yes</label>
+
+                                    <input type="radio" id="chkNo4" name="chk" onclick="ShowHideDiv4()" style="    width: 20px;">
+                                    <label for="chkNo4">No</label>
+                                </div>
+                                <div class="col-sm-8">
+                                    <div id="dvtext4" style="display: none">
+
+                                        <textarea type="text" id="fname" name="firstname" placeholder="Explain them to arrange this facilities" style="height: 50px; "> </textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <label>Shipment Type</label>
+                            <select>
+                    <option>Select</option>
+                    <option>Air</option>
+                    <option>Sea</option>
+                </select>
+
+                            <label>Delivery Type</label>
+                            <select>
+            <option>Select</option>
+            <option>FOB (Client will import himself</option>
+            <option>CIF Hongyi JIG will import and deliver at clients factory</option>
+
+</select>
+                            <label>Special Requests or Conditions by  Customer</label>
+                            <div class="row">
+                                <div class="col-sm-4">
+
+
+                                    <input type="radio" id="chkYes5" name="chk" onclick="ShowHideDiv5()" style="    width: 20px;">
+                                    <label for="chkYes5">Yes</label>
+
+                                    <input type="radio" id="chkNo5" name="chk" onclick="ShowHideDiv5()" style="    width: 20px;">
+                                    <label for="chkNo5">No</label>
+                                </div>
+                                <div class="col-sm-8">
+                                    <div id="dvtext5" style="display: none">
+
+                                        <textarea type="text" id="fname" name="firstname" placeholder="" style="height: 50px; "> </textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+
+
+
+                        </div>
+
+
+
+
+
+
+
+
+
+
+                        <hr style="border-top: 2px dotted red;
+                margin-top: 20px; margin-bottom: 20px;">
+                        <div class="pis">
+
+                            <h2>TOOL DETAILS FROM HONGYI JIG TEAM</h2>
+                            <hr>
+
+                            <label>Type of Tool Maker
+                        Required</label>
+                            <select>
+                        <option>Select</option>
+                <option>Specialist & Experienced in the
+                    same or Similar Domain</option>
+                <option>Precision Tool Maker</option>
+                <option>Commodity & Big Parts</option>
+               
+            </select>
+
+                            <label>Preferred Location
+                in China </label>
+                            <select>
+                <option>Select</option>
+        <option>Taizhou </option>
+        <option>Shenzhen /
+            Dongguan</option>
+        <option>Ningbo</option>
+       
+    </select>
+
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="col-sm-2"></div>
+        </div>
+    </div>
+
+
+
+
+
+
+    <script type="text/javascript">
+        function changeFunc01() {
+            var selectBox = document.getElementById("selectBox01");
+            var selectedValue = selectBox.options[selectBox.selectedIndex].value;
+            if (selectedValue == "not_listed01") {
+                $('#textboxes01').show();
+            } else {
+
+                $('#textboxes01').hide();
+            }
+
+            if (selectedValue == "not_listed02") {
+                $('#textboxes02').show();
+            } else {
+
+                $('#textboxes02').hide();
+            }
+
+            if (selectedValue == "not_listed03") {
+                $('#textboxes03').show();
+            } else {
+
+                $('#textboxes03').hide();
+            }
+        }
+    </script>
+
+
+
+
+
+
+    <script>
+        function ShowHideDiv() {
+            var chkYes = document.getElementById("chkYes");
+            var dvtext = document.getElementById("dvtext");
+            dvtext.style.display = chkYes.checked ? "block" : "none";
+        }
+    </script>
+
+    <script>
+        function ShowHideDiv1() {
+            var chkYes = document.getElementById("chkYes1");
+            var dvtext = document.getElementById("dvtext1");
+            dvtext.style.display = chkYes.checked ? "block" : "none";
+
+
+            var chkYes = document.getElementById("chkNo2");
+            var dvtext = document.getElementById("dvtext2");
+            dvtext.style.display = chkYes.checked ? "block" : "none";
+        }
+    </script>
+    <script>
+        function ShowHideDiv3() {
+            var chkYes = document.getElementById("chkYes3");
+            var dvtext = document.getElementById("dvtext3");
+            dvtext.style.display = chkYes.checked ? "block" : "none";
+        }
+    </script>
+
+    <script>
+        function ShowHideDiv4() {
+            var chkYes = document.getElementById("chkNo4");
+            var dvtext = document.getElementById("dvtext4");
+            dvtext.style.display = chkYes.checked ? "block" : "none";
+
+
+        }
+    </script>
+
+    <script>
+        function ShowHideDiv5() {
+            var chkYes = document.getElementById("chkYes5");
+            var dvtext = document.getElementById("dvtext5");
+            dvtext.style.display = chkYes.checked ? "block" : "none";
+
+
+        }
+    </script>
+
+
+
+
+</body>
+
+</html>

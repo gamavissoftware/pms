@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+body{
+margin:0;
+font-family:'Manrope',sans-serif;
+background:#f4f7fb;
+}
+
+/* HEADER */
+
+.header{
+background:linear-gradient(135deg,#2c7db7,#5aa7df);
+color:white;
+padding:16px;
+display:flex;
+align-items:center;
+gap:12px;
+}
+
+.back{
+font-size:18px;
+cursor:pointer;
+}
+
+.title{
+font-weight:700;
+font-size:18px;
+}
+
+/* FORM CONTAINER */
+
+.container{
+padding:16px;
+}
+
+/* CARD SECTION */
+
+.card{
+background:white;
+border-radius:18px;
+padding:18px;
+margin-bottom:16px;
+box-shadow:0 12px 28px rgba(0,0,0,0.06);
+}
+
+.card-title{
+font-weight:700;
+font-size:15px;
+margin-bottom:14px;
+color:#2c7db7;
+display:flex;
+align-items:center;
+gap:8px;
+}
+
+/* GRID */
+
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:12px;
+}
+
+.grid-3{
+display:grid;
+grid-template-columns:1fr 1fr 1fr;
+gap:12px;
+}
+
+/* FORM */
+
+.form-group{
+display:flex;
+flex-direction:column;
+}
+
+label{
+font-size:12px;
+margin-bottom:4px;
+color:#555;
+font-weight:600;
+}
+
+input,select,textarea{
+
+padding:10px;
+border-radius:10px;
+border:1px solid #e5e7eb;
+font-family:'Manrope';
+font-size:13px;
+}
+
+textarea{
+resize:none;
+}
+
+/* FULL WIDTH */
+
+.full{
+grid-column:1 / -1;
+}
+
+/* BUTTON */
+
+.submit-btn{
+width:100%;
+background:#2c7db7;
+color:white;
+padding:12px;
+border:none;
+border-radius:12px;
+font-size:14px;
+font-weight:600;
+margin-top:10px;
+cursor:pointer;
+}
+
+/* ADD CUSTOMER */
+
+.add-btn{
+background:#eef3ff;
+color:#2c7db7;
+padding:6px 10px;
+border-radius:8px;
+font-size:12px;
+margin-left:auto;
+cursor:pointer;
+}
+
+/* MOBILE */
+
+@media(max-width:700px){
+
+.grid{
+grid-template-columns:1fr;
+}
+
+.grid-3{
+grid-template-columns:1fr;
+}
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="header">
+
+<i class="fa fa-arrow-left back" onclick="history.back()"></i>
+
+<div class="title">Add Opportunity</div>
+
+</div>
+
+
+<div class="container">
+
+<!-- OPPORTUNITY DETAILS -->
+
+<div class="card">
+
+<div class="card-title">
+
+<i class="fa fa-briefcase"></i>
+Opportunity Details
+
+</div>
+
+<div class="grid">
+
+<div class="form-group">
+<label>Opportunity Date</label>
+<input type="date">
+</div>
+
+<div class="form-group">
+<label>Source</label>
+<select>
+<option>Select</option>
+<option>Call</option>
+<option>Email</option>
+<option>Website</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Opportunity Type</label>
+<select>
+<option>Domestic</option>
+<option>Export</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Machine Type</label>
+<select>
+<option>Select</option>
+<option>Liquid Filling</option>
+<option>SPM 600</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Opportunity Number</label>
+<input type="text">
+</div>
+
+<div class="form-group">
+<label>Marketing Person</label>
+<select>
+<option>Select</option>
+</select>
+</div>
+
+<div class="form-group full">
+<label>Remarks</label>
+<textarea rows="3"></textarea>
+</div>
+
+</div>
+
+</div>
+
+
+<!-- CUSTOMER DETAILS -->
+
+<div class="card">
+
+<div class="card-title">
+
+<i class="fa fa-user"></i>
+Customer Details
+
+<div class="add-btn">
+<i class="fa fa-plus"></i>
+</div>
+
+</div>
+
+<div class="grid">
+
+<div class="form-group">
+<label>Customer</label>
+<select>
+<option>Type to select</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Brand</label>
+<select>
+<option>Select</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Country</label>
+<select>
+<option>Select</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Contact Number</label>
+<input type="text">
+</div>
+
+<div class="form-group full">
+<label>Customer Address</label>
+<textarea rows="2"></textarea>
+</div>
+
+<div class="form-group full">
+<label>Email ID</label>
+<input type="email">
+</div>
+
+</div>
+
+</div>
+
+
+<!-- PRODUCT DETAILS -->
+
+<div class="card">
+
+<div class="card-title">
+
+<i class="fa fa-box"></i>
+Product Details
+
+</div>
+
+<div class="grid-3">
+
+<div class="form-group">
+<label>Product</label>
+<select>
+<option>Select</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Qty</label>
+<input type="number">
+</div>
+
+<div class="form-group">
+<label>Merchant Export</label>
+<select>
+<option>No</option>
+<option>Yes</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Client Type</label>
+<select>
+<option>Select</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Probability (%)</label>
+<select>
+<option>Select</option>
+<option>10%</option>
+<option>30%</option>
+<option>50%</option>
+<option>80%</option>
+</select>
+</div>
+
+</div>
+
+</div>
+
+
+<button class="submit-btn">
+<i class="fa fa-check"></i> Save Opportunity
+</button>
+
+
+</div>
+
+</body>
+</html>

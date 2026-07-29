@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+
+
+    <style>
+        #container {
+            width: 1055px;
+            font-family: cursive;
+            font-size: 11px;
+            margin: auto;
+            height: 200px;
+            margin-top: 50px;
+        }
+        
+        #no1 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border-radius: 50%;
+            border: 1px solid #32afc3;
+            text-align: center;
+            font-size: 19px;
+            background-color: #c6f1f9;
+        }
+        
+        #no2 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border-radius: 50%;
+            border: 1px solid #45f352;
+            text-align: center;
+            margin-top: -60px;
+            font-size: 19px;
+            margin-left: 171px;
+            background-color: #d8fbdb;
+        }
+        
+        #no3 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border-radius: 50%;
+            border: 1px solid #e28445;
+            text-align: center;
+            margin-top: -61px;
+            font-size: 19px;
+            margin-left: 342px;
+            background-color: #f1c3a4;
+        }
+        
+        #no4 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border: 1px solid #e4b44a;
+            text-align: center;
+            margin-top: -61px;
+            font-size: 19px;
+            margin-left: 539px;
+            transform: rotate( 45deg);
+            background-color: #f9e3b2;
+        }
+        
+        #no5 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border-radius: 50%;
+            border: 1px solid #ec2a69;
+            text-align: center;
+            margin-top: -61px;
+            font-size: 19px;
+            margin-left: 733px;
+            background-image: linear-gradient(#f5efef87, #ff00527d);
+        }
+        /* #no5 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border-radius: 50%;
+            border: 1px solid black;
+            text-align: center;
+            margin-top: -61px;
+            font-size: 19px;
+            margin-left: 733px;
+        } */
+        
+        #no6 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border-radius: 50%;
+            background-color: #b7ade0;
+            border: 1px solid #7e5ffd;
+            text-align: center;
+            margin-top: -61px;
+            font-size: 19px;
+            margin-left: 903px;
+        }
+        
+        #no7 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border-radius: 50%;
+            background-color: #00801c73;
+            border: 1px solid #198c31;
+            text-align: center;
+            font-size: 19px;
+            margin-top: 71px;
+            margin-left: 544px;
+            position: absolute;
+        }
+        
+        #no8 {
+            width: 120px;
+            height: 120px;
+            line-height: 115px;
+            border-radius: 50%;
+            background-color: #57c8ea;
+            border: 1px solid #0f6c88;
+            text-align: center;
+            font-size: 19px;
+            margin-top: 240px;
+            margin-left: 544px;
+            position: absolute;
+        }
+        
+        #no9 {
+            position: absolute;
+            margin-left: 567px;
+            font-size: 19px;
+            margin-top: -13px;
+            z-index: 1;
+        }
+        
+        #line1 {
+            width: 50px;
+            height: 2px;
+            background-color: black;
+            margin-top: -63px;
+            margin-left: 121px;
+        }
+        
+        #line2 {
+            width: 50px;
+            height: 2px;
+            background-color: black;
+            margin-top: -63px;
+            margin-left: 292px;
+        }
+        
+        #line3 {
+            width: 50px;
+            height: 2px;
+            background-color: black;
+            margin-top: -63px;
+            margin-left: 464px;
+        }
+        
+        #line4 {
+            width: 50px;
+            height: 2px;
+            background-color: black;
+            margin-top: -63px;
+            margin-left: 684px;
+        }
+        
+        #line5 {
+            width: 50px;
+            height: 2px;
+            background-color: black;
+            margin-top: -63px;
+            margin-left: 854px;
+        }
+        
+        #line6 {
+            width: 2px;
+            height: 50px;
+            background-color: black;
+            margin-top: 22px;
+            margin-left: 599px;
+            position: absolute;
+        }
+        
+        #line7 {
+            width: 2px;
+            height: 50px;
+            background-color: black;
+            margin-top: 191px;
+            margin-left: 599px;
+            position: absolute;
+        }
+        
+        #line8 {
+            width: 134px;
+            height: 2px;
+            background-color: black;
+            margin-top: 359px;
+            margin-left: 666px;
+            position: absolute;
+        }
+        
+        #line9 {
+            width: 2px;
+            height: 299px;
+            background-color: black;
+            margin-top: 0px;
+            margin-left: 798px;
+            position: absolute;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="no1">Circle 1</div>
+        <div id="line1"></div>
+        <div id="no2">Circle 2</div>
+        <div id="line2"></div>
+        <div id="no3">Circle 3</div>
+        <div id="line3"></div>
+
+        <div id="no9">Square</div>
+        <div id="no4"></div>
+        <div id="line6"></div>
+        <div id="no7">Circle 6</div>
+        <div id="line7"></div>
+        <div id="no8">Circle 7</div>
+        <div id="line4"></div>
+        <div id="line8"></div>
+        <div id="no5">Circle 4</div>
+        <div id="line9"></div>
+        <div id="line5"></div>
+        <div id="no6">Circle 5</div>
+    </div>
+</body>
+
+</html>

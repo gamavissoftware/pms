@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+.mention{
+background:#eaf2ff;
+padding:3px 6px;
+border-radius:6px;
+color:#2c7db7;
+font-weight:600;
+}
+
+
+body{
+margin:0;
+font-family:'Manrope',sans-serif;
+background:#f5f7fb;
+color:#1a1a1a;
+}
+
+/* HEADER */
+
+.header{
+background:linear-gradient(135deg,#2c7db7,#5aa7df);
+color:white;
+padding:16px;
+display:flex;
+align-items:center;
+justify-content:space-between;
+}
+
+.header-title{
+font-size:18px;
+font-weight:700;
+}
+
+/* SEARCH */
+
+.search{
+padding:12px;
+background:white;
+border-bottom:1px solid #eee;
+}
+
+.search input{
+width:100%;
+padding:10px 12px;
+border-radius:10px;
+border:1px solid #e5e7eb;
+font-family:'Manrope';
+}
+
+/* CHAT LIST */
+
+.chat-list{
+padding-bottom:70px;
+}
+
+.chat-item{
+display:flex;
+align-items:center;
+gap:12px;
+padding:14px;
+background:white;
+border-bottom:1px solid #f1f1f1;
+cursor:pointer;
+}
+
+.chat-avatar{
+width:42px;
+height:42px;
+border-radius:50%;
+background:#2c7db7;
+color:white;
+display:flex;
+align-items:center;
+justify-content:center;
+font-weight:700;
+}
+
+.chat-info{
+flex:1;
+}
+
+.chat-name{
+font-weight:600;
+font-size:14px;
+}
+
+.chat-msg{
+font-size:12px;
+color:#777;
+margin-top:2px;
+}
+
+.chat-time{
+font-size:11px;
+color:#999;
+}
+
+.chat-badge{
+background:#ff3b30;
+color:white;
+font-size:10px;
+padding:3px 6px;
+border-radius:10px;
+margin-top:4px;
+display:inline-block;
+}
+
+/* CHAT WINDOW */
+
+.chat-window{
+position:fixed;
+bottom:0;
+left:0;
+right:0;
+top:0;
+background:white;
+display:none;
+flex-direction:column;
+z-index:1000;
+}
+
+/* CHAT HEADER */
+
+.chat-header{
+background:white;
+border-bottom:1px solid #eee;
+padding:12px;
+display:flex;
+align-items:center;
+gap:12px;
+}
+
+.back-btn{
+font-size:18px;
+cursor:pointer;
+color:#2c7db7;
+}
+
+.user-name{
+font-weight:700;
+}
+
+.online{
+font-size:11px;
+color:#16a34a;
+}
+
+/* MESSAGES */
+/* MESSAGES */
+
+.messages{
+flex:1;
+padding:16px;
+overflow-y:auto;
+background:#f5f7fb;
+}
+
+/* MESSAGE ROW */
+
+.msg-row{
+display:flex;
+align-items:flex-end;
+margin-bottom:12px;
+gap:8px;
+}
+
+/* AVATAR */
+
+.msg-avatar{
+width:28px;
+height:28px;
+border-radius:50%;
+background:#2c7db7;
+color:white;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:11px;
+font-weight:600;
+}
+
+/* MESSAGE BUBBLE */
+
+.msg{
+max-width:70%;
+padding:10px 12px;
+border-radius:14px;
+font-size:13px;
+position:relative;
+line-height:1.4;
+}
+
+/* RECEIVED */
+
+.msg-received{
+background:white;
+border:1px solid #e6e6e6;
+}
+
+/* SENT */
+
+.msg-sent{
+background:#2c7db7;
+color:white;
+margin-left:auto;
+}
+
+/* TIME */
+
+.msg-time{
+font-size:10px;
+opacity:.6;
+margin-top:4px;
+text-align:right;
+}
+
+/* DATE SEPARATOR */
+
+.chat-date{
+text-align:center;
+font-size:11px;
+color:#888;
+margin:12px 0;
+}
+
+.chat-date span{
+background:#e9eef6;
+padding:4px 10px;
+border-radius:10px;
+}
+
+
+
+/* PREVIEW (attachment text) */
+
+.preview{
+padding:6px 14px;
+font-size:12px;
+color:#555;
+background:#f5f7fb;
+}
+
+/* CHAT INPUT BAR */
+
+.chat-input{
+position:sticky;
+bottom:0;
+background:white;
+padding:10px;
+display:flex;
+align-items:center;
+gap:10px;
+border-top:1px solid #e5e7eb;
+}
+
+/* ATTACH BUTTON */
+
+.attach{
+width:38px;
+height:38px;
+display:flex;
+align-items:center;
+justify-content:center;
+border-radius:50%;
+background:#eef3ff;
+color:#2c7db7;
+cursor:pointer;
+font-size:16px;
+}
+
+/* TEXT INPUT */
+
+.chat-input input{
+flex:1;
+height:38px;
+border-radius:20px;
+border:1px solid #e5e7eb;
+padding:0 14px;
+font-family:'Manrope';
+font-size:13px;
+outline:none;
+}
+
+/* SEND BUTTON */
+
+.send-btn{
+width:38px;
+height:38px;
+border-radius:50%;
+background:#2c7db7;
+color:white;
+display:flex;
+align-items:center;
+justify-content:center;
+cursor:pointer;
+font-size:14px;
+}
+
+
+/* MESSAGE TICKS */
+
+.msg-meta{
+display:flex;
+justify-content:flex-end;
+align-items:center;
+gap:4px;
+margin-top:3px;
+}
+
+.msg-tick{
+font-size:11px;
+opacity:.8;
+}
+
+/* TYPING INDICATOR */
+
+.typing{
+font-size:12px;
+color:#888;
+padding:6px 14px;
+}
+
+/* IMAGE VIEWER */
+
+.image-viewer{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:black;
+display:none;
+align-items:center;
+justify-content:center;
+z-index:2000;
+}
+
+.image-viewer img{
+max-width:95%;
+max-height:95%;
+}
+
+/* CONTEXT MENU */
+
+.context-menu{
+position:fixed;
+background:white;
+box-shadow:0 10px 30px rgba(0,0,0,0.2);
+border-radius:8px;
+display:none;
+z-index:3000;
+}
+
+.context-menu div{
+padding:10px 14px;
+font-size:13px;
+cursor:pointer;
+}
+
+.context-menu div:hover{
+background:#f5f7fb;
+}
+
+/* VOICE BUTTON */
+
+.voice-btn{
+width:38px;
+height:38px;
+border-radius:50%;
+background:#eef3ff;
+display:flex;
+align-items:center;
+justify-content:center;
+color:#2c7db7;
+cursor:pointer;
+}
+
+
+
+/* GROUP MODAL */
+
+.group-modal{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.45);
+display:none;
+align-items:center;
+justify-content:center;
+z-index:4000;
+}
+
+/* BOX */
+
+.group-box{
+
+width:92%;
+max-width:420px;
+
+background:white;
+border-radius:20px;
+padding:18px;
+
+box-shadow:0 20px 60px rgba(0,0,0,0.25);
+
+}
+
+/* HEADER */
+
+.group-header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+font-weight:700;
+font-size:16px;
+margin-bottom:12px;
+}
+
+/* INPUT */
+
+.group-body input{
+width:100%;
+padding:11px 12px;
+border-radius:12px;
+border:1px solid #e5e7eb;
+margin-top:6px;
+font-family:'Manrope';
+}
+
+/* SEARCH BAR */
+
+.people-search{
+margin-top:10px;
+position:relative;
+}
+
+.people-search input{
+padding-left:34px;
+}
+
+.people-search i{
+position:absolute;
+left:10px;
+top:12px;
+color:#888;
+}
+
+/* SELECTED USERS */
+
+.selected-users{
+display:flex;
+flex-wrap:wrap;
+gap:6px;
+margin-top:10px;
+}
+
+.user-chip{
+background:#eef3ff;
+color:#2c7db7;
+padding:5px 8px;
+border-radius:14px;
+font-size:12px;
+display:flex;
+align-items:center;
+gap:6px;
+}
+
+.user-chip i{
+cursor:pointer;
+}
+
+/* PEOPLE LIST */
+
+.people-list{
+max-height:180px;
+overflow:auto;
+margin-top:12px;
+border-top:1px solid #eee;
+padding-top:8px;
+}
+
+.person{
+display:flex;
+align-items:center;
+gap:10px;
+padding:8px 6px;
+cursor:pointer;
+border-radius:8px;
+}
+
+.person:hover{
+background:#f5f7fb;
+}
+
+.person-avatar{
+width:32px;
+height:32px;
+border-radius:50%;
+background:#2c7db7;
+color:white;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:12px;
+font-weight:600;
+}
+
+/* BUTTON */
+
+.group-create{
+
+margin-top:16px;
+width:100%;
+background:linear-gradient(135deg,#2c7db7,#5aa7df);
+color:white;
+border:none;
+padding:11px;
+border-radius:12px;
+font-weight:600;
+cursor:pointer;
+
+}
+
+
+/* MENTION DROPDOWN */
+
+.mention-box{
+
+position:absolute;
+bottom:60px;
+left:10px;
+right:10px;
+
+background:white;
+border-radius:12px;
+box-shadow:0 10px 30px rgba(0,0,0,0.15);
+
+display:none;
+z-index:5000;
+
+max-height:160px;
+overflow:auto;
+
+}
+
+.mention-user{
+
+padding:10px;
+display:flex;
+align-items:center;
+gap:10px;
+cursor:pointer;
+
+}
+
+.mention-user:hover{
+background:#f5f7fb;
+}
+
+.mention-avatar{
+
+width:28px;
+height:28px;
+border-radius:50%;
+background:#2c7db7;
+color:white;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:11px;
+font-weight:600;
+
+}
+
+/* MENTION TEXT */
+
+.mention{
+
+color:#2c7db7;
+font-weight:600;
+
+}
+</style>
+
+</head>
+
+<body>
+
+<!-- HEADER -->
+
+<div class="header">
+
+<div class="header-title">Internal Chat</div>
+
+<div style="display:flex; gap:14px; align-items:center;">
+
+<i class="fa fa-users" onclick="openGroupCreator()" style="cursor:pointer"></i>
+
+<i class="fa fa-comment-dots"></i>
+
+</div>
+
+</div>
+
+
+<!-- SEARCH -->
+
+<div class="search">
+<input placeholder="Search employee...">
+</div>
+
+<!-- CHAT LIST -->
+
+<div class="chat-list">
+
+<div class="chat-item" onclick="openChat('Manoj Dubey')">
+
+<div class="chat-avatar">MD</div>
+
+<div class="chat-info">
+
+<div class="chat-name">Manoj Dubey</div>
+
+<div class="chat-msg">Please review the DF meeting MOM</div>
+
+</div>
+
+<div>
+<div class="chat-time">2m</div>
+<div class="chat-badge">2</div>
+</div>
+
+</div>
+
+
+<div class="chat-item" onclick="openChat('Ravi Sharma')">
+
+<div class="chat-avatar">RS</div>
+
+<div class="chat-info">
+
+<div class="chat-name">Ravi Sharma</div>
+
+<div class="chat-msg">Design approved</div>
+
+</div>
+
+<div class="chat-time">10m</div>
+
+</div>
+
+
+<div class="chat-item" onclick="openChat('Amit Verma')">
+
+<div class="chat-avatar">AV</div>
+
+<div class="chat-info">
+
+<div class="chat-name">Amit Verma</div>
+
+<div class="chat-msg">Client meeting scheduled</div>
+
+</div>
+
+<div class="chat-time">1h</div>
+
+</div>
+
+</div>
+
+
+<!-- CHAT WINDOW -->
+
+<div class="chat-window" id="chatWindow">
+
+<div class="chat-header">
+
+<div class="back-btn" onclick="closeChat()">
+<i class="fa fa-arrow-left"></i>
+</div>
+
+<div>
+
+<div class="user-name" id="chatUser">User</div>
+<div class="online">Online</div>
+
+</div>
+
+</div>
+
+<div class="messages" id="messages">
+
+<div class="chat-date">
+<span>Today</span>
+</div>
+
+<div class="msg-row">
+
+<div class="msg-avatar">MD</div>
+
+<div class="msg msg-received">
+
+Hello
+
+<div class="msg-time">10:10 AM</div>
+
+</div>
+
+</div>
+
+<div class="msg-row">
+
+<div class="msg msg-sent">
+
+Hi, please check the update
+
+<div class="msg-time">10:12 AM</div>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="preview" id="preview"></div>
+<div class="chat-input">
+
+<label class="attach">
+<i class="fa fa-paperclip"></i>
+<input type="file" id="fileInput" hidden>
+</label>
+
+<input id="msgInput" placeholder="Type message">
+
+<div class="voice-btn" onclick="recordVoice()">
+<i class="fa fa-microphone"></i>
+</div>
+
+<div class="send-btn" onclick="sendMsg()">
+<i class="fa fa-paper-plane"></i>
+</div>
+
+</div>
+<div class="mention-box" id="mentionBox"></div>
+
+</div>
+
+
+<div class="image-viewer" id="imageViewer" onclick="closeViewer()">
+<img id="viewerImg">
+</div>
+
+<div class="context-menu" id="menu">
+<div onclick="copyMsg()">Copy</div>
+<div onclick="deleteMsg()">Delete</div>
+</div>
+
+
+
+<!-- CREATE GROUP MODAL -->
+
+<div class="group-modal" id="groupModal">
+
+<div class="group-box">
+
+<div class="group-header">
+Create Project Group
+<i class="fa fa-times" onclick="closeGroupCreator()" style="cursor:pointer"></i>
+</div>
+
+<div class="group-body">
+
+<label style="font-size:12px;font-weight:600;">Project Name</label>
+<input id="groupName" placeholder="Enter project name">
+
+<!-- SEARCH USERS -->
+
+<div class="people-search">
+<i class="fa fa-search"></i>
+<input id="userSearch" placeholder="Search people...">
+</div>
+
+<!-- SELECTED USERS -->
+
+<div class="selected-users" id="selectedUsers"></div>
+
+<!-- PEOPLE LIST -->
+
+<div class="people-list" id="peopleList">
+
+<div class="person" onclick="selectUser('Manoj Dubey','MD')">
+<div class="person-avatar">MD</div>
+Manoj Dubey
+</div>
+
+<div class="person" onclick="selectUser('Ravi Sharma','RS')">
+<div class="person-avatar">RS</div>
+Ravi Sharma
+</div>
+
+<div class="person" onclick="selectUser('Amit Verma','AV')">
+<div class="person-avatar">AV</div>
+Amit Verma
+</div>
+
+<div class="person" onclick="selectUser('Pankaj Kumar','PK')">
+<div class="person-avatar">PK</div>
+Pankaj Kumar
+</div>
+
+</div>
+
+<button class="group-create" onclick="createGroup()">
+Create Group
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+
+<script>
+
+let groupMembers = [
+{ name:"Manoj Dubey", initial:"MD"},
+{ name:"Ravi Sharma", initial:"RS"},
+{ name:"Amit Verma", initial:"AV"},
+{ name:"Pankaj Kumar", initial:"PK"}
+];
+const fileInput=document.getElementById("fileInput");
+
+fileInput.addEventListener("change",function(){
+
+let file=this.files[0];
+
+document.getElementById("preview").innerText="Attached: "+file.name;
+
+});
+
+/* OPEN CHAT */
+
+function openChat(name){
+
+document.getElementById("chatWindow").style.display="flex";
+document.getElementById("chatUser").innerText=name;
+
+}
+
+/* CLOSE CHAT */
+
+function closeChat(){
+
+document.getElementById("chatWindow").style.display="none";
+
+}
+
+/* SEND MESSAGE */
+
+function sendMsg(){
+
+let input=document.getElementById("msgInput");
+let msg=input.value.trim();
+
+if(msg==="") return;
+
+let row=document.createElement("div");
+row.className="msg-row";
+
+let div=document.createElement("div");
+div.className="msg msg-sent";
+
+let time=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+
+msg = msg.replace(/@([^\s]+)/g,function(match){
+return '<span class="mention">'+match.replace("_"," ")+'</span>';
+});
+
+div.innerHTML=`
+${msg}
+<div class="msg-meta">
+<span class="msg-time">${time}</span>
+<span class="msg-tick">✔</span>
+</div>
+`;
+
+row.appendChild(div);
+document.getElementById("messages").appendChild(row);
+
+/* ATTACHMENT */
+
+let file=fileInput.files[0];
+
+if(file){
+
+let reader=new FileReader();
+
+reader.onload=function(e){
+
+let img=document.createElement("img");
+img.src=e.target.result;
+img.style.maxWidth="160px";
+img.style.borderRadius="8px";
+img.style.marginTop="6px";
+
+img.onclick=function(){
+openViewer(e.target.result);
+}
+
+div.appendChild(img);
+
+}
+
+reader.readAsDataURL(file);
+
+fileInput.value="";
+document.getElementById("preview").innerText="";
+}
+
+input.value="";
+document.getElementById("messages").scrollTop=9999;
+
+/* SIMULATE SEEN TICK */
+
+setTimeout(()=>{
+div.querySelector(".msg-tick").innerText="✔✔";
+},2000);
+
+}
+
+
+
+/* IMAGE VIEWER */
+
+function openViewer(src){
+
+document.getElementById("viewerImg").src=src;
+document.getElementById("imageViewer").style.display="flex";
+
+}
+
+function closeViewer(){
+document.getElementById("imageViewer").style.display="none";
+}
+
+/* LONG PRESS MENU */
+
+let selectedMsg=null;
+
+document.addEventListener("contextmenu",function(e){
+
+if(e.target.classList.contains("msg")){
+
+e.preventDefault();
+
+selectedMsg=e.target;
+
+let menu=document.getElementById("menu");
+
+menu.style.display="block";
+menu.style.left=e.pageX+"px";
+menu.style.top=e.pageY+"px";
+
+}
+
+});
+
+document.addEventListener("click",function(){
+document.getElementById("menu").style.display="none";
+});
+
+function copyMsg(){
+
+navigator.clipboard.writeText(selectedMsg.innerText);
+
+}
+
+function deleteMsg(){
+
+selectedMsg.parentElement.remove();
+
+}
+
+/* VOICE RECORD */
+
+function recordVoice(){
+
+alert("Voice recording feature placeholder");
+
+}
+
+
+function openGroupCreator(){
+
+document.getElementById("groupModal").style.display="flex";
+
+}
+
+function closeGroupCreator(){
+
+document.getElementById("groupModal").style.display="none";
+
+}
+
+
+function createGroup(){
+
+let name=document.getElementById("groupName").value;
+
+if(name==""){
+alert("Enter project name");
+return;
+}
+
+let chatList=document.querySelector(".chat-list");
+
+let item=document.createElement("div");
+
+item.className="chat-item";
+
+item.onclick=function(){
+openChat(name);
+}
+
+item.innerHTML=`
+
+<div class="chat-avatar" style="background:#8e44ad">
+<i class="fa fa-users"></i>
+</div>
+
+<div class="chat-info">
+
+<div class="chat-name">${name}</div>
+
+<div class="chat-msg">Project group created</div>
+
+</div>
+
+<div class="chat-time">now</div>
+
+`;
+
+chatList.prepend(item);
+
+closeGroupCreator();
+
+document.getElementById("groupName").value="";
+
+}
+
+
+let selectedMembers=[];
+
+/* SELECT USER */
+
+function selectUser(name,initial){
+
+if(selectedMembers.includes(name)) return;
+
+selectedMembers.push(name);
+
+let chip=document.createElement("div");
+chip.className="user-chip";
+chip.innerHTML=`
+${name}
+<i class="fa fa-times" onclick="removeUser('${name}',this)"></i>
+`;
+
+document.getElementById("selectedUsers").appendChild(chip);
+
+}
+
+/* REMOVE USER */
+
+function removeUser(name,el){
+
+selectedMembers=selectedMembers.filter(u=>u!==name);
+
+el.parentElement.remove();
+
+}
+
+/* SEARCH USERS */
+
+document.getElementById("userSearch").addEventListener("keyup",function(){
+
+let value=this.value.toLowerCase();
+
+document.querySelectorAll(".person").forEach(p=>{
+
+p.style.display=p.innerText.toLowerCase().includes(value) ? "flex" : "none";
+
+});
+
+});
+
+function showMentionList(){
+
+let box=document.getElementById("mentionBox");
+
+box.innerHTML="";
+
+groupMembers.forEach(user=>{
+
+let div=document.createElement("div");
+
+div.className="mention-user";
+
+div.innerHTML=`
+
+<div class="mention-avatar">${user.initial}</div>
+${user.name}
+
+`;
+
+div.onclick=function(){
+
+insertMention(user.name);
+
+};
+
+box.appendChild(div);
+
+});
+
+box.style.display="block";
+
+}
+
+function insertMention(name){
+
+let input = document.getElementById("msgInput");
+
+let text = input.value;
+
+let atIndex = text.lastIndexOf("@");
+
+/* convert space to underscore so mention stays one word */
+let mention = name.replace(/\s/g,"_");
+
+input.value = text.substring(0, atIndex) + "@" + mention + " ";
+
+document.getElementById("mentionBox").style.display="none";
+
+input.focus();
+
+}
+
+
+const msgInput = document.getElementById("msgInput");
+
+msgInput.addEventListener("keyup", function(e){
+
+let text = this.value;
+
+/* detect @ */
+
+if(text.includes("@")){
+    showMentionList();
+}
+else{
+    document.getElementById("mentionBox").style.display="none";
+}
+
+});
+
+</script>
+
+
+</body>
+</html>

@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+/* GLOBAL */
+
+body{
+margin:0;
+font-family:'Manrope',sans-serif;
+background:#f5f7fb;
+color:#1a1a1a;
+overflow-x:hidden;
+}
+
+
+/* HEADER */
+
+.header{
+background:linear-gradient(135deg,#2c7db7,#5aa7df);
+color:white;
+padding:16px;
+}
+
+.header-title{
+font-size:18px;
+font-weight:700;
+}
+
+
+/* SEARCH */
+
+.search{
+padding:14px;
+background:white;
+}
+
+.search-box{
+background:#f3f6fb;
+border-radius:12px;
+padding:10px 12px;
+}
+
+.search-box input{
+border:none;
+background:none;
+outline:none;
+font-size:13px;
+width:100%;
+}
+
+
+/* TASK CARD */
+
+.task-card{
+position:relative;
+background:white;
+margin:14px;
+border-radius:18px;
+box-shadow:0 14px 30px rgba(0,0,0,0.07);
+padding:18px;
+transition:.2s;
+}
+
+.task-card:hover{
+transform:translateY(-2px);
+}
+
+
+/* CARD ARROW */
+
+.task-arrow{
+position:absolute;
+right:18px;
+top:20px;
+font-size:20px;
+color:#94a3b8;
+}
+
+
+/* TITLE */
+
+.task-title{
+font-weight:700;
+font-size:16px;
+padding-right:20px;
+}
+
+.task-sub{
+font-size:13px;
+color:#6b7280;
+margin-top:4px;
+}
+
+
+/* DATA GRID */
+
+.task-data{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:10px;
+margin-top:12px;
+font-size:13px;
+}
+
+.label{
+color:#6b7280;
+font-size:11px;
+}
+
+.value{
+font-weight:600;
+}
+
+
+/* PROGRESS BAR */
+
+.progress{
+height:6px;
+background:#e5e7eb;
+border-radius:10px;
+margin-top:14px;
+overflow:hidden;
+}
+
+.progress-bar{
+height:6px;
+background:#2c7db7;
+border-radius:10px;
+}
+
+
+/* FOOTER */
+
+.task-footer{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-top:14px;
+}
+
+.time-left{
+font-size:13px;
+font-weight:700;
+color:#16a34a;
+}
+
+.status{
+font-size:12px;
+background:#eef3ff;
+color:#2c7db7;
+padding:4px 10px;
+border-radius:10px;
+font-weight:600;
+}
+
+
+/* UPDATE BUTTON */
+
+.update-btn{
+margin-top:14px;
+width:100%;
+background:#2c7db7;
+border:none;
+color:white;
+padding:12px;
+border-radius:12px;
+font-weight:600;
+font-size:14px;
+cursor:pointer;
+transition:.2s;
+}
+
+.update-btn:hover{
+background:#256aa0;
+}
+
+
+
+/* MODAL OVERLAY */
+
+.modal{
+position:fixed;
+inset:0;
+display:none;
+align-items:center;
+justify-content:center;
+background:rgba(0,0,0,0.35);
+backdrop-filter:blur(8px);
+padding:20px;
+z-index:999;
+}
+
+
+/* MODAL CARD */
+
+.modal-content{
+background:white;
+width:100%;
+max-width:420px;
+border-radius:22px;
+padding:24px;
+box-shadow:0 30px 80px rgba(0,0,0,0.25);
+animation:modalEnter .25s ease;
+box-sizing:border-box;
+}
+
+
+/* MODAL ANIMATION */
+
+@keyframes modalEnter{
+from{
+transform:translateY(40px) scale(.95);
+opacity:0;
+}
+to{
+transform:translateY(0) scale(1);
+opacity:1;
+}
+}
+
+
+/* MODAL HEADER */
+
+.modal-header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:18px;
+}
+
+.modal-header div:first-child{
+display:flex;
+flex-direction:column;
+}
+
+.modal-title{
+font-size:19px;
+font-weight:700;
+}
+
+.close-btn{
+width:36px;
+height:36px;
+border-radius:12px;
+background:#f1f5f9;
+display:flex;
+align-items:center;
+justify-content:center;
+cursor:pointer;
+font-size:18px;
+color:#555;
+}
+
+
+
+/* FORM */
+
+.form-group{
+margin-bottom:16px;
+}
+
+.form-group label{
+font-size:12px;
+font-weight:600;
+margin-bottom:6px;
+display:block;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea{
+width:100%;
+padding:12px;
+border-radius:10px;
+border:1px solid #e5e7eb;
+font-family:'Manrope';
+font-size:14px;
+background:#fafafa;
+box-sizing:border-box;
+}
+
+textarea{
+resize:none;
+height:90px;
+}
+
+
+
+/* CAMERA BUTTON */
+
+.camera-btn{
+width:100%;
+background:#eef3ff;
+border:2px dashed #2c7db7;
+padding:14px;
+border-radius:12px;
+font-weight:600;
+color:#2c7db7;
+cursor:pointer;
+font-size:14px;
+display:flex;
+align-items:center;
+justify-content:center;
+gap:8px;
+}
+
+
+
+/* SUBMIT BUTTON */
+
+.submit-btn{
+width:100%;
+margin-top:10px;
+background:#16a34a;
+border:none;
+color:white;
+padding:14px;
+border-radius:12px;
+font-size:15px;
+font-weight:600;
+cursor:pointer;
+transition:.2s;
+}
+
+.submit-btn:hover{
+background:#12853a;
+}
+
+</style>
+
+<script>
+	function openTaskDetails(){
+
+document.body.style.opacity="0.4";
+
+setTimeout(function(){
+window.location.href="task-details.html";
+},200);
+
+}
+</script>
+</head>
+
+<body>
+
+<!-- HEADER -->
+
+<div class="header">
+<div class="header-title">Ongoing Tasks</div>
+</div>
+
+<!-- SEARCH -->
+
+<div class="search">
+<div class="search-box">
+<input type="text" placeholder="Search DF No / Task Name">
+</div>
+</div>
+
+<!-- TASK 1 -->
+
+<div class="task-card">
+<div class="task-arrow" onclick="openTaskDetails()">›</div>
+<div class="task-title">DF Meeting</div>
+<div class="task-sub">DF No: 1699 • Marketing</div>
+
+<div class="task-data">
+<div><div class="label">Assigned</div><div class="value">Manoj Dubey</div></div>
+<div><div class="label">Start</div><div class="value">04 Mar 2026</div></div>
+<div><div class="label">TAT</div><div class="value">11 Mar 2026</div></div>
+<div><div class="label">Priority</div><div class="value">High</div></div>
+</div>
+
+<div class="progress"><div class="progress-bar" style="width:60%"></div></div>
+
+<div class="task-footer">
+<div class="time-left">2 DAYS LEFT</div>
+<div class="status">In Progress</div>
+</div>
+
+<button class="update-btn" onclick="openModal('DF Meeting')">
+Update Progress
+</button>
+
+</div>
+
+<!-- TASK 2 -->
+
+<div class="task-card">
+	<div class="task-arrow" onclick="openTaskDetails()">›</div>
+<div class="task-title">Design Approval</div>
+<div class="task-sub">DF No: 1702 • Design</div>
+
+<div class="task-data">
+<div><div class="label">Assigned</div><div class="value">Ravi Sharma</div></div>
+<div><div class="label">Start</div><div class="value">05 Mar 2026</div></div>
+<div><div class="label">TAT</div><div class="value">12 Mar 2026</div></div>
+<div><div class="label">Priority</div><div class="value">Medium</div></div>
+</div>
+
+<div class="progress"><div class="progress-bar" style="width:35%"></div></div>
+
+<div class="task-footer">
+<div class="time-left">3 DAYS LEFT</div>
+<div class="status">In Progress</div>
+</div>
+
+<button class="update-btn" onclick="openModal('Design Approval')">
+Update Progress
+</button>
+
+</div>
+
+<!-- TASK 3 -->
+
+<div class="task-card">
+	<div class="task-arrow" onclick="openTaskDetails()">›</div>
+<div class="task-title">Client Discussion</div>
+<div class="task-sub">DF No: 1704 • Sales</div>
+
+<div class="task-data">
+<div><div class="label">Assigned</div><div class="value">Amit Verma</div></div>
+<div><div class="label">Start</div><div class="value">06 Mar 2026</div></div>
+<div><div class="label">TAT</div><div class="value">10 Mar 2026</div></div>
+<div><div class="label">Priority</div><div class="value">High</div></div>
+</div>
+
+<div class="progress"><div class="progress-bar" style="width:50%"></div></div>
+
+<div class="task-footer">
+<div class="time-left">1 DAY LEFT</div>
+<div class="status">In Progress</div>
+</div>
+
+<button class="update-btn" onclick="openModal('Client Discussion')">
+Update Progress
+</button>
+
+</div>
+
+<!-- TASK 4 -->
+
+<div class="task-card">
+	<div class="task-arrow" onclick="openTaskDetails()">›</div>
+<div class="task-title">Quotation Preparation</div>
+<div class="task-sub">DF No: 1710 • Sales</div>
+
+<div class="task-data">
+<div><div class="label">Assigned</div><div class="value">Pooja Singh</div></div>
+<div><div class="label">Start</div><div class="value">07 Mar 2026</div></div>
+<div><div class="label">TAT</div><div class="value">13 Mar 2026</div></div>
+<div><div class="label">Priority</div><div class="value">Medium</div></div>
+</div>
+
+<div class="progress"><div class="progress-bar" style="width:25%"></div></div>
+
+<div class="task-footer">
+<div class="time-left">5 DAYS LEFT</div>
+<div class="status">In Progress</div>
+</div>
+
+<button class="update-btn" onclick="openModal('Quotation Preparation')">
+Update Progress
+</button>
+
+</div>
+
+<!-- TASK 5 -->
+
+<div class="task-card">
+	<div class="task-arrow" onclick="openTaskDetails()">›</div>
+<div class="task-title">Production Planning</div>
+<div class="task-sub">DF No: 1715 • Production</div>
+
+<div class="task-data">
+<div><div class="label">Assigned</div><div class="value">Rakesh Patel</div></div>
+<div><div class="label">Start</div><div class="value">08 Mar 2026</div></div>
+<div><div class="label">TAT</div><div class="value">15 Mar 2026</div></div>
+<div><div class="label">Priority</div><div class="value">High</div></div>
+</div>
+
+<div class="progress"><div class="progress-bar" style="width:40%"></div></div>
+
+<div class="task-footer">
+<div class="time-left">6 DAYS LEFT</div>
+<div class="status">In Progress</div>
+</div>
+
+<button class="update-btn" onclick="openModal('Production Planning')">
+Update Progress
+</button>
+
+</div>
+
+<!-- TASK 6 -->
+
+<div class="task-card">
+	<div class="task-arrow" onclick="openTaskDetails()">›</div>
+<div class="task-title">Material Approval</div>
+<div class="task-sub">DF No: 1720 • Purchase</div>
+
+<div class="task-data">
+<div><div class="label">Assigned</div><div class="value">Anil Gupta</div></div>
+<div><div class="label">Start</div><div class="value">09 Mar 2026</div></div>
+<div><div class="label">TAT</div><div class="value">18 Mar 2026</div></div>
+<div><div class="label">Priority</div><div class="value">Medium</div></div>
+</div>
+
+<div class="progress"><div class="progress-bar" style="width:15%"></div></div>
+
+<div class="task-footer">
+<div class="time-left">9 DAYS LEFT</div>
+<div class="status">In Progress</div>
+</div>
+
+<button class="update-btn" onclick="openModal('Material Approval')">
+Update Progress
+</button>
+
+</div>
+
+<!-- MODAL -->
+
+<!-- MODAL -->
+
+<div class="modal" id="updateModal">
+
+<div class="modal-content">
+
+<div class="modal-header">
+<div>
+<div class="modal-title">Update Task</div>
+<div style="font-size:12px;color:#6b7280;margin-top:2px" id="taskName"></div>
+</div>
+
+<div class="close-btn" onclick="closeModal()">✕</div>
+</div>
+
+<div class="form-group">
+<label>Status *</label>
+<select id="taskStatus" onchange="toggleCamera()">
+<option value="progress">In Progress</option>
+<option value="done">Done</option>
+<option value="delay">Delayed</option>
+</select>
+</div>
+
+<div class="form-group">
+<label>Date</label>
+<input type="date">
+</div>
+
+<div class="form-group">
+<label>Remarks</label>
+<textarea placeholder="Enter remarks..."></textarea>
+</div>
+
+<!-- CAMERA SECTION -->
+
+<div class="form-group" id="cameraSection" style="display:none">
+
+<label>Capture Proof</label>
+
+<input type="file" accept="image/*" capture="environment" style="display:none" id="cameraInput">
+
+<button type="button" class="camera-btn" onclick="document.getElementById('cameraInput').click()">
+📷 Capture Photo
+</button>
+
+</div>
+
+<button class="submit-btn">Submit</button>
+
+</div>
+
+</div>
+
+<style>
+
+/* CAMERA BUTTON */
+
+.camera-btn{
+width:100%;
+background:#eef3ff;
+border:2px dashed #2c7db7;
+padding:12px;
+border-radius:12px;
+font-weight:600;
+color:#2c7db7;
+cursor:pointer;
+font-size:14px;
+transition:.2s;
+}
+
+.camera-btn:hover{
+background:#e3ecff;
+}
+
+/* PREMIUM MODAL IMPROVEMENTS */
+
+.modal-content{
+background:white;
+width:100%;
+max-width:420px;
+border-radius:18px;
+padding:22px;
+animation:popup .25s ease;
+box-shadow:0 20px 60px rgba(0,0,0,0.25);
+}
+
+.modal-header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:18px;
+}
+
+.modal-title{
+font-weight:700;
+font-size:18px;
+}
+
+.close-btn{
+cursor:pointer;
+font-size:20px;
+color:#777;
+}
+
+.form-group select,
+.form-group input,
+.form-group textarea{
+width:100%;
+padding:12px;
+border-radius:10px;
+border:1px solid #e5e7eb;
+font-family:'Manrope';
+font-size:14px;
+background:#fafafa;
+}
+
+</style>
+
+<script>
+
+function openModal(task){
+
+document.getElementById("updateModal").style.display="flex";
+document.getElementById("taskName").innerText=task;
+
+document.body.style.overflow="hidden";
+
+}
+
+function closeModal(){
+
+document.getElementById("updateModal").style.display="none";
+document.body.style.overflow="auto";
+
+}
+
+function toggleCamera(){
+
+let status=document.getElementById("taskStatus").value;
+let camera=document.getElementById("cameraSection");
+
+if(status==="done"){
+camera.style.display="block";
+}else{
+camera.style.display="none";
+}
+
+}
+
+window.onclick=function(e){
+if(e.target.id==="updateModal"){
+closeModal();
+}
+}
+
+
+</script>
+
+
+</body>
+</html>

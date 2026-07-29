@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+body{
+margin:0;
+font-family:'Manrope',sans-serif;
+background:#f5f7fb;
+color:#1a1a1a;
+overflow-x:hidden;
+padding-bottom:80px;
+}
+
+/* HEADER */
+
+.header{
+background:linear-gradient(135deg,#2c7db7,#5aa7df);
+color:white;
+padding:18px;
+}
+
+.header-row{
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+.header-title{
+font-size:18px;
+font-weight:700;
+}
+
+.header-icons{
+display:flex;
+gap:18px;
+align-items:center;
+}
+
+.notification{
+position:relative;
+cursor:pointer;
+}
+
+.badge{
+position:absolute;
+top:-6px;
+right:-6px;
+background:red;
+color:white;
+font-size:10px;
+width:16px;
+height:16px;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+}
+
+/* NOTIFICATION PANEL */
+
+.notification-panel{
+position:fixed;
+top:64px;
+left:0;
+width:100%;
+background:white;
+box-shadow:0 15px 35px rgba(0,0,0,0.15);
+border-bottom-left-radius:16px;
+border-bottom-right-radius:16px;
+transform:translateY(-120%);
+transition:.35s;
+z-index:999;
+}
+
+.notification-panel.active{
+transform:translateY(0);
+}
+
+.notif-header{
+padding:16px;
+font-weight:700;
+border-bottom:1px solid #eee;
+}
+
+.notif-item{
+display:flex;
+gap:12px;
+padding:14px 16px;
+align-items:center;
+border-bottom:1px solid #f4f4f4;
+}
+
+.notif-item:last-child{
+border-bottom:none;
+}
+
+.notif-item i{
+color:#2c7db7;
+font-size:14px;
+}
+
+.notif-title{
+font-size:13px;
+font-weight:600;
+}
+
+.notif-time{
+font-size:11px;
+color:#888;
+}
+
+/* SECTION */
+
+.section{
+padding:18px;
+}
+
+.section-title{
+font-size:16px;
+font-weight:700;
+margin-bottom:14px;
+}
+
+/* KPI GRID */
+
+.task-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:14px;
+}
+
+.task-card{
+background:white;
+border-radius:18px;
+padding:16px;
+box-shadow:0 12px 26px rgba(0,0,0,0.06);
+display:flex;
+align-items:center;
+gap:14px;
+}
+
+.task-icon{
+width:44px;
+height:44px;
+border-radius:14px;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:18px;
+color:white;
+}
+
+.blue{background:linear-gradient(135deg,#2c7db7,#5aa7df);}
+.red{background:linear-gradient(135deg,#e74c3c,#ff6b6b);}
+.green{background:linear-gradient(135deg,#2ecc71,#6ee7b7);}
+.orange{background:linear-gradient(135deg,#f39c12,#f7c873);}
+.purple{background:linear-gradient(135deg,#8e44ad,#c084fc);}
+
+.task-title{
+font-size:12px;
+color:#6b7280;
+}
+
+.task-value{
+font-size:22px;
+font-weight:700;
+}
+
+/* PIPELINE */
+
+.pipeline{
+background:white;
+border-radius:18px;
+padding:16px;
+box-shadow:0 10px 24px rgba(0,0,0,0.06);
+}
+
+.pipeline-row{
+display:flex;
+justify-content:space-between;
+padding:12px 0;
+border-bottom:1px solid #f0f0f0;
+}
+
+.pipeline-left{
+display:flex;
+align-items:center;
+gap:10px;
+}
+
+.stage-dot{
+width:10px;
+height:10px;
+border-radius:50%;
+}
+
+.pipeline-title{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:10px;
+}
+
+.add-btn{
+background:#2c7db7;
+color:white;
+width:30px;
+height:30px;
+border-radius:8px;
+display:flex;
+align-items:center;
+justify-content:center;
+cursor:pointer;
+}
+
+/* FOLLOWUPS */
+
+.follow-grid{
+display:grid;
+grid-template-columns:1fr 1fr 1fr;
+gap:12px;
+}
+
+.follow-card{
+background:white;
+border-radius:16px;
+padding:16px;
+text-align:center;
+box-shadow:0 10px 24px rgba(0,0,0,0.06);
+}
+
+.follow-count{
+font-size:20px;
+font-weight:700;
+}
+
+.follow-label{
+font-size:11px;
+color:#6b7280;
+}
+
+/* ACTIVITY FEED */
+
+.activity{
+background:white;
+border-radius:18px;
+box-shadow:0 10px 24px rgba(0,0,0,0.06);
+}
+
+.activity-item{
+display:flex;
+gap:12px;
+padding:14px 16px;
+border-bottom:1px solid #f0f0f0;
+}
+
+.activity-icon{
+color:#2c7db7;
+}
+
+.activity-text{
+font-size:13px;
+}
+
+.activity-time{
+font-size:11px;
+color:#999;
+}
+
+/* BOTTOM NAV */
+
+.bottom-nav{
+position:fixed;
+bottom:0;
+width:100%;
+height:65px;
+background:white;
+box-shadow:0 -4px 20px rgba(0,0,0,0.08);
+display:flex;
+justify-content:space-around;
+align-items:center;
+}
+
+.nav-item{
+display:flex;
+flex-direction:column;
+align-items:center;
+font-size:11px;
+color:#777;
+}
+
+.nav-item i{
+font-size:18px;
+margin-bottom:4px;
+}
+
+.nav-active{
+color:#2c7db7;
+font-weight:600;
+}
+
+
+.clickable{
+cursor:pointer;
+transition:0.2s;
+}
+
+.clickable:hover{
+transform:scale(1.02);
+box-shadow:0 14px 28px rgba(0,0,0,0.08);
+}
+
+
+
+/* FLOATING CHAT BUTTON */
+
+.chat-fab{
+position:fixed;
+bottom:90px;
+right:20px;
+width:58px;
+height:58px;
+border-radius:50%;
+background:linear-gradient(135deg,#2c7db7,#5aa7df);
+display:flex;
+align-items:center;
+justify-content:center;
+color:white;
+font-size:22px;
+cursor:pointer;
+box-shadow:0 12px 30px rgba(0,0,0,0.25);
+z-index:9999;
+}
+
+.chat-dot{
+position:absolute;
+top:6px;
+right:6px;
+width:10px;
+height:10px;
+background:#ff3b30;
+border-radius:50%;
+border:2px solid white;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<!-- HEADER -->
+
+<div class="header">
+
+<div class="header-row">
+
+<div class="header-title">Dashboard</div>
+
+<div class="header-icons">
+
+<div class="notification" onclick="toggleNotif()">
+<i class="fa fa-bell"></i>
+<div class="badge">3</div>
+</div>
+
+<i class="fa fa-sign-out-alt"></i>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- NOTIFICATION PANEL -->
+
+<div class="notification-panel" id="notificationPanel">
+
+<div class="notif-header">Notifications</div>
+
+<div class="notif-item">
+<i class="fa fa-user-plus"></i>
+<div>
+<div class="notif-title">Rahul Traders added as new lead</div>
+<div class="notif-time">2 mins ago</div>
+</div>
+</div>
+
+<div class="notif-item">
+<i class="fa fa-file-invoice"></i>
+<div>
+<div class="notif-title">Quotation sent to ABC Packaging</div>
+<div class="notif-time">15 mins ago</div>
+</div>
+</div>
+
+<div class="notif-item">
+<i class="fa fa-phone"></i>
+<div>
+<div class="notif-title">Followup reminder scheduled</div>
+<div class="notif-time">Today 3:30 PM</div>
+</div>
+</div>
+
+<div class="notif-item">
+<i class="fa fa-trophy"></i>
+<div>
+<div class="notif-title">Order won from PQR Industries</div>
+<div class="notif-time">Yesterday</div>
+</div>
+</div>
+
+</div>
+
+<!-- TASK OVERVIEW -->
+
+<div class="section">
+
+<div class="section-title">Task Overview</div>
+
+<div class="task-grid">
+
+<div class="task-card clickable" onclick="openTaskPage()">
+
+<div class="task-icon blue">
+<i class="fa fa-spinner"></i>
+</div>
+
+<div style="flex:1">
+
+<div class="task-title">Ongoing</div>
+
+<div class="task-value counter" data-count="12">0</div>
+
+</div>
+
+<div style="color:#9ca3af">
+<i class="fa fa-chevron-right"></i>
+</div>
+
+</div>
+
+<div class="task-card">
+<div class="task-icon red"><i class="fa fa-exclamation"></i></div>
+<div>
+<div class="task-title">Overdue</div>
+<div class="task-value counter" data-count="3">0</div>
+</div>
+</div>
+
+<div class="task-card">
+<div class="task-icon green"><i class="fa fa-check"></i></div>
+<div>
+<div class="task-title">Completed</div>
+<div class="task-value counter" data-count="42">0</div>
+</div>
+</div>
+
+<div class="task-card">
+<div class="task-icon orange"><i class="fa fa-user-plus"></i></div>
+<div>
+<div class="task-title">Unassigned</div>
+<div class="task-value counter" data-count="5">0</div>
+</div>
+</div>
+
+<div class="task-card">
+<div class="task-icon purple"><i class="fa fa-clock"></i></div>
+<div>
+<div class="task-title">Pending Approval</div>
+<div class="task-value counter" data-count="2">0</div>
+</div>
+</div>
+
+</div>
+
+</div>
+
+<!-- SALES PIPELINE -->
+
+<div class="section">
+
+<div class="pipeline-title">
+<div class="section-title">Sales Pipeline</div>
+<div class="add-btn" onclick="location.href='add-opportunity.html'"><i class="fa fa-plus"></i></div>
+</div>
+
+<div class="pipeline">
+
+<div class="pipeline-row clickable" onclick="location.href='new-leads.html'">
+<div class="pipeline-left">
+<div class="stage-dot" style="background:#3498db"></div>
+New Leads
+</div>
+<b>18</b>
+</div>
+
+<div class="pipeline-row">
+<div class="pipeline-left">
+<div class="stage-dot" style="background:#9b59b6"></div>
+Contacted
+</div>
+<b>6</b>
+</div>
+
+<div class="pipeline-row">
+<div class="pipeline-left">
+<div class="stage-dot" style="background:#f39c12"></div>
+Quotation Sent
+</div>
+<b>4</b>
+</div>
+
+<div class="pipeline-row">
+<div class="pipeline-left">
+<div class="stage-dot" style="background:#2ecc71"></div>
+Order Won
+</div>
+<b>1</b>
+</div>
+
+</div>
+
+</div>
+
+<!-- FOLLOWUPS -->
+
+<div class="section">
+
+<div class="section-title">Followups</div>
+
+<div class="follow-grid">
+
+<div class="follow-card">
+<i class="fa fa-calendar-day"></i>
+<div class="follow-count">5</div>
+<div class="follow-label">Today</div>
+</div>
+
+<div class="follow-card">
+<i class="fa fa-bell"></i>
+<div class="follow-count">1</div>
+<div class="follow-label">Missed</div>
+</div>
+
+<div class="follow-card">
+<i class="fa fa-calendar"></i>
+<div class="follow-count">7</div>
+<div class="follow-label">Upcoming</div>
+</div>
+
+</div>
+
+</div>
+
+<!-- RECENT ACTIVITY -->
+
+<div class="section">
+
+<div class="section-title">Recent Activity</div>
+
+<div class="activity">
+
+<div class="activity-item">
+<div class="activity-icon"><i class="fa fa-user-plus"></i></div>
+<div>
+<div class="activity-text">Rahul Traders added as new lead</div>
+<div class="activity-time">2 mins ago</div>
+</div>
+</div>
+
+<div class="activity-item">
+<div class="activity-icon"><i class="fa fa-file-invoice"></i></div>
+<div>
+<div class="activity-text">Quotation sent to ABC Packaging</div>
+<div class="activity-time">15 mins ago</div>
+</div>
+</div>
+
+<div class="activity-item">
+<div class="activity-icon"><i class="fa fa-trophy"></i></div>
+<div>
+<div class="activity-text">Order won from PQR Industries</div>
+<div class="activity-time">Yesterday</div>
+</div>
+</div>
+
+</div>
+
+</div>
+
+
+<!-- CHAT FLOAT BUTTON -->
+
+<div class="chat-fab" onclick="openChat()">
+
+<i class="fa fa-comment-dots"></i>
+
+<div class="chat-dot"></div>
+
+</div>
+
+
+<!-- BOTTOM NAV -->
+
+<div class="bottom-nav">
+
+<div class="nav-item nav-active">
+<i class="fa fa-home"></i>
+Dashboard
+</div>
+
+<div class="nav-item">
+<i class="fa fa-user-plus"></i>
+Leads
+</div>
+
+<div class="nav-item">
+<i class="fa fa-tasks"></i>
+Tasks
+</div>
+
+<div class="nav-item">
+<i class="fa fa-chart-line"></i>
+Reports
+</div>
+
+<div class="nav-item">
+<i class="fa fa-user"></i>
+Profile
+</div>
+
+</div>
+
+<script>
+
+/* KPI COUNTER ANIMATION */
+
+const counters=document.querySelectorAll('.counter');
+
+counters.forEach(counter=>{
+const update=()=>{
+const target=+counter.getAttribute('data-count');
+const count=+counter.innerText;
+
+const inc=target/30;
+
+if(count<target){
+counter.innerText=Math.ceil(count+inc);
+setTimeout(update,30);
+}else{
+counter.innerText=target;
+}
+}
+
+update();
+});
+
+
+/* NOTIFICATION TOGGLE */
+
+function toggleNotif(){
+document.getElementById("notificationPanel").classList.toggle("active");
+}
+
+
+function openTaskPage(){
+window.location.href="ongoing-tasks.html";
+}	
+
+function openChat(){
+
+window.location.href="chat.html";
+
+}
+
+function newLeads(){
+window.open("new-leads.html","_self");
+}
+
+
+</script>
+
+</body>
+</html>

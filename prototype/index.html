@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shubham Pack App</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+
+body{
+background:#e9eef2;
+font-family:'Segoe UI',sans-serif;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+margin:0;
+}
+
+.mobile-frame{
+width:360px;
+height:740px;
+background:white;
+border-radius:40px;
+box-shadow:0 20px 60px rgba(0,0,0,0.25);
+overflow:hidden;
+position:relative;
+}
+
+.status-bar{
+height:28px;
+background:#fff;
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:0 12px;
+font-size:12px;
+}
+
+.screen-frame{
+width:100%;
+height:calc(100% - 28px);
+border:none;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="mobile-frame">
+
+<div class="status-bar">
+<span>9:41</span>
+<span>
+<i class="fa fa-signal"></i>
+<i class="fa fa-wifi"></i>
+<i class="fa fa-battery-three-quarters"></i>
+</span>
+</div>
+
+<iframe src="login.html" class="screen-frame" id="appFrame"></iframe>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,204 @@
+<?php
+$order_won_id=$this->uri->segment('3');
+$lead_id=$this->uri->segment('4');
+$reste=$this->db->select('id')->from('bom_moulds_detail')->where('lead_id',$lead_id)->get();
+if($reste->num_rows()==0)
+{
+echo "No Mould Available"; exit;
+}
+
+         $projectname = '';
+         $sql = $this->db->select('project_name')
+                         ->from('bom_pi_sales_client_info')
+                         ->where('lead_id', $lead_id)
+                         ->get();
+
+            if ($sql->num_rows() > 0) {
+                foreach($sql->result() as $row);
+                $projectname = $row->project_name;
+            }
+
+            
+
+/** QUERY ENDS **/
+
+
+require_once('tcpdf_include.php');
+
+// create new PDF document
+$pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+
+// set document information
+$pdf->SetCreator(PDF_CREATOR);
+
+
+
+// set default header data
+//$pdf->SetHeaderData(PDF_HEADER_LOGO, PDF_HEADER_LOGO_WIDTH);
+$pdf->setFooterData(array(0, 64, 0), array(0, 64, 128));
+
+// set header and footer fonts
+$pdf->setHeaderFont(array(PDF_FONT_NAME_MAIN, '', PDF_FONT_SIZE_MAIN));
+$pdf->setFooterFont(array(PDF_FONT_NAME_DATA, '', PDF_FONT_SIZE_DATA));
+
+// set default monospaced font
+$pdf->SetDefaultMonospacedFont(PDF_FONT_MONOSPACED);
+
+// set margins
+$pdf->SetMargins(PDF_MARGIN_LEFT, PDF_MARGIN_TOP, PDF_MARGIN_RIGHT);
+$pdf->SetHeaderMargin(PDF_MARGIN_HEADER);
+$pdf->SetFooterMargin(PDF_MARGIN_FOOTER);
+
+// set auto page breaks
+$pdf->SetAutoPageBreak(TRUE, PDF_MARGIN_BOTTOM);
+
+// set image scale factor
+$pdf->setImageScale(PDF_IMAGE_SCALE_RATIO);
+
+// set some language-dependent strings (optional)
+if (@file_exists(dirname(__FILE__) . '/lang/eng.php')) {
+    require_once(dirname(__FILE__) . '/lang/eng.php');
+    $pdf->setLanguageArray($l);
+}
+$pdf->AddPage('L', 'A4');
+// ---------------------------------------------------------
+
+// set default font subsetting mode
+$pdf->setFontSubsetting(true);
+
+// Set font
+// dejavusans is a UTF-8 Unicode font, if you only need to
+// print standard ASCII chars, you can use core fonts like
+// helvetica or times to reduce file size.
+$pdf->SetFont('dejavusans', '', 10, '', true);
+
+// Add a page
+// This method has several options, check the source code documentation for more information.
+
+// Call before the addPage() method
+$pdf->SetPrintHeader(false);
+$pdf->SetPrintFooter(false);
+// set text shadow effect
+$pdf->setTextShadow(array('enabled' => false, 'depth_w' => 0.2, 'depth_h' => 0.2, 'color' => array(196, 196, 196), 'opacity' => 1, 'blend_mode' => 'Normal'));
+
+$html= '
+<table width="100%" style="padding:5px;">
+<tr>
+<td width="50%">PROJECT NAME.:- '.$projectname.'
+</td>
+<td width="20%" style="font-size:20px;"> </td>
+<td width="30%"style="text-align:right;" ><img src="https://www.hongyijig.com/wp-content/uploads/2021/01/HongyiJig-main-logo.png" style="width:150px;"></td>
+</tr>
+</table>
+<table width="100%" style="padding:5px;">
+<tr>
+<td width="35%" style="height:200px;padding:5px">
+
+</td>
+<td width="30%"></td>   
+<td width="35%" style="height:200px; padding:5px">
+</td>
+</tr>
+<tr>
+<td width="100%" style="padding:5px; text-align:center; font-size:20px;color:red;font-size:32px;">CATALOUGE FOR CUSTOMS
+</td>
+</tr>
+</table>
+<br pagebreak="true"/>
+';
+// Set some content to print
+
+/** quert paet **/ 
+if($reste->num_rows()>0){
+$i=1;
+foreach($reste->result() as $row)
+{ 
+
+     $res=$this->db->select('*')->from('mould_catalogue_details')->where('order_won_id',$order_won_id)->where('mould_id',$row->id)->get();
+            if($res->num_rows()>0)
+            {
+                foreach($res->result() as $editdata);
+
+$a=SITE_ROOT.'assets/mould_catalouge/'.$editdata->isometric_file;
+
+$html.= '
+<table width="100%" style="padding:5px;">
+<tr>
+<td width="20%">MOULD NO.:- '.$i.'
+</td>
+<td width="50%" style="font-size:20px;">MOULD NAME:- 500 ML CONTAINER</td>
+<td width="30%"style="text-align:right;" ><img src="https://www.hongyijig.com/wp-content/uploads/2021/01/HongyiJig-main-logo.png" style="width:150px;"></td>
+</tr>
+</table>
+
+
+<table width="100%" style="padding:5px;">
+<tr>
+<td width="35%" style="height:100px; border:1px solid black;">
+<img src="'.$a.'" width="400" height="220px">
+</td>
+<td width="30%"></td>
+<td width="35%" style="height:200px; border:1px solid black; padding:5px">
+<img src="'.SITE_ROOT.'assets/mould_catalouge/'.$editdata->component_image.'" width="400" height="220px">
+</td>
+</tr>
+<tr>
+<td width="35%" style="padding:5px; text-align:center; font-size:20px;">ISOMETRIC VIEW
+</td>
+<td width="30%"></td>
+<td width="35%" style="padding:5px; text-align:center; font-size:20px;">'.$editdata->component_name.'
+</td>
+</tr>
+</table>
+<br>
+<br>
+
+<table width="100%" style="padding:5px;">
+<tr>
+<td width="35%" style="height:200px; border:1px solid black; padding:5px">
+<img src="'.SITE_ROOT.'assets/mould_catalouge/'.$editdata->core_file.'" width="400" height="220px">
+</td>
+<td width="30%"></td>
+<td width="35%" style="height:200px; border:1px solid black; padding:5px">
+<img src="'.SITE_ROOT.'assets/mould_catalouge/'.$editdata->cavity_file.'" width="400" height="220px">
+</td>
+</tr>
+<tr>
+<td width="35%" style="padding:5px; text-align:center; font-size:20px;">CORE SIDE
+</td>
+<td width="30%"></td>
+<td width="35%" style="padding:5px; text-align:center; font-size:20px;">CAVITY SIDE
+</td>
+</tr>
+</table>';
+if($i!=$res->num_rows())
+{
+$html.='<br pagebreak="true"/>
+';
+}
+}
+$i++;
+}
+}
+
+//echo $footer_logo_html; exit;
+// Print text using writeHTMLCell()
+$pdf->writeHTMLCell(0, 0, '', '', $html, 0, 1, 0, true, '', true);
+
+// ---------------------------------------------------------
+
+// Close and output PDF document
+// This method has several options, check the source code documentation for more information.
+
+
+
+$filelocation = $_SERVER['DOCUMENT_ROOT'] . '/image_bank/popdf';
+$fileNL = $filelocation . "/akash.pdf"; //Linux
+
+$pdf->Output($fileNL, 'I');
+
+
+
+//============================================================+
+// END OF FILE
+//============================================================+

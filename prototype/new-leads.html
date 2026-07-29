@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+body{
+margin:0;
+font-family:'Manrope',sans-serif;
+background:#f4f7fb;
+color:#1a1a1a;
+}
+
+/* HEADER */
+
+.header{
+background:linear-gradient(135deg,#2c7db7,#5aa7df);
+color:white;
+padding:16px;
+display:flex;
+align-items:center;
+gap:12px;
+}
+
+.back{
+font-size:18px;
+cursor:pointer;
+}
+
+.title{
+font-weight:700;
+font-size:17px;
+}
+
+/* SEARCH BAR */
+
+.search{
+padding:14px;
+background:white;
+border-bottom:1px solid #eee;
+}
+
+.search input{
+width:100%;
+padding:11px 14px;
+border-radius:12px;
+border:1px solid #e5e7eb;
+font-family:'Manrope';
+font-size:13px;
+}
+
+/* LEAD LIST */
+
+.lead-list{
+padding:14px;
+}
+
+/* LEAD CARD */
+
+.lead-card{
+background:white;
+border-radius:18px;
+padding:16px;
+margin-bottom:14px;
+box-shadow:0 12px 28px rgba(0,0,0,0.06);
+}
+
+/* COMPANY + LEAD NO */
+
+.company-row{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:6px;
+gap:10px;
+}
+
+.company{
+font-weight:700;
+font-size:15px;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
+}
+
+.leadno{
+background:#eef3ff;
+color:#2c7db7;
+padding:4px 8px;
+border-radius:8px;
+font-size:11px;
+font-weight:600;
+white-space:nowrap;
+}
+
+/* CONTACT */
+
+.contact{
+font-size:13px;
+margin-top:6px;
+display:flex;
+align-items:center;
+gap:6px;
+color:#444;
+}
+
+.contact i{
+color:#2c7db7;
+}
+
+/* MACHINE */
+
+.machine{
+margin-top:8px;
+background:#f5f7fb;
+padding:8px 10px;
+border-radius:10px;
+font-size:12px;
+color:#444;
+}
+
+/* REMARK */
+
+.remark{
+font-size:12px;
+background:#f9fafc;
+padding:10px;
+border-radius:10px;
+margin-top:10px;
+color:#555;
+}
+
+/* MANAGER */
+
+.manager{
+margin-top:8px;
+font-size:12px;
+color:#777;
+}
+
+/* BUTTONS */
+
+.actions{
+display:flex;
+gap:10px;
+margin-top:12px;
+}
+
+.btn{
+flex:1;
+padding:9px;
+border-radius:10px;
+border:none;
+font-size:12px;
+cursor:pointer;
+font-weight:600;
+}
+
+.btn-progress{
+background:#22c55e;
+color:white;
+}
+
+.btn-email{
+background:#2c7db7;
+color:white;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<!-- HEADER -->
+
+<div class="header">
+
+<i class="fa fa-arrow-left back" onclick="history.back()"></i>
+
+<div class="title">New Leads</div>
+
+</div>
+
+<!-- SEARCH -->
+
+<div class="search">
+
+<input type="text" placeholder="Search Lead / Company / Contact">
+
+</div>
+
+
+<div class="lead-list">
+
+<!-- LEAD CARD -->
+
+<div class="lead-card">
+
+<div class="company-row">
+
+<div class="company">
+East African Overseas
+</div>
+
+<div class="leadno">
+SPM/DOM/L/1004/25-26
+</div>
+
+</div>
+
+<div class="contact">
+
+<i class="fa fa-user"></i>
+Ram Kumar Jain
+
+</div>
+
+<div class="contact">
+
+<i class="fa fa-phone"></i>
+9927800906
+
+</div>
+
+<div class="machine">
+
+Machine: <b>SPM 600 Cantilever (1 Nos)</b>
+
+</div>
+
+<div class="remark">
+
+Discussion held with Mr Ram Kumar Jain. Already using our machine and planning to buy another SPM 600 Cantilever.
+
+</div>
+
+<div class="manager">
+
+Manager: <b>Rakesh Chand</b>
+
+</div>
+
+<div class="actions">
+
+<button class="btn btn-progress">
+<i class="fa fa-pen"></i> Update Progress
+</button>
+
+<button class="btn btn-email">
+<i class="fa fa-envelope"></i> Send Intro Email
+</button>
+
+</div>
+
+</div>
+
+
+<!-- SECOND LEAD -->
+
+<div class="lead-card">
+
+<div class="company-row">
+
+<div class="company">
+ABC Packaging
+</div>
+
+<div class="leadno">
+SPM/DOM/L/1021
+</div>
+
+</div>
+
+<div class="contact">
+<i class="fa fa-user"></i>
+Ravi Sharma
+</div>
+
+<div class="contact">
+<i class="fa fa-phone"></i>
+9876543210
+</div>
+
+<div class="machine">
+
+Machine: <b>Liquid Filling Machine</b>
+
+</div>
+
+<div class="remark">
+Client interested in automated filling line.
+</div>
+
+<div class="manager">
+Manager: <b>Manoj Dubey</b>
+</div>
+
+<div class="actions">
+
+<button class="btn btn-progress" onclick="openProgress()">
+<i class="fa fa-pen"></i> Update Progress
+</button>
+
+<button class="btn btn-email">
+<i class="fa fa-envelope"></i> Send Intro Email
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+</body>
+
+<script>
+function openProgress(){
+window.location.href="update-progress.html";
+}
+</script>
+</html>

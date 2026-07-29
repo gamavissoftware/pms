@@ -1,0 +1,805 @@
+.row-flex {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+@media (max-width:576px){
+    .row-flex{
+        display:block;
+    }
+}
+
+
+
+
+.flutter {
+  height: 100%;
+  padding: 10px;
+  background-color:white;
+box-shadow:1px 1px  10px lightgrey;
+/* margin-top:20px; */
+border-radius:10px;
+border-bottom: 2px solid lightseagreen;
+}
+
+.flutter p{
+    font-size:11px;
+    text-align:center;
+}
+
+.flutter h4{
+    text-align:center;
+    margin:0px;
+    font-size:15px;
+}
+hr {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    border: 0;
+    border-top: 1px solid #eee;
+}
+
+[class*="col-"] {
+  margin-bottom: 10px;
+}
+
+.dailytaskcircle{
+    border-radius: 50%;
+    width: 45px;
+    height: 45px;
+    padding: 9px 0px 0px 0px;
+    background: #fff;
+    border: 2px solid #703bda52;
+    color: #666;
+    text-align: center;
+    font-size: 14px;
+    margin: auto;
+    color:#703bda;
+    font-weight:600;
+}
+
+.flutter i{
+    color: #703bda;
+}
+
+
+.delegation-box i {
+    font-size: 20px;
+    color: #f9ab00;
+    border-radius: 50%;
+    margin: auto;
+    width: 45px;
+    height: 45px;
+    background-color: #fff1ea;
+    padding: 12px;
+}
+
+.refer{
+
+    font-size: 28px;
+    background: #DBF3FA;
+    color: #283043;
+ 
+    text-align: center;
+    border-radius: 50%;
+
+    margin: auto;
+    width: 45px;
+    height: 45px;
+
+}
+   
+
+.numberCircle {
+
+    border-radius: 50%;
+
+    width: 45px;
+
+    height: 45px;
+
+     padding: 9px 0px 0px 0px;
+
+    background: #fff;
+
+    border: 2px solid #64C3D1;
+
+    color: #666;
+
+    text-align: center;
+
+    font-size: 14px;
+
+    margin:auto;
+
+}
+
+.dailytasksection { 
+
+    border-radius: 50%;
+
+    width: 45px;
+
+    height: 45px;
+
+     padding: 9px 0px 0px 0px;
+
+    background: #fff;
+
+    border: 2px solid #00A69D;
+
+    color: #666;
+
+    text-align: center;
+
+    font-size: 14px;
+
+    margin:auto;
+
+}
+
+.numberCirclegreen {
+
+    border-radius: 50%;
+
+    width: 45px;
+
+    height: 45px;
+
+     padding: 9px 0px 0px 0px;
+
+    background: #fff;
+
+    border: 2px solid #44D156;
+
+    color: #666;
+
+    text-align: center;
+
+    font-size: 14px;
+
+    margin:auto;
+
+}
+
+.numberCircleproduction {
+
+    border-radius: 50%;
+
+    width: 45px;
+
+    height: 45px;
+
+     padding: 9px 0px 0px 0px;
+
+    background: #fff;
+
+    border: 2px solid #8B97BD;
+
+    color: #666;
+
+    text-align: center;
+
+    font-size: 14px;
+
+    margin:auto;
+
+}
+
+
+
+.numberCirclepurchase {
+
+    border-radius: 50%;
+
+    width: 45px;
+
+    height: 45px;
+
+     padding: 9px 0px 0px 0px;
+
+    background: #fff;
+
+    border: 2px solid #F2652F99;
+
+    color: #666;
+
+    text-align: center;
+
+    font-size: 14px;
+
+     margin:auto;
+
+}
+
+.numberCirclestore {
+
+    border-radius: 50%;
+
+    width: 45px;
+
+    height: 45px;
+
+     padding: 9px 0px 0px 0px;
+
+    background: #fff;
+
+    border: 2px solid #E6E31DCC;
+
+    color: #666;
+
+    text-align: center;
+
+    font-size: 14px;
+
+    margin:auto;
+
+}
+
+
+
+@media(max-width:769px)
+
+{
+
+    .removestick
+
+    {
+
+        display:none;
+
+        
+
+    }
+
+}
+
+
+
+.numberCircleleave {
+
+    
+
+    border-radius: 50%;
+
+    width: 45px;
+
+    height: 45px;
+
+     padding: 9px 0px 0px 0px;
+
+    background: #fff;
+
+    border: 2px solid #C0C0C0;
+
+    color: #666;
+
+    text-align: center;
+
+    font-size: 14px;
+
+}
+
+.numberCircleMIS {
+
+    border-radius: 50%;
+
+    width: 30px;
+
+    height: 30px;
+
+     padding: 9px 0px 0px 0px;
+
+    background: #fff;
+
+    border: 2px solid #fff;
+
+    color: #666;
+
+    text-align: center;
+
+    font-size: 13px;
+
+}
+
+
+
+
+
+.card-box {
+
+    padding: 6px;
+
+    box-shadow: 1px 1px 10px lightgray;
+
+    -webkit-border-radius: 5px;
+
+    border-radius: 5px;
+
+    -moz-border-radius: 5px;
+
+    background-clip: padding-box;
+
+    margin-bottom: 7px;
+
+    background-color: #ffffff;
+    
+
+}
+
+.blink {
+
+    -webkit-animation: blink 1s step-end infinite;
+
+            animation: blink 1s step-end infinite;
+
+}
+
+@-webkit-keyframes blink { 50% { visibility: hidden; }}
+
+        @keyframes blink { 50% { visibility: hidden; }}
+
+        
+
+        .sonar-wrapper {
+
+  position: relative;
+
+  z-index: 0;
+
+  overflow: hidden;
+
+  padding: .5rem 0;
+
+}
+
+
+
+/* The circle */
+
+.sonar-emitter {
+
+position: relative;
+
+margin: 0 auto;
+
+width: 10px;
+
+height: 10px;
+
+border-radius: 9999px;
+
+background-color: HSL(4.1, 100%, 51.6%);
+
+}
+
+
+
+/* the 'wave', same shape and size as its parent */
+
+.sonar-wave {
+
+  position: absolute;
+
+  top: 0;
+
+  left: 0;
+
+  width: 10px;
+
+  height: 10px;
+
+  border-radius: 50%;
+
+  background-color: HSL(4.1, 100%, 51.6%);
+
+  opacity: 0;
+
+  z-index: -1;
+
+  pointer-events: none;
+
+}
+
+
+
+/*
+
+  Animate!
+
+  NOTE: add browser prefixes where needed.
+
+*/
+
+.sonar-wave {
+
+  animation: sonarWave 2s linear infinite;
+
+}
+
+
+
+@keyframes sonarWave {
+
+  from {
+
+    opacity: 0.4;
+
+  }
+
+  to {
+
+    transform: scale(3);
+
+    opacity: 0;
+
+  }
+
+}
+
+hr {
+
+    margin-top: 8px;
+
+    margin-bottom: 8px;
+
+    border: 0;
+
+        border-top-color: currentcolor;
+
+        border-top-style: none;
+
+        border-top-width: 0px;
+
+    border-top: 1px solid #eee;
+
+}
+
+
+
+
+
+#mydiv {
+
+  position: absolute;
+
+  z-index: 9;
+
+  background-color: #f1f1f1;
+
+  border: 1px solid #d3d3d3;
+
+  text-align: center;
+
+}
+
+
+
+#mydivheader {
+
+  padding: 10px;
+
+  cursor: move;
+
+  z-index: 10;
+
+  background-color: #2196F3;
+
+  color: #fff;
+
+}
+
+#mydiv textarea{
+
+    
+
+    font-family: "Segoe UI";
+
+}
+
+ #mydiv textarea:focus{
+
+        outline: none;
+
+    }
+
+.pulsating-circle {
+
+ position: absolute;
+
+width: 45px;
+
+height: 45px;
+
+left: 50%;
+
+transform: translateX(-50%);
+
+  }
+
+.pulsating-circle::before {
+
+    content: '';
+
+    position: relative;
+
+    display: block;
+
+    width: 150%;
+
+    height: 150%;
+
+    box-sizing: border-box;
+
+    margin-left: -25%;
+
+    margin-top: -25%;
+
+    border-radius: 45px;
+
+    background-color: lightgray;
+
+    animation: pulse-ring 4.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+
+}
+
+.pulsating-circle::after {
+
+    content: '';
+
+    position: absolute;
+
+    left: 0;
+
+    top: 0;
+
+    display: block;
+
+    width: 100%;
+
+    height: 100%;
+
+    background-color: white;
+
+    border-radius: 45px;
+
+    box-shadow: 0 0 8px rgba(0,0,0,.3);
+
+    /*animation: pulse-dot 1.25s cubic-bezier(0.455, 0.03, 0.515, 0.955) -.4s infinite;*/
+
+}
+
+
+
+
+
+.pulsating-circle1 {
+
+position: absolute;
+
+    width: 20px;
+
+    height: 20px;
+
+    left: 35%;
+
+    top: -17px;
+
+  }
+
+  
+
+ .pulsating-circle1  span
+
+  {
+
+        position: absolute;
+
+        top: 0;
+
+        z-index: 10;
+
+        width: 100%;
+
+        display: block;
+
+        text-align: center;
+
+        height: 20px;
+
+        line-height: 20px;
+
+        font-size: 10px;
+
+  }
+
+.pulsating-circle1::before {
+
+    content: '';
+
+    position: relative;
+
+    display: block;
+
+    width: 150%;
+
+    height: 150%;
+
+    box-sizing: border-box;
+
+    margin-left: -25%;
+
+    margin-top: -25%;
+
+    border-radius: 45px;
+
+    background-color: #1e4823;
+
+    
+
+    animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+
+}
+
+.pulsating-circle1::after {
+
+    content: '';
+
+    position: absolute;
+
+    left: 0;
+
+    top: 0;
+
+    display: block;
+
+    width: 100%;
+
+    height: 100%;
+
+    background-color: white;
+
+    border-radius: 45px;
+
+    box-shadow: 0 0 8px rgba(0,0,0,.3);
+
+    /*animation: pulse-dot 1.25s cubic-bezier(0.455, 0.03, 0.515, 0.955) -.4s infinite;*/
+
+}
+
+
+
+
+
+@keyframes pulse-ring {
+
+  0% {
+
+    transform: scale(.33);
+
+  }
+
+  80%, 100% {
+
+    opacity: 0;
+
+  }
+
+}
+
+
+
+@keyframes pulse-dot {
+
+  0% {
+
+    transform: scale(.8);
+
+  }
+
+  50% {
+
+    transform: scale(1);
+
+  }
+
+  100% {
+
+    transform: scale(.8);
+
+  }
+
+}
+
+
+
+
+
+table.manglesh thead th {
+
+	position: relative;
+
+				background: #e0e0e0;
+
+				color:#413a3a;
+
+				font-weight:bold;
+
+				text-align:center;
+
+				font-size:15px;
+
+			}
+
+			table.taskdetail thead th {
+
+				background: yellow;
+
+				color:#000;
+
+				font-weight:bold;
+
+			}
+
+			
+
+		table.sales thead th {
+
+	position: relative;
+
+				background: red;
+
+				color:#fff;
+
+				font-weight:bold;
+
+				text-align:center;
+
+			}
+
+			
+
+			
+
+	
+
+	#shortcut p
+
+	{
+
+	    text-align:center;
+        font-size:11px;
+
+	}
+
+			
+.mis-score{
+    background-color: white; height:80px;
+}
+
+
+.mis-score:hover{
+    background-color: #e9e9ff; height:80px;
+}
+
+
+.delegation-box{
+    background-color: white; height: 80px;"
+}
+
+.delegation-box:hover{
+    background-color: #fff1ea; height: 80px;"
+}
+
+.blink_me {
+    animation: blinker 6s linear infinite;
+    color: #2986CE;
+    font-size: 15px;
+    margin-left: 10px;
+}
+
+@keyframes blinker {
+  50% {
+    opacity: 0;
+  }
+}

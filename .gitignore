@@ -1,0 +1,73 @@
+# =====================================================================
+#  Shubham Packaging PMS — repository exclusions
+# =====================================================================
+
+# ── Credentials — never commit ───────────────────────────────────────
+# Live Hostinger credentials. Track database.php.sample instead.
+application/config/database.php
+# Google service-account private key (project shubhampackapp).
+# Track firebase.json.sample instead.
+application/config/firebase.json
+
+# ── Archives ─────────────────────────────────────────────────────────
+*.zip
+
+# ── Database dumps ───────────────────────────────────────────────────
+# NOTE: Database/ itself stays TRACKED — module DDL lives there
+# (abom_001.sql, abom_002_seed.sql, df_dispatch_plan_001.sql, ...).
+# Only the full production dump and compressed dumps are excluded.
+Database/u537620103_shubhampckpms.sql
+Database/*.sql.gz
+dailydbbackup/
+
+# ── Copy-based backup trees (pre-git convention) ─────────────────────
+*-backup-*/
+controller-model-view-backup-18june2026/
+
+# ── User uploads & generated artefacts ───────────────────────────────
+uploads/
+upload/
+exceluploads/
+exported_files/
+image_bank/
+qrimages/
+audio_files/
+competitor_files/
+consolidatedpoinvoice/
+customer_ledger/
+customer_payments/
+einvoices/
+ewaybill/
+evidence/
+packslip/
+quotation_pdf/
+sfpo/
+shubhamquotation/
+designform/
+tmp/
+application/cache/
+application/logs/
+!application/cache/index.html
+!application/logs/index.html
+
+# ── Loose documents & images in the project ROOT only ────────────────
+# Root-scoped with a leading slash so assets/ is unaffected.
+# /*png (no dot) catches the extensionless junk: 1658566548png etc.
+/*png
+/*.pdf
+/*.png
+/*.jpg
+/*.jpeg
+/*.xls
+/*.xlsx
+/*.csv
+
+# ── Framework core — absent from the tree; never commit if restored ──
+/system/
+
+# ── OS / editor ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

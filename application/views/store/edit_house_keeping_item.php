@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="">
+        <meta name="author" content="NJ Media">
+
+        <link rel="shortcut icon" href="<?php echo assets_url;?>images/favicon.ico">
+
+        <title>Prestogroup</title>
+
+        <!-- Table Responsive css -->
+		<script src="<?php echo assets_url;?>js/angular.min.js"></script>
+		 <!-- DataTables -->
+        <link href="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>plugins/datatables/fixedHeader.bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>plugins/datatables/scroller.bootstrap.min.css" rel="stylesheet" type="text/css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
+
+        <link href="<?php echo assets_url;?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/core.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/components.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/icons.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/pages.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/menu.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/responsive.css" rel="stylesheet" type="text/css" />
+
+        <!-- HTML5 Shiv and Respond.js IE8 support of HTML5 elements and media queries -->
+        <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+        <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+        <![endif]-->
+
+        <script src="<?php echo assets_url;?>js/modernizr.min.js"></script>
+
+    </head>
+
+
+    <body>
+
+
+        <!-- Navigation Bar-->
+        <header id="topnav">
+          <?php $this->load->view('common/nav-menu');?>
+        </header>
+        <!-- End Navigation Bar-->
+
+
+        <div class="wrapper">
+            <div class="container">
+
+                <!-- Page-Title -->
+                <div class="row" style="margin-top:20px;">
+                    <div class="col-sm-12 col-xs-12 col-md-12 col-lg-12">
+                        <div class="page-title-box">
+						 <div class="btn-group pull-right">
+						  
+                               
+                            </div>
+                           
+                            <h4 class="page-title">Edit House Keeping Item</h4>
+                        </div>
+                    </div>
+                </div>
+                <!-- end page title end breadcrumb -->
+				<span style="color:red;"><?php echo $this->session->flashdata('message'); ?></span>
+<?php
+								$id = $this->uri->segment(3);
+								$this->db->select('*')->from(' house_keeping_items')->where('id',$id);
+								$query = $this->db->get();
+								$res = $query->result();
+								foreach($res as $item)
+								?>
+               <div class="row">
+                    <div class="col-xs-12">
+                        <div class="card-box">
+ <form method="post" action="<?php echo page_url;?>Store/update_house_keeping_items/<?php echo $item->id;?>"  enctype="multipart/form-data">
+<input type="hidden" name="old_img" value="<?php echo $item->picture;?>">
+                            <div class="row">
+								   <div class="col-md-12">
+								   <div class="col-md-3">
+													<div class="form-group">
+														 <label for="field-2" class="control-label">Machine <span style="color:red">*</span></label>
+														 <span id="error_item_name" style="color:red;"></span>
+														 <input type="text" class="form-control" name="item_name" id="item_name"  value="<?php echo $item->item_name;?>" required>
+													</div>
+												</div>
+												
+												
+												 <div class="col-md-3">
+													<div class="form-group">
+														 <label for="field-2" class="control-label">Qty <span style="color:red">*</span></label>
+														 <span id="error_qty" style="color:red;"></span>
+														 <input type="number" class="form-control" name="qty" id="qty"  value="<?php echo $item->qty;?>">
+													</div>
+												</div>
+												
+												 <div class="col-md-3">
+													<div class="form-group">
+														 <label for="field-2" class="control-label">Minimum Qty <span style="color:red">*</span></label>
+														 <span id="error_min_qty" style="color:red;"></span>
+														 <input type="number" class="form-control" name="min_qty" id="min_qty"  value="<?php echo $item->min_qty;?>">
+													</div>
+												</div>
+												
+												<div class="col-md-3">
+												<div class="form-group">
+												<label for="field-2" class="control-label">Unit <span style="color:red">*</span></label>
+												<span id="error_unit" style="color:red;"></span>
+												<select class="form-control" id="unit" name="unit">
+													<option value="">--Select Unit--</option>
+													<?php 
+													$query = $this->db->select('id, name')->from('units')->order_by('name','asc')->get();
+													foreach($query->result() as $row){
+													?>
+													<option value="<?php echo $row->id;?>" <?php if($item->unit==$row->id){echo "selected";}?>><?php echo $row->name;?></option>
+													<?php }?>
+												</select>
+												</div>
+											</div>
+										  
+											 <div class="col-md-3">
+													<div class="form-group">
+														 <label for="field-2" class="control-label">Picture</label>
+														 <span id="error_item_name" style="color:red;"></span>
+														 <input type="file" class="form-control" name="picture" id="picture"  value="">
+														 <img src="<?php echo housekeeping.$item->picture;?>" width="60px">
+													</div>
+												</div>	
+											<div class="col-md-3">
+												<div class="form-group">
+												<label for="field-2" class="control-label">Status <span style="color:red">*</span></label>
+												<span id="error_status" style="color:red;"></span>
+												<select class="form-control" id="status" name="status">
+													<option value="<?php echo $item->status;?>">--Select Status--</option>
+													<option value="1" <?php if($item->status=='1'){echo "selected";}?>>Active</option>
+													<option value="0" <?php if($item->status=='0'){echo "selected";}?>>Inactive</option>
+												</select>
+												</div>
+												<div class="form-group">
+												    <label>GST IN %</label>
+												    <input type="number" name="gst" id="gst" class="form-control" value="<?php echo $item->gst;?>">
+												</div>
+											</div>
+											
+											<div class="col-md-3">
+												<div class="form-group">
+													<label>Category<span id="error_category" style="color:red;">*</span></label>
+													<select class="form-control" id="category" name="category">
+													<option value="">--Select Category--</option>
+													<?php $q= $this->db->select('id,category')->from('presto_machine_part_category')->where('cattype','2')->get();
+													foreach($q->result() as $row){?>
+													<option value="<?php echo $row->id;?>" <?php if($item->category_id==$row->id){echo "selected";}?>><?php echo $row->category;?></option>
+													<?php }?>
+													
+												</select>
+												</div>
+											</div>
+											<div class="col-md-3">
+												<div class="form-group">
+													<label>Remarks</label>
+													<textarea class="form-control" name="remarks" id="remarks"><?php echo $item->remarks;?></textarea>
+												</div>
+											</div>
+											</div>
+											<?php 
+												$query = $this->db->select('id,vendor_id, item_id, price')->from('vendorwise_house_keeping_item_price')->where('item_id',$this->uri->segment(3))->get();
+												if($query->num_rows()>0){
+												foreach($query->result() as $row1){
+											?>
+											<input type="hidden" name="recordid[]" value="<?php echo $row1->id;?>">
+											<div class="col-md-12">
+												 <div class="col-md-4">
+													<div class="form-group">
+														 <label for="field-2" class="control-label">VENDOR </label>
+														 <span id="error_item_name" style="color:red;"></span>
+														<select class="form-control" name="vendor[]" id="vendor" style="font-size:11px;">
+														<option value="">--SELECT VENDOR--</option>
+														<?php 
+														
+														$query = $this->db->select('id,name')->from('vendors')->where('status','1')->get();
+														foreach($query->result() as $vendor){
+														?>
+														<option value="<?php echo $vendor->id;?>" <?php if($vendor->id==$row1->vendor_id){echo "selected";}?>><?php echo $vendor->name;?></option>
+														<?php }?>
+														</select>
+													</div>
+												</div>
+												<div class="col-md-3">
+													<div class="form-group">
+														<label>PRICE</label>
+														<input type="number" name="price[]" id="price" value="<?php echo $row1->price;?>" step="0.2" class="form-control">
+													</div>
+												</div>
+
+												
+											</div>
+											
+												<?php }}?>
+											<div class="col-md-12">
+												 <div class="col-md-4">
+													<div class="form-group">
+														 <label for="field-2" class="control-label">VENDOR </label>
+														 <span id="error_item_name" style="color:red;"></span>
+														<select class="form-control" name="vendor[]" id="vendor" style="font-size:11px;">
+														<option value="">--SELECT VENDOR--</option>
+														<?php 
+														
+														$query = $this->db->select('id, name')->from('vendors')->where('status','1')->get();
+														foreach($query->result() as $vendor){
+														?>
+														<option value="<?php echo $vendor->id;?>"><?php echo $vendor->name;?></option>
+														<?php }?>
+														</select>
+													</div>
+												</div>
+												<div class="col-md-3">
+													<div class="form-group">
+														<label>PRICE</label>
+														<input type="number" name="price[]" id="price" value="" step="0.2" class="form-control">
+													</div>
+												</div>
+
+												<div class="col-md-1">
+													<div class="form-group" style="margin-top:25px">
+														<button type="button" class="btn btn-warning" name="add" id="addmore_btn1"><i class="fa fa-plus"></i></button>
+													</div>
+												</div>
+											</div>
+											
+											<div class="col-md-12">
+												<div id="dynamictasks1"></div></div>
+                                            </div>
+											<div class="row">
+											
+										<div class="col-md-9"></div>
+										<div class="col-md-3">
+											<div class="form-group pull-right" style="padding-top:24px;">
+												<label>&nbsp;</label>
+												<input type="submit" class="btn btn-success" value="Update">
+											</div>
+										</div>
+									
+									
+
+                                </div></form>
+                                   
+								   
+
+                            </div>
+                            <!-- end row -->
+                        </div> <!-- end ard-box -->
+                    </div><!-- end col-->
+
+                </div>
+                <!-- end row -->
+ 
+
+                <!-- Footer -->
+<?php $this->load->view('common/footer');?>
+                <!-- End Footer -->
+
+            </div> <!-- end container -->
+        </div>
+        <!-- end wrapper -->
+
+
+         <!-- jQuery  -->
+        <script src="<?php echo assets_url;?>js/jquery.min.js"></script>
+        <script src="<?php echo assets_url;?>js/bootstrap.min.js"></script>
+        <script src="<?php echo assets_url;?>js/detect.js"></script>
+        <script src="<?php echo assets_url;?>js/fastclick.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.slimscroll.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.blockUI.js"></script>
+        <script src="<?php echo assets_url;?>js/waves.js"></script>
+        <script src="<?php echo assets_url;?>js/wow.min.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.nicescroll.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.scrollTo.min.js"></script>
+
+        <!-- Datatables-->
+        <script src="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.bootstrap.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.buttons.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/jszip.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/pdfmake.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/vfs_fonts.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.html5.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.print.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.fixedHeader.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.keyTable.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.responsive.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.scroller.min.js"></script>
+
+        <!-- Datatable init js -->
+        <script src="<?php echo assets_url;?>pages/datatables.init.js"></script>
+
+        <!-- App js -->
+        <script src="<?php echo assets_url;?>js/jquery.core.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.app.js"></script>
+
+     <script language="javascript" type="text/javascript">   
+
+$(document).ready(function() {
+$("#save").click(function() {
+var item_name = $("#item_name").val();
+if(item_name=='')
+{
+	$("#error_item_name").html('Required!');
+}
+
+var qty = $("#qty").val();
+if(qty=='')
+{
+	$("#error_qty").html('Required!');
+}
+
+var min_qty = $("#min_qty").val();
+if(min_qty=='')
+{
+	$("#error_min_qty").html('Required!');
+}
+var unit = $("#unit").val();
+if(unit=='')
+{
+	$("#error_unit").html('Required!');
+}
+
+
+var status = $("#status").val();
+if(status=='')
+{
+	
+	$("#error_status").html('Required!');
+}
+
+
+if(item_name=='' || qty=='' || min_qty=='' || unit=='' || status=='' )
+{
+	
+	return false;
+}
+
+});
+});
+</script>
+<script type="text/javascript">
+$(document).ready(function(){
+var i=1;
+ $('#addmore_btn1').click(function(){
+ i++;
+ 
+ $('#dynamictasks1').append('<div id="row'+i+'" class="row"><div class="col-md-12"><div class="col-md-4"><div class="form-group"><label for="field-2" class="control-label">VENDOR </label><span id="error_item_name" style="color:red;"></span><select class="form-control" name="vendor[]" id="vendor" onChange="fetch_machine(0);" style="font-size:11px;"><option value="">--SELECT VENDOR--</option><?php $query = $this->db->select('id, name')->from('vendors')->where('status','1')->get(); foreach($query->result() as $vendor){?><option value="<?php echo $vendor->id;?>"><?php echo $vendor->name;?></option><?php }?></select></div></div><div class="col-md-3"><div class="form-group"><label>PRICE</label><input type="number" name="price[]" id="price" value="" step="0.2" class="form-control"></div></div><div class="col-md-1"><div class="form-group pull-left" style="padding-top:30px"><label for="field-1" class="control-label">&nbsp;</label><button type="button" name="add" class="btn_remove  btn btn-danger" id="'+i+'"><i class="fa fa-close"></i></button></div></div></div></div><br/>');
+ initializeSelect2('select3'+i);
+ });
+ 
+ 
+ 
+ $(document).on('click', '.btn_remove', function(){
+ var button_id = $(this).attr("id");
+ $('#row'+button_id+'').remove();
+ });
+ 
+});
+	  </script>
+    </body>
+</html>

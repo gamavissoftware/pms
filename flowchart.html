@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow Chart</title>
+
+
+    <style>
+        h1 {
+            width: 580px;
+            font-family: verdana, arial, helvetica, sans-serif;
+            font-size: 18px;
+            text-align: center;
+            margin: 40px auto;
+        }
+        
+        #container {
+            width: 580px;
+            font-family: verdana, arial, helvetica, sans-serif;
+            font-size: 11px;
+            text-align: center;
+            margin: auto;
+        }
+        
+        #no1 {
+            width: 200px;
+            line-height: 60px;
+            border: 1px solid #00c4ffeb;
+            margin: auto;
+            font-size: 13px;
+            background-image: linear-gradient(#f5efef87, #00c4ffeb);
+        }
+        
+        #no2 {
+            width: 260px;
+            line-height: 60px;
+            border: 1px solid #e4b44a;
+            margin: auto;
+            font-size: 13px;
+            background-color: #f9e3b2;
+        }
+        
+        #no3 {
+            width: 173px;
+            border: 1px solid #ecac7f;
+            font-size: 13px;
+            background-color: #f7d7c1;
+            margin-left: -42px;
+            padding: 15px;
+        }
+        
+        #no4 {
+            width: 173px;
+            border: 1px solid #f56e6e;
+            font-size: 13px;
+            background-color: #f7c1c1;
+            margin-left: 449px;
+            line-height: 60px;
+        }
+        
+        #no5 {
+            width: 173px;
+            border: 1px solid #e28445;
+            font-size: 13px;
+            background-color: #f1c3a4;
+            margin-left: -42px;
+            line-height: 60px;
+        }
+        
+        #no6 {
+            width: 173px;
+            border: 1px solid #0f6c88;
+            font-size: 13px;
+            background-color: #57c8ea;
+            margin-left: 449px;
+            line-height: 60px;
+            margin-top: 92px;
+            position: absolute;
+        }
+        
+        #no7 {
+            width: 200px;
+            line-height: 60px;
+            border: 1px solid #00c4ffeb;
+            margin: auto;
+            font-size: 13px;
+            background-image: linear-gradient(#f5efef87, #00c4ffeb);
+        }
+        
+        #no8 {
+            width: 200px;
+            line-height: 60px;
+            border: 1px solid #ec2a69;
+            margin: auto;
+            font-size: 13px;
+            background-image: linear-gradient(#f5efef87, #ff00527d);
+        }
+        
+        #no9 {
+            width: 173px;
+            border: 1px solid #7e5ffd;
+            font-size: 13px;
+            background-color: #b7ade0;
+            margin-left: 0px;
+            line-height: 60px;
+        }
+        
+        #no10 {
+            width: 173px;
+            border: 1px solid #7e5ffd;
+            font-size: 13px;
+            background-color: #b7ade0;
+            margin-left: 428px;
+            line-height: 60px;
+        }
+        
+        #no11 {
+            width: 173px;
+            border: 1px solid #7e5ffd;
+            font-size: 13px;
+            background-color: #b7ade0;
+            margin-left: 0px;
+            line-height: 60px;
+        }
+        
+        #no12 {
+            width: 173px;
+            border: 1px solid #7e5ffd;
+            font-size: 13px;
+            background-color: #b7ade0;
+            margin-left: 428px;
+            line-height: 60px;
+            margin-top: 92px;
+            position: absolute;
+        }
+        
+        #no13 {
+            width: 200px;
+            line-height: 60px;
+            border: 1px solid #198c31;
+            margin: auto;
+            font-size: 13px;
+            background-color: #00801c73;
+        }
+        
+        #no14 {
+            width: 200px;
+            line-height: 60px;
+            border: 1px solid #76dc4e;
+            margin: auto;
+            font-size: 13px;
+            background-color: #bde0af;
+        }
+        
+        #no15 {
+            width: 200px;
+            line-height: 60px;
+            border: 1px solid #0f6c88;
+            margin: auto;
+            font-size: 13px;
+            background-color: #57c8ea;
+        }
+        
+        #line1 {
+            font-size: 0;
+            width: 2px;
+            height: 60px;
+            color: #fff;
+            background-color: #000;
+            margin: auto;
+        }
+        
+        #line2 {
+            font-size: 0;
+            width: 120px;
+            height: 2px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 39px;
+            margin-top: 30px;
+            position: absolute;
+        }
+        
+        #line3 {
+            font-size: 0;
+            width: 120px;
+            height: 2px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 420px;
+            margin-top: 30px;
+            position: absolute;
+        }
+        
+        #line4 {
+            font-size: 0;
+            width: 2px;
+            height: 90px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 39px;
+            margin-top: -30px;
+        }
+        
+        #line6 {
+            font-size: 0;
+            width: 2px;
+            height: 90px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 39px;
+            margin-top: 2px;
+        }
+        
+        #line5 {
+            font-size: 0;
+            width: 2px;
+            height: 90px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 538px;
+            margin-top: -154px;
+        }
+        
+        #line7 {
+            font-size: 0;
+            width: 2px;
+            height: 92px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 538px;
+            margin-top: 0px;
+            position: absolute;
+        }
+        
+        #line8 {
+            font-size: 0;
+            width: 317px;
+            height: 2px;
+            color: #fff;
+            background-color: #000;
+            margin-top: -31px;
+            margin-left: 132px;
+        }
+        
+        #line9 {
+            font-size: 0;
+            width: 2px;
+            height: 70px;
+            color: #fff;
+            background-color: #000;
+            margin: auto;
+        }
+        
+        #line10 {
+            font-size: 0;
+            width: 120px;
+            height: 2px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 69px;
+            margin-top: 30px;
+            position: absolute;
+        }
+        
+        #line11 {
+            font-size: 0;
+            width: 120px;
+            height: 2px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 391px;
+            margin-top: 30px;
+            position: absolute;
+        }
+        
+        #line12 {
+            font-size: 0;
+            width: 2px;
+            height: 90px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 69px;
+            margin-top: -30px;
+        }
+        
+        #line13 {
+            font-size: 0;
+            width: 2px;
+            height: 90px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 510px;
+            margin-top: -154px;
+        }
+        
+        #line14 {
+            font-size: 0;
+            width: 2px;
+            height: 90px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 69px;
+            margin-top: 2px;
+        }
+        
+        #line15 {
+            font-size: 0;
+            width: 2px;
+            height: 92px;
+            color: #fff;
+            background-color: #000;
+            margin-left: 510px;
+            margin-top: 0px;
+            position: absolute;
+        }
+        
+        #line16 {
+            font-size: 0;
+            width: 253px;
+            height: 2px;
+            color: #fff;
+            background-color: #000;
+            margin-top: -31px;
+            margin-left: 175px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="no1">MACHINING</div>
+        <div id="line1"></div>
+        <div id="line2"></div>
+        <div id="line3"></div>
+        <div id="no2">ORDER PLANNING</div>
+        <div id="line4"></div>
+        <div id="no3">CHECK MATERIAL & RAISE PR </div>
+        <div id="line5"></div>
+        <div id="no4">PENDING TO START</div>
+        <div id="line7"></div>
+        <div id="no6">UNDER MACHINING </div>
+        <div id="line6"></div>
+        <div id="no5">FULL KITTING</div>
+        <div id="line8"></div>
+        <div id="line9"></div>
+        <div id="no7">IN PROCESS FITTING</div>
+        <div id="line9"></div>
+        <div id="line10"></div>
+        <div id="line11"></div>
+        <div id="no8">IN PROCESS QC</div>
+        <div id="line12"></div>
+        <div id="no9">MATERIAL PAINT OUT</div>
+        <div id="line13"></div>
+        <div id="no10">MATERIAL PLATING OUT</div>
+        <div id="line15"></div>
+        <div id="no12">MATERIAL PAINT IN</div>
+        <div id="line14"></div>
+        <div id="no11">MATERIAL PLATING IN</div>
+        <div id="line16"></div>
+        <div id="line9"></div>
+        <div id="no13">FINAL FITTING</div>
+        <div id="line9"></div>
+        <div id="no14">ELECTRICAL</div>
+        <div id="line9"></div>
+        <div id="no15">FINAL QC</div>
+    </div>
+</body>
+
+</html>

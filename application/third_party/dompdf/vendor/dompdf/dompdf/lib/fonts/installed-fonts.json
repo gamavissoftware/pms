@@ -1,0 +1,22 @@
+{
+    "poppins": {
+        "normal": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/poppins_normal_18cdd0bfe89ff4334bd75ffd4e786578",
+        "bold": "poppins_bold_71bd3f315b9b46d11123794301175367"
+    },
+    "ibm plex sans": {
+        "100_italic": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_100_italic_a14e8256239a5604ee059c2f01254273",
+        "200_italic": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_200_italic_5e37ec3178af09a1885e68003533d74b",
+        "300_italic": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_300_italic_ad24b86fd00adc9ee9bde9ccd8d03090",
+        "italic": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_italic_f0187ce068eb4383932f253b9eea5ac9",
+        "500_italic": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_500_italic_e9ca778ef2af02d29a7546e7720f7bb4",
+        "600_italic": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_600_italic_2e249781a18923b4266427316b1837ac",
+        "bold_italic": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_bold_italic_503dc9f17e4683b223d465d1e467fd77",
+        "100": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_100_8445269838640cffb4c08031b79e731a",
+        "200": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_200_249bf457659302a490da1b682bec9f9a",
+        "300": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_300_f37c85cceb1f4dca4e74d06634e8aff6",
+        "normal": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_normal_7ca580cfde6bccbbff48c1466402a4bd",
+        "500": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_500_8697ad5eccf922d090c480b3dcd10556",
+        "600": "\/home\/u537620103\/domains\/shubhampack.in\/public_html\/pms\/application\/third_party\/dompdf\/vendor\/dompdf\/dompdf\/lib\/fonts\/ibm_plex_sans_600_5da1d644d0a96ec201074b031a6bd921",
+        "bold": "ibm_plex_sans_bold_e537ac646ee1c444b098537bbefac67b"
+    }
+}

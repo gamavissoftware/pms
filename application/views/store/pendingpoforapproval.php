@@ -1,0 +1,2176 @@
+<?php
+$CI =& get_instance();
+$CI->load->model('Store_model');
+$jbvalue=$CI->Store_model->jobcardunapprovedpo();
+$indentvalue=$CI->Store_model->indentunapprovedpo();
+$imsvalue=$CI->Store_model->imsunapprovedpo();
+$totalmonthlypo=$CI->Store_model->totalapprovedpothismonth();
+?>
+
+<!DOCTYPE html>
+
+<html>
+
+    <head>
+
+        <meta charset="utf-8">
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <meta name="description" content="">
+
+        <meta name="author" content="NJ Media">
+
+        <link rel="shortcut icon" href="<?php echo assets_url;?>images/favicon.ico">
+
+        <title>PENDING PO FOR APPROVAL</title>
+
+        <!-- Table Responsive css -->
+
+		<script src="<?php echo assets_url;?>js/angular.min.js"></script>
+
+		 <!-- DataTables -->
+
+        <link href="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>plugins/datatables/fixedHeader.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+		<link href="https://cdn.datatables.net/fixedheader/3.1.6/css/fixedHeader.dataTables.min.css">
+
+        <link href="<?php echo assets_url;?>plugins/datatables/scroller.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
+
+        <link href="<?php echo assets_url;?>plugins/select2/dist/css/select2.css" rel="stylesheet" type="text/css">
+
+		<script type="text/javascript" src="<?php echo assets_url;?>ckeditor/ckeditor.js"></script> 
+
+        <link href="<?php echo assets_url;?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/core.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/components.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/icons.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/pages.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/menu.css" rel="stylesheet" type="text/css" />
+
+        <link href="<?php echo assets_url;?>css/responsive.css" rel="stylesheet" type="text/css" />
+
+		<link href="<?php echo assets_url;?>plugins/timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
+
+		<script type="text/javascript" src="<?php echo assets_url;?>ckeditor/ckeditor.js"></script>
+
+		<link href="assets/plugins/timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
+
+        <!-- HTML5 Shiv and Respond.js IE8 support of HTML5 elements and media queries -->
+
+        <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+
+        <!--[if lt IE 9]>
+
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+
+        <![endif]-->
+
+
+
+        <script src="<?php echo assets_url;?>js/modernizr.min.js"></script>
+
+		<style>
+
+table.manglesh thead th {
+
+				background: #003366;
+
+				color:#fff;
+
+				font-size:11px;
+
+				font-weight:bold;
+
+			}
+
+table tbody tr td {
+
+  font-size: 14px;
+
+  color:#000;
+
+}
+
+#pageloader
+
+{
+
+  background: rgba( 255, 255, 255, 0.8 );
+
+  display: none;
+
+  height: 100%;
+
+  position: fixed;
+
+  width: 100%;
+
+  z-index: 9999;
+
+}
+
+#pageloader img
+
+{
+
+  left: 50%;
+
+  margin-left: -32px;
+
+  margin-top: -32px;
+
+  position: absolute;
+
+  top: 50%;
+
+}
+
+#fixedbutton {
+position: fixed;
+top: 50%;
+right: 0%;
+z-index: 999;
+}
+
+</style>
+
+    </head>
+
+    </head>
+
+
+
+
+
+    <body>
+
+
+
+
+
+        <!-- Navigation Bar-->
+
+                <header id="topnav">
+
+          <?php $this->load->view('common/nav-menu');?>
+
+        </header>
+
+        <!-- End Navigation Bar-->
+
+
+
+
+
+        <div class="wrapper">
+
+            <div class="container-fluid">
+
+
+
+                <!-- Page-Title -->
+
+<form action="<?php echo page_url;?>Store/approvebulkpos" method="post" onsubmit="return checkforsingleboxapproval();">
+                <div class="row">
+
+                   
+                    <div class="col-sm-12">
+                    
+                    <div class="col-md-4">
+                    <div class="page-title-box">
+                    <h4 class="page-title">PENDING PO FOR APPROVAL</h4>
+                    </div>
+                    </div>
+                    <div class="col-md-4"></div>
+
+                    </div>
+
+                </div>
+
+                <!-- end page title end breadcrumb -->
+
+	<span style="color:red;"><?php echo $this->session->flashdata('message'); ?></span>
+
+		<div class="row">
+		<div class="col-sm-12">
+		<div class="col-md-3"></div>
+		<div class="col-md-4 card-box">
+                                
+                               <table class="table table-bordered">
+                                <thead>
+                                <tr>
+                                <th colspan="6" style="text-align:center;">UNAPPROVED PO VALUE</th>
+
+                                
+                                </tr>
+                                
+                                </thead>
+                                <tbody>
+                                <?php		
+                                	$total=round($jbvalue,0)+round($indentvalue,0)+round($imsvalue,0);
+                                ?>
+				<tr>
+				<td colspan="2" class="text-center">JOBCARD VALUE - <?php echo round($jbvalue,0);?></td>
+				<td colspan="2" class="text-center">INDENT VALUE - <?php echo round($indentvalue,0);?></td>
+				<td colspan="2" class="text-center">IMS VALUE - <?php echo round($imsvalue,0);?></td>
+			
+				</tr>
+                               </tbody>
+                                </table>
+                         
+                            </div>
+
+
+                            <div class="col-md-2 card-box" style="height: 133px;
+    margin-left: 10px;">
+                                
+                               <table class="table table-bordered">
+                                <thead>
+                                <tr>
+                                <th colspan="" style="text-align:center;">TOTAL PO VALUE</th>
+                                <th colspan="" style="text-align:center;">TOTAL PO VALUE (<?php echo strtoupper(date('M'));?>)</th>
+
+                                
+                                </tr>
+                                
+                                </thead>
+                                <tbody>
+                                <?php		
+                                	$total=round($jbvalue,0)+round($indentvalue,0)+round($imsvalue,0);
+                                ?>
+								<tr>
+								<td  class="text-center"><?php echo $total;?></td>
+								<td class="text-center"><?php echo $totalmonthlypo;?></td>
+								</tr>
+                               </tbody>
+                                </table>
+                         
+                            </div>
+		</div>
+
+		
+                    <div class="col-sm-12">
+                    	<div class="row">
+					        <div class="col-sm-12">
+					            <div class="page-title-box">
+					                <h4 class="page-title">PENDING PO FOR APPROVAL(JOB CARD) OF VALUE - <?php echo round($jbvalue,0);?></h4>
+					            </div>
+					        </div>
+				        </div>
+
+                        <div class="card-box table-responsive">
+
+                            <table id="example123445" class="table table-bordered manglesh">
+
+                                <thead>
+
+                                <tr>
+
+                                    <th>Sr No.</th>
+
+                                    <th>CREATED ON</th>
+
+                                    <th>PR/PO NO.</th>
+
+								    <th>SOURCE</th>
+
+									<th>VENDOR NAME</th>
+
+									<th style="width:150px">ITEM</th>
+
+									<th>QTY</th>
+
+                                    <th>PRICE PER UNIT</th>
+
+                                    <th>LAST TIME PURCHASE RATE</th>
+                                     <th>DIFF.</th>
+
+ <th>OPEN PO</th>
+									<th style="width:100px">APPROVE&nbsp;&nbsp;<input type="checkbox" class="appdata1" onclick="checkalldata(1);" style="width:20px;height:20px;"></th>
+
+									<th>REJECT</th>
+
+								   
+
+									<th>DELIVERY DAYS</th>
+
+
+                                </tr>
+
+                                </thead>
+
+                                <tbody>
+
+								<?php
+
+								$rest=$this->db->select('a.vendor,a.pricechange,a.originalprice,a.id,a.prno,a.jobcard,a.source,h.sourceid,a.potype,a.addedOn,a.pono,e.first_name,e.last_name,a.itemid,e.department_id, v.name, v.address,v.payment_terms,v.payment_mode,v.deliverytime,v.otherdeliverytime, a.fright, a.fright_charges, a.packing_charges')
+
+								->from('purchase_order a')
+
+								->join('system_users e','e.user_id=a.addedBy','left')
+								
+								->join('purchase_request h','h.prno=a.prno','left')
+
+								->join('vendors v','a.vendor=v.id','left')
+
+								->where('a.approved','0')
+								->where('a.source','1')
+
+								->order_by('a.addedOn','DESC')
+
+								->group_by('a.id')->get();
+
+								if($rest->num_rows()>0)
+
+								{
+
+								$i=1;
+
+								$prevpo='';
+
+								foreach($rest->result() as $restyui1)
+
+								{
+
+								
+
+								
+
+								$jobcard='';
+
+
+								if($restyui1->source==1)
+
+
+								{
+
+								$job=$this->db->select('job_card_no')->from('order_instruments')->where('id',$restyui1->jobcard)->get();
+
+								if($job->num_rows()>0)
+
+								{
+
+								foreach($job->result() as $job1);
+
+								$jobcard='Jobcard-'.$job1->job_card_no;
+
+								}else{
+
+								$jobcard='';
+
+								}
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}else if($restyui1->source==2)
+
+								{
+
+								/** Intend **/
+
+								$jobcard='INDENT- IND'.$restyui1->sourceid;
+
+								$polink="generalpo";
+
+								$mrnlink="generalmrn";
+
+								}else if($restyui1->source==3)
+
+								{
+
+								/** Intend **/
+
+								$jobcard='AUTO PR';
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}					
+
+
+
+
+
+                               
+
+
+
+								if($restyui1->potype=='0')
+
+								{
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}else
+
+								{
+
+								$polink="generalpo";
+
+								$mrnlink="generalmrn";
+
+								}
+
+
+
+								$html='<a href="javascript:;" onclick="approvepo('."'".$restyui1->pono."'".');" class="btn btn-warning btn-xs">APPROVE PO</a>';
+
+								$approved = '<span id="app'.$restyui1->id.'" style="color:green;font-weight:bold;"><input type="checkbox"  class="approval1" name="approvedrecord[]" id="approvedrecord'.$restyui1->id.$restyui1->itemid.'" style="width:20px;height:20px;" value="'.$restyui1->id.'" onchange="markasapproved('."'".$restyui1->id."'".','."'".$restyui1->pono."'".','."'".$restyui1->itemid."'".');"></span><input type="hidden" name="mypo'.$restyui1->id.'" value="'.$restyui1->pono.'"><input type="hidden" name="myitemid'.$restyui1->id.'" value="'.$restyui1->itemid.'">';
+
+								$html1='<a href="javascript:;" class="btn btn-warning btn-xs" onclick="showpopup('."'".$restyui1->pono."'".');">REJECT PO</a>';
+
+
+
+								$htm="";
+
+
+
+
+
+								if($restyui1->potype=='0'){
+
+
+
+								$indenttype = "Machine Related Items";
+
+								$rest123=$this->db->select('b.part as item_name,a.qty,a.price,a.unit,a.itemid')->from('purchase_order a')->join('machine_parts_with_picture b','a.itemid=b.id')->where('b.id',$restyui1->itemid)->get();
+								$currentrice=$this->Store_model->getitemprice($restyui1->potype,$restyui1->vendor,$restyui1->itemid);	
+
+								}else{
+
+								$indenttype = "General Items";
+
+								$rest123=$this->db->select('b.item_name,a.qty,a.unit,a.price, a.itemid')->from('purchase_order a')->join('house_keeping_items b','a.itemid=b.id')->where('b.id',$restyui1->itemid)->get();	
+								
+								$currentrice=$this->Store_model->getitemprice($restyui1->potype,$restyui1->vendor,$restyui1->itemid);
+
+								}
+
+
+
+
+
+								if($rest123->num_rows()>0)
+
+								{
+
+
+
+								foreach($rest123->result() as $rest1231)
+
+								$price = $rest1231->price;
+
+								
+
+								$oldprice="";
+
+								$query = $this->db->select('price')->from('purchase_order')->where('itemid',$rest1231->itemid)->where('approved','1')->limit('1')->order_by('id','desc')->get();
+
+								if($query->num_rows()>0){
+
+								foreach($query->result() as $oldata);
+
+								$oldprice = $oldata->price;
+
+								$diff = abs($price-$oldprice);
+
+								}else{
+
+								
+								$oldprice=$currentrice;
+
+								$diff = abs($price-$oldprice);
+
+								}
+
+								$itemname = strtoupper($rest1231->item_name);
+
+								$qty = $rest1231->qty;
+
+
+								}
+
+								
+
+								$pon="<a href='".page_url."Store/".$polink."/".$restyui1->pono."' target='_blank'>".$restyui1->pono."</a>";
+
+								
+
+								if($restyui1->deliverytime=='Other')
+
+								{
+
+									$delt=$restyui1->otherdeliverytime;
+
+								}else{
+
+									$delt=$restyui1->deliverytime;
+
+								}
+
+								
+
+				if($restyui1->pricechange==1)
+
+                                {
+
+                                $pri="<span style='color:red;font-weight:bold;'>".$price."</span>" ;
+
+                                $oldpri=$restyui1->originalprice;
+                                $prem="(Price Changed)";
+
+                                }else
+
+                                { 
+
+                                $pri=$price;
+
+                                 $oldpri="";
+                                 $prem="";
+
+                                }
+
+                                
+
+                                $createdby= ucfirst($restyui1->first_name." ".$restyui1->last_name);
+
+                                
+
+                            
+
+                                  /**  if($pri<=$oldprice) **/
+                                  
+                                
+				if(trim($diff)>0)
+
+
+				{
+				$pricc="<span style='color:red'>".$pri."</span>";
+
+
+				}else
+
+				{
+
+
+				$pricc="<span style='color:green'>".$pri."</span>";
+
+				}
+
+                                    
+
+                               
+
+                                
+
+								?>
+
+								<tr id="<?php echo $restyui1->id;?>" style="font-size:18px;">
+
+								<td><?php echo $i;?></td>
+
+									<td><?php echo date('d-M-Y g:i A',strtotime($restyui1->addedOn));?></td>
+
+									
+									<td><?php echo $restyui1->prno;?>/<?php echo $pon;?><br/><?php
+									if($prevpo<>$restyui1->pono)
+
+									{?>  
+									<?php echo $createdby;?>
+									
+									<?php
+									}
+									?></td>
+							 
+
+								<td><?php echo $jobcard;?></td>
+
+								<td><strong><?php echo $restyui1->name;?></strong><br/>Payment Term: <?php echo $restyui1->payment_terms;?> Day/<?php echo $restyui1->payment_mode;?></td>
+
+								
+
+								<td><?php echo $itemname;?> <br/>
+
+								
+								</td>
+
+								<td><?php echo $qty;?></td>
+
+								<td><?php echo $pricc;?><br/><?php echo $prem;?></td>
+
+								<td><?php echo $oldprice;?>
+<br/><br/>								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								?>
+								<span>Freight Charges - <?php if($restyui1->fright=='0'){ if($restyui1->fright_charges=='0.00'){echo "<span style='color:green; font-size:bold'>Not Updated</span>";}else{echo $restyui1->fright_charges;}}else{echo "To be picked by presto";}?></span><br/><br/>
+					
+					<?php if($restyui1->packing_charges=='0.00'){}else{echo "Packing Charges: ".$restyui1->packing_charges;}?>
+								
+								<?php
+								}
+								?>
+								
+								</td>
+								<?php
+								if($diff>0)
+								{
+									$b="background-color:#d4f0fe";
+								}else
+								{
+									$b="";
+								}
+								?>
+									<td style="<?php echo $b;?>"><?php echo $diff;?></td>
+
+<td><a href="<?php echo page_url;?>Store/<?php echo $polink;?>/<?php echo $restyui1->pono;?>" target='_blank' class="btn  btn-xs btn-success">OPEN PO</a><br/>
+									
+									</td>
+								<td class="text-center"><?php echo $approved;?><br/>
+								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								?>
+								<span style="text-align:center;color:" id="mail<?php echo $restyui1->pono;?>"><!--<span class="text-center"><input type="checkbox" id="sendmails" onchange="sendmail('<?php echo $restyui1->pono;?>');"></span><br/><span style="text-center">Mail PO</span>--></span>
+								<?php
+								} 
+								?><br/>
+								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								$pototal=$CI->Store_model->getpototal($restyui1->pono);
+								?>
+								<span style='color:black;font-weight:bold'>Total Value - <?php echo round($pototal,0);?></span>
+								<?php
+								} 
+								?>
+								</td>
+
+								
+						
+
+								<td><?php echo $html1;?></td>
+
+
+							
+
+								
+
+							
+
+								<td><?php echo $delt;?> Days</td>
+
+							
+								</tr>
+
+						<?php
+							
+							$prevpo=$restyui1->pono;
+
+							$i++;
+						}
+
+							}
+
+							?>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+                         <div class="col-md-12" style="margin-top:10px;">
+                        
+                        <input type="submit" class="btn btn-success pull-right" value="Job Card Approval">
+                        
+                    </div>
+
+                    </div>
+
+                   </form>
+
+                   <form action="<?php echo page_url;?>Store/approvebulkpos" method="post" onsubmit="return checkforsingleboxapproval();">
+
+                    <div class="col-sm-12">
+                    	<div class="row">
+					        <div class="col-sm-12">
+					            <div class="page-title-box">
+					                <h4 class="page-title">PENDING PO FOR APPROVAL(INDENT) OF VALUE - <?php echo round($indentvalue,0);?></h4>
+					            </div>
+					        </div>
+				        </div>
+
+                        <div class="card-box table-responsive">
+
+                            <table id="example1234455" class="table table-bordered manglesh">
+
+                                <thead>
+
+                                <tr>
+
+                                    <th>Sr No.</th>
+
+                                    <th>CREATED ON</th>
+
+                                    <th>PR/PO NO.</th>
+
+								    <th>SOURCE</th>
+
+									<th>VENDOR NAME</th>
+
+									<th style="width:150px">ITEM</th>
+
+									<th>QTY</th>
+
+                                    <th>PRICE PER UNIT</th>
+
+                                    <th>LAST TIME PURCHASE RATE</th>
+                                     <th>DIFF.</th>
+
+ <th>OPEN PO</th>
+									<th style="width:100px">APPROVE&nbsp;&nbsp;<input type="checkbox" class="appdata2" onclick="checkalldata(2);" style="width:20px;height:20px;"></th>
+
+									<th>REJECT</th>
+
+								   
+
+									<th>DELIVERY DAYS</th>
+
+
+                                </tr>
+
+                                </thead>
+
+                                <tbody>
+
+								<?php
+
+								$rest=$this->db->select('a.vendor,a.pricechange,a.originalprice,a.id,a.prno,a.jobcard,a.source,h.sourceid,a.potype,a.addedOn,a.pono,e.first_name,e.last_name,a.itemid,e.department_id, v.name, v.address,v.payment_terms,v.payment_mode,v.deliverytime,v.otherdeliverytime, a.fright, a.fright_charges, a.packing_charges')
+
+								->from('purchase_order a')
+
+								->join('system_users e','e.user_id=a.addedBy','left')
+								
+								->join('purchase_request h','h.prno=a.prno','left')
+
+								->join('vendors v','a.vendor=v.id','left')
+
+								->where('a.approved','0')
+								->where('a.source','2')
+
+								->order_by('a.addedOn','DESC')
+
+								->group_by('a.id')->get();
+
+								if($rest->num_rows()>0)
+
+								{
+
+								$i=1;
+
+								$prevpo='';
+
+								foreach($rest->result() as $restyui1)
+
+								{
+
+								
+
+								
+
+								$jobcard='';
+
+
+								if($restyui1->source==1)
+
+
+								{
+
+								$job=$this->db->select('job_card_no')->from('order_instruments')->where('id',$restyui1->jobcard)->get();
+
+								if($job->num_rows()>0)
+
+								{
+
+								foreach($job->result() as $job1);
+
+								$jobcard='Jobcard-'.$job1->job_card_no;
+
+								}else{
+
+								$jobcard='';
+
+								}
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}else if($restyui1->source==2)
+
+								{
+
+								/** Intend **/
+
+								$jobcard='INDENT- IND'.$restyui1->sourceid;
+
+								$polink="generalpo";
+
+								$mrnlink="generalmrn";
+
+								}else if($restyui1->source==3)
+
+								{
+
+								/** Intend **/
+
+								$jobcard='AUTO PR';
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}					
+
+
+
+
+
+                               
+
+
+
+								if($restyui1->potype=='0')
+
+								{
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}else
+
+								{
+
+								$polink="generalpo";
+
+								$mrnlink="generalmrn";
+
+								}
+
+
+
+								$html='<a href="javascript:;" onclick="approvepo('."'".$restyui1->pono."'".');" class="btn btn-warning btn-xs">APPROVE PO</a>';
+
+								$approved = '<span id="app'.$restyui1->id.'" style="color:green;font-weight:bold;"><input type="checkbox" name="approvedrecord[]" id="approvedrecord'.$restyui1->id.$restyui1->itemid.'" style="width:20px;height:20px;" value="'.$restyui1->id.'" class="approval2" onchange="markasapproved('."'".$restyui1->id."'".','."'".$restyui1->pono."'".','."'".$restyui1->itemid."'".');"></span><input type="hidden" name="mypo'.$restyui1->id.'" value="'.$restyui1->pono.'"><input type="hidden" name="myitemid'.$restyui1->id.'" value="'.$restyui1->itemid.'">';
+
+								$html1='<a href="javascript:;" class="btn btn-warning btn-xs" onclick="showpopup('."'".$restyui1->pono."'".');">REJECT PO</a>';
+
+
+
+								$htm="";
+
+
+
+
+
+								if($restyui1->potype=='0'){
+
+
+
+								$indenttype = "Machine Related Items";
+
+								$rest123=$this->db->select('b.conversion_weight,b.conversion_unit,b.part as item_name,a.qty,a.price,a.unit,a.itemid')->from('purchase_order a')->join('machine_parts_with_picture b','a.itemid=b.id')->where('b.id',$restyui1->itemid)->get();
+								$currentrice=$this->Store_model->getitemprice($restyui1->potype,$restyui1->vendor,$restyui1->itemid);	
+
+								}else{
+
+								$indenttype = "General Items";
+
+								$rest123=$this->db->select('b.item_name,a.qty,a.unit,a.price, a.itemid')->from('purchase_order a')->join('house_keeping_items b','a.itemid=b.id')->where('b.id',$restyui1->itemid)->get();	
+								
+								$currentrice=$this->Store_model->getitemprice($restyui1->potype,$restyui1->vendor,$restyui1->itemid);
+
+								}
+
+
+
+
+
+								if($rest123->num_rows()>0)
+
+								{
+
+
+
+								foreach($rest123->result() as $rest1231)
+
+								$price = $rest1231->price;
+
+								
+
+								$oldprice="";
+
+								$query = $this->db->select('price')->from('purchase_order')->where('itemid',$rest1231->itemid)->where('approved','1')->limit('1')->order_by('id','desc')->get();
+
+								if($query->num_rows()>0){
+
+								foreach($query->result() as $oldata);
+
+								$oldprice = $oldata->price;
+
+								$diff = abs($price-$oldprice);
+
+								}else{
+
+								
+								$oldprice=$currentrice;
+
+								$diff = abs($price-$oldprice);
+
+								}
+
+								$itemname = strtoupper($rest1231->item_name);
+
+								$qty = $rest1231->qty;
+
+
+								}
+
+								
+
+								$pon="<a href='".page_url."Store/".$polink."/".$restyui1->pono."' target='_blank'>".$restyui1->pono."</a>";
+
+								
+
+								if($restyui1->deliverytime=='Other')
+
+								{
+
+									$delt=$restyui1->otherdeliverytime;
+
+								}else{
+
+									$delt=$restyui1->deliverytime;
+
+								}
+
+								
+
+				if($restyui1->pricechange==1)
+
+                                {
+
+                                $pri="<span style='color:red;font-weight:bold;'>".$price."</span>" ;
+
+                                $oldpri=$restyui1->originalprice;
+                                $prem="(Price Changed)";
+
+                                }else
+
+                                { 
+
+                                $pri=$price;
+
+                                 $oldpri="";
+                                 $prem="";
+
+                                }
+
+                                
+
+                                $createdby= ucfirst($restyui1->first_name." ".$restyui1->last_name);
+
+                                
+
+                            
+
+                                  /**  if($pri<=$oldprice) **/
+                                  
+                                
+				if(trim($diff)>0)
+
+
+				{
+				$pricc="<span style='color:red'>".$pri."</span>";
+
+
+				}else
+
+				{
+
+
+				$pricc="<span style='color:green'>".$pri."</span>";
+
+				}
+
+                                    
+
+                               
+
+                                
+
+								?>
+
+								<tr id="<?php echo $restyui1->id;?>" style="font-size:18px;">
+
+								<td><?php echo $i;?></td>
+
+									<td><?php echo date('d-M-Y g:i A',strtotime($restyui1->addedOn));?></td>
+
+									
+									<td><?php echo $restyui1->prno;?>/<?php echo $pon;?><br/><?php
+									if($prevpo<>$restyui1->pono)
+
+									{?>  
+									<?php echo $createdby;?>
+									
+									<?php
+									}
+									?></td>
+							 
+
+								<td><?php echo $jobcard;?></td>
+
+								<td><strong><?php echo $restyui1->name;?></strong><br/>Payment Term: <?php echo $restyui1->payment_terms;?> Day/<?php echo $restyui1->payment_mode;?></td>
+
+								
+
+								<td><?php echo $itemname;?> <br/>
+
+								
+								</td>
+
+
+								<?php
+								$originalunit=$CI->Store_model->getunit($rest1231->unit);
+								$convertedunit=$CI->Store_model->getunit($rest1231->conversion_unit);
+								if($rest1231->conversion_unit>0)
+								{
+									$convertedweight=$rest1231->conversion_weight*$qty." ".$convertedunit."(Converted Weight)";
+									$qty=$convertedweight;
+
+								}else
+								{
+									$convertedweight='';
+								}
+
+
+
+								?>
+
+								<td><?php echo floatval($qty);?> <?php echo $originalunit;?><br/><?php echo $convertedweight;?></td>
+
+								<td><?php echo $pricc;?><br/><?php echo $prem;?></td>
+
+								<td><?php echo $oldprice;?>
+<br/><br/>								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								?>
+								<span>Freight Charges - <?php if($restyui1->fright=='0'){ if($restyui1->fright_charges=='0.00'){echo "<span style='color:green; font-size:bold'>Not Updated</span>";}else{echo $restyui1->fright_charges;}}else{echo "To be picked by presto";}?></span><br/><br/>
+					
+					<?php if($restyui1->packing_charges=='0.00'){}else{echo "Packing Charges: ".$restyui1->packing_charges;}?>
+								
+								<?php
+								}
+								?>
+								
+								</td>
+								<?php
+								if($diff>0)
+								{
+									$b="background-color:#d4f0fe";
+								}else
+								{
+									$b="";
+								}
+								?>
+									<td style="<?php echo $b;?>"><?php echo $diff;?></td>
+
+<td><a href="<?php echo page_url;?>Store/<?php echo $polink;?>/<?php echo $restyui1->pono;?>" target='_blank' class="btn  btn-xs btn-success">OPEN PO</a><br/>
+									
+									</td>
+								<td class="text-center"><?php echo $approved;?><br/>
+								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								?>
+								<span style="text-align:center;color:" id="mail<?php echo $restyui1->pono;?>"><!--<span class="text-center"><input type="checkbox" id="sendmails" onchange="sendmail('<?php echo $restyui1->pono;?>');"></span><br/><span style="text-center">Mail PO</span>--></span>
+								<?php
+								} 
+								?><br/>
+								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								$pototal=$CI->Store_model->getpototal($restyui1->pono);
+								?>
+								<span style='color:black;font-weight:bold'>Total Value - <?php echo round($pototal,0);?></span>
+								<?php
+								} 
+								?>
+								</td>
+
+								
+						
+
+								<td><?php echo $html1;?></td>
+
+
+							
+
+								
+
+							
+
+								<td><?php echo $delt;?> Days</td>
+
+							
+								</tr>
+
+						<?php
+							
+							$prevpo=$restyui1->pono;
+
+							$i++;
+						}
+
+							}
+
+							?>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                        <div class="col-md-12" style="margin-top:10px;">
+                        
+                        <input type="submit" class="btn btn-success pull-right" value="Indent Approval">
+                        
+                    </div>
+
+                    </div>
+                </form>
+
+                <form action="<?php echo page_url;?>Store/approvebulkpos" method="post" onsubmit="return checkforsingleboxapproval();">
+
+                    <div class="col-sm-12">
+                    	<div class="row">
+					        <div class="col-sm-12">
+					            <div class="page-title-box">
+					                <h4 class="page-title">PENDING PO FOR APPROVAL(AUTO PR IMS) OF VALUE - <?php echo round($imsvalue,0);?></h4>
+					            </div>
+					        </div>
+				        </div>
+
+                        <div class="card-box table-responsive">
+
+                            <table id="example1234456" class="table table-bordered manglesh">
+
+                                <thead>
+
+                                <tr>
+
+                                    <th>Sr No.</th>
+
+                                    <th>CREATED ON</th>
+
+                                    <th>PR/PO NO.</th>
+
+								    <th>SOURCE</th>
+
+									<th>VENDOR NAME</th>
+
+									<th style="width:150px">ITEM</th>
+
+									<th>QTY</th>
+
+                                    <th>PRICE PER UNIT</th>
+
+                                    <th>LAST TIME PURCHASE RATE</th>
+                                     <th>DIFF.</th>
+
+ <th>OPEN PO</th>
+									<th style="width:100px">APPROVE&nbsp;&nbsp;<input type="checkbox" class="appdata3" onclick="checkalldata(3);" style="width:20px;height:20px;"></th>
+
+									<th>REJECT</th>
+
+								   
+
+									<th>DELIVERY DAYS</th>
+
+
+                                </tr>
+
+                                </thead>
+
+                                <tbody>
+
+								<?php
+
+								$rest=$this->db->select('a.vendor,a.pricechange,a.originalprice,a.id,a.prno,a.jobcard,a.source,h.sourceid,a.potype,a.addedOn,a.pono,e.first_name,e.last_name,a.itemid,e.department_id, v.name, v.address,v.payment_terms,v.payment_mode,v.deliverytime,v.otherdeliverytime, a.fright, a.fright_charges, a.packing_charges')
+
+								->from('purchase_order a')
+
+								->join('system_users e','e.user_id=a.addedBy','left')
+								
+								->join('purchase_request h','h.prno=a.prno','left')
+
+								->join('vendors v','a.vendor=v.id','left')
+
+								->where('a.approved','0')
+								->where('a.source','3')
+
+								->order_by('a.addedOn','DESC')
+
+								->group_by('a.id')->get();
+
+								if($rest->num_rows()>0)
+
+								{
+
+								$i=1;
+
+								$prevpo='';
+
+								foreach($rest->result() as $restyui1)
+
+								{
+
+								
+
+								
+
+								$jobcard='';
+
+
+								if($restyui1->source==1)
+
+
+								{
+
+								$job=$this->db->select('job_card_no')->from('order_instruments')->where('id',$restyui1->jobcard)->get();
+
+								if($job->num_rows()>0)
+
+								{
+
+								foreach($job->result() as $job1);
+
+								$jobcard='Jobcard-'.$job1->job_card_no;
+
+								}else{
+
+								$jobcard='';
+
+								}
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}else if($restyui1->source==2)
+
+								{
+
+								/** Intend **/
+
+								$jobcard='INDENT- IND'.$restyui1->sourceid;
+
+								$polink="generalpo";
+
+								$mrnlink="generalmrn";
+
+								}else if($restyui1->source==3)
+
+								{
+
+								/** Intend **/
+
+								$jobcard='AUTO PR';
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}					
+
+
+
+
+
+                               
+
+
+
+								if($restyui1->potype=='0')
+
+								{
+
+								$polink="po";
+
+								$mrnlink="mrn";
+
+								}else
+
+								{
+
+								$polink="generalpo";
+
+								$mrnlink="generalmrn";
+
+								}
+
+
+
+								$html='<a href="javascript:;" onclick="approvepo('."'".$restyui1->pono."'".');" class="btn btn-warning btn-xs">APPROVE PO</a>';
+
+								$approved = '<span id="app'.$restyui1->id.'" style="color:green;font-weight:bold;"><input type="checkbox" class="approval3" name="approvedrecord[]" id="approvedrecord'.$restyui1->id.$restyui1->itemid.'" style="width:20px;height:20px;" value="'.$restyui1->id.'" onchange="markasapproved('."'".$restyui1->id."'".','."'".$restyui1->pono."'".','."'".$restyui1->itemid."'".');"></span><input type="hidden" name="mypo'.$restyui1->id.'" value="'.$restyui1->pono.'"><input type="hidden" name="myitemid'.$restyui1->id.'" value="'.$restyui1->itemid.'">';
+
+								$html1='<a href="javascript:;" class="btn btn-warning btn-xs" onclick="showpopup('."'".$restyui1->pono."'".');">REJECT PO</a>';
+
+
+
+								$htm="";
+
+
+
+
+
+								if($restyui1->potype=='0'){
+
+
+
+								$indenttype = "Machine Related Items";
+
+								$rest123=$this->db->select('b.part as item_name,a.qty,a.price,a.unit,a.itemid')->from('purchase_order a')->join('machine_parts_with_picture b','a.itemid=b.id')->where('b.id',$restyui1->itemid)->get();
+								$currentrice=$this->Store_model->getitemprice($restyui1->potype,$restyui1->vendor,$restyui1->itemid);	
+
+								}else{
+
+								$indenttype = "General Items";
+
+								$rest123=$this->db->select('b.item_name,a.qty,a.unit,a.price, a.itemid')->from('purchase_order a')->join('house_keeping_items b','a.itemid=b.id')->where('b.id',$restyui1->itemid)->get();	
+								
+								$currentrice=$this->Store_model->getitemprice($restyui1->potype,$restyui1->vendor,$restyui1->itemid);
+
+								}
+
+
+
+
+
+								if($rest123->num_rows()>0)
+
+								{
+
+
+
+								foreach($rest123->result() as $rest1231)
+
+								$price = $rest1231->price;
+
+								
+
+								$oldprice="";
+
+								$query = $this->db->select('price')->from('purchase_order')->where('itemid',$rest1231->itemid)->where('approved','1')->limit('1')->order_by('id','desc')->get();
+
+								if($query->num_rows()>0){
+
+								foreach($query->result() as $oldata);
+
+								$oldprice = $oldata->price;
+
+								$diff = abs($price-$oldprice);
+
+								}else{
+
+								
+								$oldprice=$currentrice;
+
+								$diff = abs($price-$oldprice);
+
+								}
+
+								$itemname = strtoupper($rest1231->item_name);
+
+								$qty = $rest1231->qty;
+
+
+								}
+
+								
+
+								$pon="<a href='".page_url."Store/".$polink."/".$restyui1->pono."' target='_blank'>".$restyui1->pono."</a>";
+
+								
+
+								if($restyui1->deliverytime=='Other')
+
+								{
+
+									$delt=$restyui1->otherdeliverytime;
+
+								}else{
+
+									$delt=$restyui1->deliverytime;
+
+								}
+
+								
+
+				if($restyui1->pricechange==1)
+
+                                {
+
+                                $pri="<span style='color:red;font-weight:bold;'>".$price."</span>" ;
+
+                                $oldpri=$restyui1->originalprice;
+                                $prem="(Price Changed)";
+
+                                }else
+
+                                { 
+
+                                $pri=$price;
+
+                                 $oldpri="";
+                                 $prem="";
+
+                                }
+
+                                
+
+                                $createdby= ucfirst($restyui1->first_name." ".$restyui1->last_name);
+
+                                
+
+                            
+
+                                  /**  if($pri<=$oldprice) **/
+                                  
+                                
+				if(trim($diff)>0)
+
+
+				{
+				$pricc="<span style='color:red'>".$pri."</span>";
+
+
+				}else
+
+				{
+
+
+				$pricc="<span style='color:green'>".$pri."</span>";
+
+				}
+
+                                    
+
+                               
+
+                                
+
+								?>
+
+								<tr id="<?php echo $restyui1->id;?>" style="font-size:18px;">
+
+								<td><?php echo $i;?></td>
+
+									<td><?php echo date('d-M-Y g:i A',strtotime($restyui1->addedOn));?></td>
+
+									
+									<td><?php echo $restyui1->prno;?>/<?php echo $pon;?><br/><?php
+									if($prevpo<>$restyui1->pono)
+
+									{?>  
+									<?php echo $createdby;?>
+									
+									<?php
+									}
+									?></td>
+							 
+
+								<td><?php echo $jobcard;?></td>
+
+								<td><strong><?php echo $restyui1->name;?></strong><br/>Payment Term: <?php echo $restyui1->payment_terms;?> Day/<?php echo $restyui1->payment_mode;?></td>
+
+								
+
+								<td><?php echo $itemname;?> <br/>
+
+								
+								</td>
+
+								<td><?php echo $qty;?></td>
+
+								<td><?php echo $pricc;?><br/><?php echo $prem;?></td>
+
+								<td><?php echo $oldprice;?>
+<br/><br/>								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								?>
+								<span>Freight Charges - <?php if($restyui1->fright=='0'){ if($restyui1->fright_charges=='0.00'){echo "<span style='color:green; font-size:bold'>Not Updated</span>";}else{echo $restyui1->fright_charges;}}else{echo "To be picked by presto";}?></span><br/><br/>
+					
+					<?php if($restyui1->packing_charges=='0.00'){}else{echo "Packing Charges: ".$restyui1->packing_charges;}?>
+								
+								<?php
+								}
+								?>
+								
+								</td>
+								<?php
+								if($diff>0)
+								{
+									$b="background-color:#d4f0fe";
+								}else
+								{
+									$b="";
+								}
+								?>
+									<td style="<?php echo $b;?>"><?php echo $diff;?></td>
+
+<td><a href="<?php echo page_url;?>Store/<?php echo $polink;?>/<?php echo $restyui1->pono;?>" target='_blank' class="btn  btn-xs btn-success">OPEN PO</a><br/>
+									
+									</td>
+								<td class="text-center"><?php echo $approved;?><br/>
+								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								?>
+								<span style="text-align:center;color:" id="mail<?php echo $restyui1->pono;?>"><!--<span class="text-center"><input type="checkbox" id="sendmails" onchange="sendmail('<?php echo $restyui1->pono;?>');"></span><br/><span style="text-center">Mail PO</span>--></span>
+								<?php
+								} 
+								?><br/>
+								<?php
+								if($prevpo<>$restyui1->pono)
+								{
+								$pototal=$CI->Store_model->getpototal($restyui1->pono);
+								?>
+								<span style='color:black;font-weight:bold'>Total Value - <?php echo round($pototal,0);?></span>
+								<?php
+								} 
+								?>
+								</td>
+
+								
+						
+
+								<td><?php echo $html1;?></td>
+
+
+							
+
+								
+
+							
+
+								<td><?php echo $delt;?> Days</td>
+
+							
+								</tr>
+
+						<?php
+							
+							$prevpo=$restyui1->pono;
+
+							$i++;
+						}
+
+							}
+
+							?>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+                        <div class="col-md-12" style="margin-top:10px;">
+                        
+                        <input type="submit" class="btn btn-success pull-right" value="Auto PR IMS Approval">
+                        
+                    </div>
+
+                    </div>
+
+  </form>
+                </div>
+
+                   <!-- Page-Title -->
+
+                <div class="row">
+
+                    <div class="col-sm-12">
+
+                        <div class="page-title-box">
+
+                            <h4 class="page-title">PO HISTORY</h4>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+		  
+
+		  
+
+		  <div class="row">
+
+                    <div class="col-sm-12">
+
+                        <div class="card-box table-responsive">
+
+                            <table id="example1" class="table table-bordered manglesh">
+
+                                <thead>
+
+                                <tr>
+
+                                   <th>Sr No.</th>
+
+                                   <th>PR NO</th>
+
+									<th>PO NO.</th>
+
+									<th>SOURCE</th>
+
+									<th>VENDOR NAME</th>
+
+									<th>ITEM</th>
+
+									<th>QTY</th>
+
+									<th>PRICE PER UNIT</th>
+
+									<th>LAST TIME PURCHASE RATE</th>
+
+									<th>DIFFRENCE</th>
+
+									<th>CREATED BY</th>
+
+									<th>CREATED ON</th>
+									<th>APPROVED ON</th>
+
+									<th>STATUS</th>
+
+									<th>REMARKS</th>
+
+									
+
+                                </tr>
+
+                                </thead>
+
+
+
+
+
+                                <tbody>
+
+								
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+        
+
+        
+
+        
+
+        <!-- Modal -->
+
+<div id="myModal" class="modal fade" role="dialog">
+
+  <div class="modal-dialog">
+
+
+
+    <!-- Modal content-->
+
+    <form action="<?php echo page_url;?>Reporting/addporemarks" method="post">
+
+        <input type="hidden" name="pono" id="pono" value="">
+
+    <div class="modal-content">
+
+      <div class="modal-header">
+
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+
+        <h4 class="modal-title">Adding Remarks for PO- <span id="ponum"></span></h4>
+
+      </div>
+
+      <div class="modal-body">
+
+        <div class="row">
+
+        <textarea class="form-control" name="remarks" id="remarks" placeholder="Remarks"></textarea>
+
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+
+        <input type="submit" class="btn btn-sm btn-success" value="Update">
+
+    </div>
+
+    </form>
+
+
+
+  </div>
+
+</div>
+
+          <!-- Footer -->
+
+               <?php $this->load->view('common/footer');?>
+
+                <!-- End Footer -->
+
+
+
+            </div> <!-- end container -->
+
+        </div>
+
+        <!-- end wrapper -->
+
+
+
+
+
+                <!-- jQuery  -->
+
+        <script src="<?php echo assets_url;?>js/jquery.min.js"></script>
+
+        <script src="<?php echo assets_url;?>js/bootstrap.min.js"></script>
+
+        <script src="<?php echo assets_url;?>js/detect.js"></script>
+
+        <script src="<?php echo assets_url;?>js/fastclick.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.slimscroll.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.blockUI.js"></script>
+
+        <script src="<?php echo assets_url;?>js/waves.js"></script>
+
+        <script src="<?php echo assets_url;?>js/wow.min.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.nicescroll.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.scrollTo.min.js"></script>
+
+
+
+        <!-- Datatables-->
+
+        <script src="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.bootstrap.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.buttons.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/jszip.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/pdfmake.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/vfs_fonts.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.html5.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.print.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.fixedHeader.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.keyTable.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.responsive.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.js"></script>
+
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.scroller.min.js"></script>
+
+        <script src="https://cdn.datatables.net/fixedheader/3.1.6/js/dataTables.fixedHeader.min.js"></script>
+
+<script src="<?php echo assets_url;?>plugins/timepicker/bootstrap-timepicker.min.js"></script>
+
+        <!-- Datatable init js -->
+
+        <script src="<?php echo assets_url;?>pages/datatables.init.js"></script>
+
+
+
+        <!-- App js -->
+
+        <script src="<?php echo assets_url;?>js/jquery.core.js"></script>
+
+        <script src="<?php echo assets_url;?>js/jquery.app.js"></script>
+
+		
+
+
+
+	 
+
+ <script>
+
+$( document ).ready(function() {
+
+ 
+
+$('#example123445').dataTable({"bSort" : false,"iDisplayLength": 100});
+$('#example1234455').dataTable({"bSort" : false,"iDisplayLength": 100});
+$('#example1234456').dataTable({"bSort" : false,"iDisplayLength": 100});
+
+$('#example').dataTable({
+
+ "bProcessing": false,
+
+ "pagination":true,
+
+fixedHeader: true,
+
+
+   scrollCollapse: true,
+
+   fixedColumns:   {
+
+            leftColumns: 3
+
+        },
+
+ "sAjaxSource": "<?php echo page_url;?>Reporting/pendingpolistforapproval/<?php echo $this->uri->segment(3);?>",
+
+ "aoColumns": [
+
+					{ mData: 'sr_no' },
+
+					{mData:'prnumber'},
+
+					{ mData: 'prno'},
+
+					{ mData: 'jobcardno'},
+
+					{mData:'vendor'},
+
+					{mData:'itemname'},
+
+					{mData:'qty'},
+
+					{mData:'price'},
+
+					{mData:'oldprice'},
+
+					{mData:'diff'},
+
+					{ mData: 'createdby'},
+
+					{ mData: 'createdon'},
+
+					{ mData: 'markrecvd'},
+
+					{ mData: 'markrrej'}
+
+					
+
+						
+
+						
+
+                ]
+
+        });  
+
+        
+
+$('#example1').dataTable({
+
+ "bProcessing": false,
+
+ "pagination":true,
+
+fixedHeader: true,
+
+   scrollCollapse: true,
+
+   fixedColumns:   {
+
+            leftColumns: 3
+
+        },
+
+	
+	"sAjaxSource": "<?php echo page_url;?>Reporting/polisthistory",
+
+	"aoColumns": [
+
+					{ mData: 'sr_no' },
+
+					{mData:'prnumber'},
+
+					{ mData: 'prno'},
+
+					{ mData: 'jobcardno'},
+
+					{mData:'vendor'},
+
+					{mData:'itemname'},
+
+					{mData:'qty'},
+
+					{mData:'price'},
+
+					{mData:'oldprice'},
+
+					{mData:'diff'},
+
+					{ mData: 'createdby'},
+
+					{ mData: 'createdon'},
+					{ mData: 'approvredon'},
+
+					{ mData: 'status'},
+
+					{ mData: 'remarks'}
+
+						
+
+						
+
+                ]
+
+        });     
+
+   
+
+        
+
+});
+
+
+
+
+
+</script>
+
+
+
+
+
+<script src="<?php echo assets_url;?>plugins/select2/dist/js/select2.min.js" type="text/javascript"></script>
+
+<script>
+
+$(document).ready(function(){
+
+  $("#loginForm").on("submit", function(){
+
+    $("#pageloader").fadeIn();
+
+  });//submit
+
+});//document ready
+
+
+
+function approvepo(pono)
+
+{
+
+		document.location="<?php echo page_url;?>Store/approvepo/"+pono;
+
+		return true;
+
+
+
+}
+
+
+
+function showpopup(pono)
+
+{
+
+    
+
+    $("#myModal").modal('show');
+
+    $("#ponum").text(pono);
+
+     $("#pono").val(pono);
+
+    
+
+    
+
+}
+
+
+
+
+
+
+
+</script>
+
+<script>
+
+function markasapproved(i,j,itemid){
+
+    
+
+    if($("#approvedrecord"+i+itemid).is(":checked"))
+
+    {
+
+        var a="1";
+
+    }else
+
+    {
+
+        var a="0";
+
+    }
+
+   
+
+	$.ajax({
+
+	type:"post",
+
+	url:"<?php echo page_url;?>Store/checktoapprovepo",
+
+	data:"id="+i+"&pono="+j+"&itemid="+itemid+"&type="+a,
+
+	success:function(data){
+$("#app"+i).html('Approved');
+
+$('#'+i).css({ 'background-color' : '#CCFDC1'});
+
+	}
+
+	});
+
+}
+																																																																				
+
+
+
+
+function sendmail(pono)
+
+{
+
+    if($('#sendmails').is(":checked"))
+
+    {
+
+           $.ajax({																	
+
+            type:"post",
+
+            url:"<?php echo page_url;?>Store/sendemailtosupplier",
+
+            data:"pono="+pono,
+
+            success:function(data){
+
+            //	alert(data);																																																																																																																			
+            $("#mail"+pono).css('color','green');
+            $("#mail"+pono).css('font-weight','bold');
+            $("#mail"+pono).html('Mail Send');
+
+            }
+
+            });
+
+    }
+
+    
+
+}
+
+
+
+function checkalldata(id)
+{
+    
+    if($(".appdata"+id).is(":checked"))
+    {
+       $('.approval'+id).prop('checked',true);
+        
+    }else
+    {
+         $('.approval'+id).prop('checked',false);
+        
+    }
+    
+}
+
+
+function checkforsingleboxapproval()
+{
+
+  var checklen=$('[name="approvedrecord[]"]:checked').length;
+    if(checklen>0)
+    {
+    return true;
+    }else
+    {
+    alert('At least one item selection is mandatory');
+    return false;  
+    
+    }
+    
+}
+</script>
+
+</body>
+
+</html>	
+

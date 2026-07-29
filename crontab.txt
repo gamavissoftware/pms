@@ -1,0 +1,3 @@
+25 15 * * * php /home/prestomitr80/public_html/index.php Testcontroller sendmail/1
+25 15 * * * php /home/prestomitr80/public_html/index.php Testcontroller sendmail/1
+25 15 * * * php /home/prestomitr80/public_html/index.php Testcontroller sendmail/1

@@ -1,0 +1,272 @@
+<?php 
+$CI =& get_instance();
+$CI->load->model('Salescrm_model', 'salescrm');
+$checkRolePermission = $CI->salescrm->checkRolePermission($_SESSION['logged_in']['user_id'], 11);
+
+if ($checkRolePermission != '') {
+    foreach ($checkRolePermission as $row);
+    $madd = $row->madd;
+    $mremove = $row->mremove;
+} else {
+    $madd = '';
+    $mremove = '';
+}
+?>
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="">
+        <meta name="author" content="<?php echo copyright;?>">
+
+        <link rel="shortcut icon" href="<?php echo assets_url;?>images/favicon.ico">
+
+        <title><?php echo sitetitle;?></title>
+
+        <!-- Table Responsive css -->
+		<script src="<?php echo assets_url;?>js/angular.min.js"></script>
+		 <!-- DataTables -->
+        <link href="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>plugins/datatables/fixedHeader.bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>plugins/datatables/scroller.bootstrap.min.css" rel="stylesheet" type="text/css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
+
+        <link href="<?php echo assets_url;?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/core.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/components.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/icons.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/pages.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/menu.css" rel="stylesheet" type="text/css" />
+        <link href="<?php echo assets_url;?>css/responsive.css" rel="stylesheet" type="text/css" />
+
+        <!-- HTML5 Shiv and Respond.js IE8 support of HTML5 elements and media queries -->
+        <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+        <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+        <![endif]-->
+<?PHP 
+$q = $this->db->select('company_name, logo, colorcode')->from('company_information')->get();
+foreach($q->result() as $LOGO);
+?>
+        <script src="<?php echo assets_url;?>js/modernizr.min.js"></script>
+<style>
+            table.pretty thead th {
+                text-align: center;
+                background: <?php echo $LOGO->colorcode;?>;
+                color:#fff;
+				font-size:12px;
+            }
+			table.pretty td {
+                text-align: center;
+                font-size:12px;
+            }
+			</style>
+    </head>
+
+
+    <body>
+
+
+        <!-- Navigation Bar-->
+        <header id="topnav">
+          <?php $this->load->view('common/nav-menu');?>
+        </header>
+        <!-- End Navigation Bar-->
+<div class="wrapper">
+            <div class="container">
+			<!-- Page-Title -->
+                <div class="row" style="margin-top:20px;">
+                    <div class="col-sm-12 col-xs-12 col-md-12 col-lg-12">
+                        <div class="page-title-box">
+                            <a href="javascript:history.go(-1)"><button type="submit" class="btn btn-success" name="action_button" style="background-color: ;"><i class="fa fa-arrow-left"></i>Back</button></a>
+                            <?php //if($madd == 1 && $mremove == 0) {?>
+						 <div class="btn-group pull-right">
+						  <button class="btn btn-success waves-effect waves-light" data-toggle="modal" data-target="#con-close-modal" style="background-color: ;">Add Lead Source</button>
+                            </div>
+                            <?php //} ?>
+                           <h4 class="page-title text-center">Lead Source List</h4>
+                        </div>
+                    </div>
+                </div>
+                <!-- end page title end breadcrumb -->
+<span style="color:red;"><?php echo $this->session->flashdata('message'); ?></span>
+
+                 <div class="row">
+                    <div class="col-sm-12">
+                        <div class="card-box table-responsive">
+                            <table id="example" class="table table-striped table-bordered pretty" style="background-color: ;">
+                                <thead>
+                                <tr>
+                                    <th>Sr No.</th>
+									<th>Lead Source</th>
+                                    <th>Keyword</th>
+                                    <th>Action</th>
+                                </tr>
+                                </thead>
+                                
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- end row -->
+ <div id="con-close-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
+ <form id="loginForm" method="post" action="<?php echo page_url;?>Master/Lead_Type/add_lead_source">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title">Add Lead Source</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            
+							<div class="col-md-6">
+								<div class="form-group">
+									 <label for="field-2" class="control-label">Lead Source</label>
+									 <span id="error_lead_source" style="color:red;">*</span>
+									 <input type="text" class="form-control" name="lead_source" id="lead_source" required="">
+								</div>
+							</div>
+
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                     <label for="field-2" class="control-label">Lead Source Abbreviation</label>
+                                     <span id="error_lead_source" style="color:red;">*</span>
+                                     <input type="text" class="form-control" name="source_abbr" id="source_abbr" onblur="checkIfAbbrExists()" required="">
+                                </div>
+                            </div>
+						
+                        </div>
+						
+						
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Close</button>
+                        <input type="submit" id="save" class="btn btn-info" value="Submit"> 
+                    </div>
+                </div>
+            </div>
+								</form>
+                            </div><!-- /.modal -->
+
+
+                <!-- Footer -->
+<?php $this->load->view('common/footer');?>
+                <!-- End Footer -->
+
+            </div> <!-- end container -->
+        </div>
+        <!-- end wrapper -->
+
+
+         <!-- jQuery  -->
+        <script src="<?php echo assets_url;?>js/jquery.min.js"></script>
+        <script src="<?php echo assets_url;?>js/bootstrap.min.js"></script>
+        <script src="<?php echo assets_url;?>js/detect.js"></script>
+        <script src="<?php echo assets_url;?>js/fastclick.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.slimscroll.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.blockUI.js"></script>
+        <script src="<?php echo assets_url;?>js/waves.js"></script>
+        <script src="<?php echo assets_url;?>js/wow.min.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.nicescroll.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.scrollTo.min.js"></script>
+
+        <!-- Datatables-->
+        <script src="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.bootstrap.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.buttons.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/jszip.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/pdfmake.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/vfs_fonts.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.html5.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/buttons.print.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.fixedHeader.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.keyTable.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.responsive.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.js"></script>
+        <script src="<?php echo assets_url;?>plugins/datatables/dataTables.scroller.min.js"></script>
+
+        <!-- Datatable init js -->
+        <script src="<?php echo assets_url;?>pages/datatables.init.js"></script>
+
+        <!-- App js -->
+        <script src="<?php echo assets_url;?>js/jquery.core.js"></script>
+        <script src="<?php echo assets_url;?>js/jquery.app.js"></script>
+
+       
+
+        <script>
+$( document ).ready(function() {
+$('#example').dataTable({
+"bProcessing": true,
+"pagination":true,
+"sAjaxSource": "<?php echo page_url;?>Master/Lead_Type/Lead_source_list",
+"aoColumns": [
+				{ mData: 'sr_no' } ,
+				{ mData: 'lead_source' },
+                { mData: 'keyword' }
+				// { mData: 'status' },
+                <?php //if($madd == 1 && $mremove == 0) {?>
+				,{ mData: 'edit' }
+                <?php //} ?>
+				
+				
+		]
+});   
+});
+
+</script>
+		
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<script language="javascript" type="text/javascript">   
+jQuery.noConflict();
+$(document).ready(function() {
+$("#save").click(function() {
+var lead_source = $("#lead_source").val();
+if(lead_source=='')
+{
+	$("#error_lead_source").html('Required!');
+}
+
+var status = $("#status").val();
+if(status=='')
+{
+	
+	$("#error_status").html('Required!');
+}
+
+
+if(lead_source=='' || status=='' )
+{
+	
+	return false;
+}
+
+});
+});
+</script>
+
+<script type="text/javascript">
+    function checkIfAbbrExists() {
+        var source_abbr = $("#source_abbr").val();
+            $.ajax({
+                type:"post",
+                url:"<?php echo page_url;?>Master/Lead_Type/checkIfAbbrExists",
+                data:{source_abbr: source_abbr},
+                success:function(data){
+                    if (data == 1) {
+                        alert('Abbreviation already exists!');
+                        $("#source_abbr").val('');
+                    }
+                }
+            });
+    }
+</script>
+    </body>
+</html>

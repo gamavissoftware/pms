@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automation BOM — SPM1200L · DF-1826 &amp; DF-1827 · Review Copy</title>
+<style>
+  :root {
+    --navy:    #1F3864;
+    --blue:    #2E75B6;
+    --lblue:   #DEEAF1;
+    --lgreen:  #E2EFDA;
+    --lyellow: #FFF2CC;
+    --orange:  #FFE0B2;
+    --red:     #C00000;
+    --gray:    #F5F5F5;
+    --dgray:   #555;
+    --border:  #D0D7E3;
+    --white:   #FFFFFF;
+    --success: #217346;
+    --warn:    #BF8F00;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; background: #ECF0F5; color: #222; }
+
+  /* ── HEADER ── */
+  .app-header {
+    background: var(--navy);
+    color: #fff;
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: .3px; }
+  .app-header .sub { font-size: 11px; opacity: .75; margin-top: 2px; }
+  .badge {
+    background: var(--blue); color: #fff;
+    padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .badge.review { background: var(--warn); }
+
+  /* ── LAYOUT ── */
+  .layout { display: flex; gap: 0; min-height: calc(100vh - 54px); }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 300px; min-width: 300px;
+    background: var(--white);
+    border-right: 2px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .sidebar-title {
+    background: var(--blue); color: #fff;
+    padding: 10px 16px; font-size: 12px; font-weight: 700;
+    letter-spacing: .5px; text-transform: uppercase;
+  }
+  .sidebar-body { padding: 16px; flex: 1; overflow-y: auto; }
+
+  /* Preset DF cards */
+  .preset-card {
+    width: 100%; text-align: left; cursor: pointer;
+    background: #FAFCFF; border: 1.5px solid var(--border); border-radius: 7px;
+    padding: 10px 12px; margin-bottom: 10px; font-family: Arial, sans-serif;
+    transition: border .15s, background .15s;
+  }
+  .preset-card:hover { border-color: var(--blue); }
+  .preset-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .preset-card.active { border-color: var(--navy); background: var(--lblue); }
+  .preset-card .pc-df { font-size: 13px; font-weight: 700; color: var(--navy); }
+  .preset-card .pc-line { font-size: 11px; color: var(--dgray); margin-top: 3px; line-height: 1.5; }
+  .preset-card .pc-tags { margin-top: 6px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .pc-tag {
+    font-size: 9px; font-weight: 700; letter-spacing: .4px;
+    padding: 2px 7px; border-radius: 9px; text-transform: uppercase;
+  }
+  .pc-iqr  { background: var(--lgreen); color: #1A4001; }
+  .pc-fx5  { background: var(--lblue);  color: var(--navy); }
+  .pc-cont { background: var(--lyellow); color: var(--warn); }
+  .pc-int  { background: #EEE; color: #555; }
+
+  .form-group { margin-bottom: 12px; }
+  .form-group label {
+    display: block; font-size: 11px; font-weight: 700;
+    color: var(--navy); margin-bottom: 4px; text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  .form-group input {
+    width: 100%; padding: 7px 10px;
+    border: 1.5px solid var(--border); border-radius: 5px;
+    font-size: 13px; font-family: Arial, sans-serif;
+    background: #FAFCFF; outline: none;
+  }
+  .form-group input.ro { background: var(--gray); color: #333; font-weight: 700; cursor: default; }
+  .cfg-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .plc-badge {
+    display: inline-block; padding: 5px 14px; border-radius: 6px;
+    font-size: 13px; font-weight: 700; margin-top: 4px;
+  }
+  .plc-fx5  { background: var(--lblue); color: var(--navy); }
+  .plc-iqr  { background: var(--lgreen); color: #1A4001; }
+
+  .divider { border: none; border-top: 1.5px solid var(--border); margin: 14px 0; }
+
+  .btn-reset {
+    width: 100%; padding: 7px;
+    background: transparent; color: var(--dgray);
+    border: 1.5px solid var(--border); border-radius: 6px;
+    font-size: 12px; cursor: pointer; margin-top: 4px;
+    transition: all .15s;
+  }
+  .btn-reset:hover { border-color: var(--red); color: var(--red); }
+
+  .legend { font-size: 10px; color: #888; line-height: 1.7; }
+  .legend b { color: #555; }
+  .lg-chip { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
+
+  /* ── MAIN CONTENT ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .bom-topbar {
+    background: var(--white);
+    border-bottom: 2px solid var(--border);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .config-chip {
+    background: var(--navy); color: #fff;
+    padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 700;
+  }
+  .config-chip.fx5  { background: var(--blue); }
+  .config-chip.iqr  { background: var(--success); }
+  .config-chip.cont { background: var(--warn); }
+  .config-chip.lite { background: #7A8BA6; }
+  .bom-actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn-sm {
+    padding: 6px 14px; border-radius: 5px; font-size: 12px; font-weight: 700;
+    cursor: pointer; border: none; transition: opacity .15s;
+  }
+  .btn-sm:hover { opacity: .85; }
+  .btn-sm:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+  .btn-export { background: var(--success); color: #fff; }
+  .btn-print  { background: var(--blue); color: #fff; }
+  .btn-copy   { background: var(--dgray); color: #fff; }
+
+  .bom-area { flex: 1; overflow: auto; padding: 16px 20px; }
+
+  /* Verbatim DF title strip */
+  .doc-title {
+    background: var(--white); border: 1.5px solid var(--border); border-left: 5px solid var(--navy);
+    border-radius: 7px; padding: 10px 14px; margin-bottom: 14px;
+    font-size: 12.5px; color: #333;
+  }
+  .doc-title b { color: var(--navy); }
+  .doc-title .dt-date { color: var(--dgray); font-size: 11px; margin-left: 10px; white-space: nowrap; }
+
+  /* Stats row */
+  .stats-row { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 7px;
+    padding: 10px 16px; min-width: 118px;
+  }
+  .stat-card .val { font-size: 22px; font-weight: 700; color: var(--navy); }
+  .stat-card .lbl { font-size: 10px; color: var(--dgray); text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+
+  /* BOM table */
+  .bom-table-wrap { background: var(--white); border-radius: 8px; border: 1.5px solid var(--border); overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px; }
+  thead tr { background: var(--navy); color: #fff; }
+  thead th { padding: 9px 10px; text-align: center; font-size: 11px; font-weight: 700;
+             letter-spacing: .3px; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
+  thead th.left { text-align: left; }
+
+  .sec-row td {
+    background: var(--blue); color: #fff;
+    font-weight: 700; font-size: 11px; padding: 6px 10px;
+    letter-spacing: .5px; text-transform: uppercase;
+    border-top: 2px solid var(--navy);
+  }
+  .sec-row td span { opacity: .7; font-weight: 400; margin-left: 8px; font-size: 10px; }
+
+  tbody tr.data-row:hover { background: #EEF4FF !important; }
+  tbody tr.data-row td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+
+  .erp-cell { font-family: 'Courier New', monospace; font-size: 11px; color: var(--navy); font-weight: 700; }
+  .erp-new  { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700;
+              color: var(--red); background: var(--orange); padding: 2px 6px; border-radius: 3px; }
+  .desc-cell { max-width: 300px; }
+  .part-cell { font-family: 'Courier New', monospace; font-size: 11px; color: #444; }
+
+  .qty-input {
+    width: 55px; padding: 3px 6px; border: 1.5px solid var(--border);
+    border-radius: 4px; font-size: 12px; font-weight: 700; text-align: center;
+    font-family: Arial; background: #FAFCFF;
+  }
+  .qty-input:focus { border-color: var(--blue); outline: none; }
+  .qty-input.manual { background: var(--lyellow); border-color: #E0C050; }
+
+  .formula-tag {
+    display: inline-block; padding: 2px 7px; border-radius: 10px;
+    font-size: 10px; font-weight: 700; white-space: nowrap;
+  }
+  .tag-pending { background: var(--orange);  color: var(--red); }
+  .tag-edited  { background: var(--lyellow); color: var(--warn); }
+  .tag-ok      { color: #B9C2D0; font-weight: 400; }
+
+  .remarks-cell { color: var(--dgray); font-size: 11px; max-width: 230px; }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--dgray); }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state h3 { font-size: 16px; margin-bottom: 6px; color: var(--navy); }
+  .empty-state p { font-size: 13px; }
+
+  /* Section filter pills */
+  .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .pill {
+    padding: 4px 12px; border-radius: 12px; font-size: 11px; cursor: pointer;
+    border: 1.5px solid var(--border); background: var(--white); font-weight: 600;
+    transition: all .12s;
+  }
+  .pill.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .pill:hover:not(.active) { border-color: var(--blue); color: var(--blue); }
+  .pill:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  /* Review notes banner */
+  .action-banner {
+    background: #FFF3CD; border: 1.5px solid #FFD04A; border-radius: 7px;
+    padding: 10px 14px; margin-bottom: 14px; font-size: 11px; color: #7A5800;
+  }
+  .action-banner strong { display: block; margin-bottom: 4px; font-size: 12px; }
+  .action-banner div { margin-top: 3px; line-height: 1.5; }
+
+  /* Approval / signature block */
+  .approval-block {
+    margin-top: 18px; background: var(--white);
+    border: 1.5px solid var(--border); border-radius: 8px; padding: 14px 16px;
+  }
+  .approval-block .ap-note { font-size: 11px; color: var(--dgray); margin-bottom: 12px; line-height: 1.5; }
+  .ap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .ap-box { border: 1.5px solid var(--border); border-radius: 6px; padding: 10px 12px; min-height: 108px; }
+  .ap-box .ap-role { font-size: 10px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .4px; }
+  .ap-box .ap-line { border-bottom: 1px solid #999; margin-top: 34px; }
+  .ap-box .ap-lbl { font-size: 10px; color: #888; margin-top: 4px; display: flex; justify-content: space-between; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; }
+    .sidebar { width: 100%; min-width: 0; border-right: none; border-bottom: 2px solid var(--border); }
+    .bom-actions { margin-left: 0; width: 100%; }
+    .ap-grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+
+  /* Print styles */
+  @media print {
+    body { background: #fff; }
+    .sidebar, .bom-actions, .filter-pills, .btn-reset { display: none !important; }
+    .layout { display: block; }
+    .main { overflow: visible; }
+    .bom-area { padding: 0; overflow: visible; }
+    .bom-topbar { border: none; padding: 0 0 8px 0; page-break-after: avoid; }
+    .bom-table-wrap { border-radius: 0; overflow: visible; }
+    table { min-width: 0; font-size: 10.5px; }
+    thead th { position: static; }
+    tr { page-break-inside: avoid; }
+    .stats-row .stat-card { padding: 6px 10px; }
+    .stat-card .val { font-size: 16px; }
+    .qty-input { border: none; background: transparent !important; }
+    .approval-block { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <h1>⚙️ Automation BOM Generator</h1>
+    <div class="sub">SPM1200L · Mitsubishi Automation · Reference DF Library — DF-1826 &amp; DF-1827</div>
+  </div>
+  <span class="badge review">FOR CUSTOMER REVIEW &amp; APPROVAL</span>
+</header>
+
+<div class="layout">
+
+  <!-- ══ SIDEBAR ══ -->
+  <aside class="sidebar">
+    <div class="sidebar-title">🔧 Machine Configuration</div>
+    <div class="sidebar-body">
+
+      <div class="form-group">
+        <label>Load Reference BOM</label>
+        <button class="preset-card" id="card-DF-1826" onclick="loadDF('DF-1826')">
+          <div class="pc-df">DF-1826 · REV.02</div>
+          <div class="pc-line">SPM1200L · 15 Axis · 12 Track · 180 PPM<br>Standalone Panel · 42 line items</div>
+          <div class="pc-tags">
+            <span class="pc-tag pc-iqr">iQ-R</span>
+            <span class="pc-tag pc-cont">Continuous</span>
+            <span class="pc-tag pc-cont">High Speed</span>
+          </div>
+        </button>
+        <button class="preset-card" id="card-DF-1827" onclick="loadDF('DF-1827')">
+          <div class="pc-df">DF-1827</div>
+          <div class="pc-line">SPM1200L · 8 Axis · 12 Track · 140 PPM · LHS<br>Panel With Machine · 29 line items</div>
+          <div class="pc-tags">
+            <span class="pc-tag pc-fx5">FX5</span>
+            <span class="pc-tag pc-int">Intermittent</span>
+          </div>
+        </button>
+      </div>
+
+      <hr class="divider">
+
+      <div id="cfgFields" style="display:none;">
+        <div class="cfg-2col">
+          <div class="form-group"><label>DF Number</label><input class="ro" id="cfgDF" readonly></div>
+          <div class="form-group"><label>Revision</label><input class="ro" id="cfgRev" readonly></div>
+        </div>
+        <div class="form-group"><label>Machine Model</label><input class="ro" id="cfgModel" readonly></div>
+        <div class="cfg-2col">
+          <div class="form-group"><label>Axes</label><input class="ro" id="cfgAxes" readonly></div>
+          <div class="form-group"><label>Tracks</label><input class="ro" id="cfgTracks" readonly></div>
+        </div>
+        <div class="cfg-2col">
+          <div class="form-group"><label>Speed (PPM)</label><input class="ro" id="cfgSpeed" readonly></div>
+          <div class="form-group"><label>Side</label><input class="ro" id="cfgSide" readonly></div>
+        </div>
+        <div class="form-group"><label>Motion Type</label><input class="ro" id="cfgMotion" readonly></div>
+        <div class="form-group"><label>Panel Location</label><input class="ro" id="cfgPanel" readonly></div>
+        <div class="form-group">
+          <label>PLC Family (as per DF)</label>
+          <div id="plcFamilyBadge" class="plc-badge plc-fx5">—</div>
+        </div>
+        <div style="font-size:10px;color:#888;line-height:1.5;">Parameters are locked to the released DF document. Quantities in the table remain editable for review markups.</div>
+        <hr class="divider">
+      </div>
+
+      <button class="btn-reset" onclick="resetView()">↺ Clear Selection</button>
+
+      <hr class="divider">
+      <div class="legend">
+        <b>Review Legend:</b><br>
+        <span class="lg-chip" style="background:var(--orange);"></span><span style="color:var(--red);font-weight:700;">NEW / PENDING</span> — ERP code to be assigned<br>
+        <span class="lg-chip" style="background:var(--lyellow);"></span>Qty edited during review (marked ✎)<br>
+        <span class="lg-chip" style="background:#FAFCFF;border:1px solid var(--border);"></span>Qty as per released DF
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN ══ -->
+  <main class="main">
+
+    <div class="bom-topbar" id="configBar" style="display:none;">
+      <span id="chipRow" style="display:contents;"></span>
+      <div class="bom-actions">
+        <button class="btn-sm btn-copy" onclick="copyBOM()">📋 Copy</button>
+        <button class="btn-sm btn-print" onclick="window.print()">🖨️ Print</button>
+        <button class="btn-sm btn-export" onclick="exportCSV()">📥 Export CSV</button>
+      </div>
+    </div>
+
+    <div class="bom-area">
+
+      <div class="empty-state" id="emptyState">
+        <div class="icon">📋</div>
+        <h3>Select a reference DF to load its automation BOM</h3>
+        <p>Choose <strong>DF-1826</strong> (Continuous · iQ-R · 42 items) or <strong>DF-1827</strong> (Intermittent · FX5 · 29 items)<br>from the panel to view the complete BOM for review and approval.</p>
+        <br>
+        <p style="font-size:11px;color:#aaa;">Every line item is reproduced verbatim from the released DF spreadsheets — nothing omitted.</p>
+      </div>
+
+      <div id="bomContent" style="display:none;">
+        <div class="doc-title" id="docTitle"></div>
+        <div class="stats-row" id="statsRow"></div>
+        <div class="action-banner" id="actionBanner" style="display:none;"></div>
+        <div class="filter-pills" id="sectionPills"></div>
+        <div class="bom-table-wrap">
+          <table id="bomTable">
+            <thead>
+              <tr>
+                <th style="width:44px;">S.NO.</th>
+                <th style="width:100px;">ERP CODE</th>
+                <th class="left" style="width:290px;">DESCRIPTION</th>
+                <th class="left" style="width:165px;">MODEL NO. / PART NO.</th>
+                <th style="width:100px;">MANUFACTURER</th>
+                <th style="width:60px;">QTY.</th>
+                <th style="width:55px;">UOM</th>
+                <th class="left" style="width:220px;">REMARKS</th>
+                <th style="width:96px;">STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="bomBody"></tbody>
+          </table>
+        </div>
+
+        <div class="approval-block" id="approvalBlock">
+          <div class="ap-note"><strong style="color:var(--navy);">Review instructions:</strong> This BOM is reproduced verbatim from the released DF document. Please verify every item, model number, quantity and remark. Mark any quantity changes directly in the QTY column (changes are tagged ✎), note pending ERP codes highlighted in red, and return this document signed for approval.</div>
+          <div class="ap-grid">
+            <div class="ap-box">
+              <div class="ap-role">Prepared By — Engineering</div>
+              <div class="ap-line"></div>
+              <div class="ap-lbl"><span>Name / Sign</span><span>Date</span></div>
+            </div>
+            <div class="ap-box">
+              <div class="ap-role">Checked By</div>
+              <div class="ap-line"></div>
+              <div class="ap-lbl"><span>Name / Sign</span><span>Date</span></div>
+            </div>
+            <div class="ap-box">
+              <div class="ap-role">Approved By — Customer</div>
+              <div class="ap-line"></div>
+              <div class="ap-lbl"><span>Name / Sign</span><span>Date</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════
+// BOM DATA — extracted verbatim from the released DF spreadsheets
+// DF-1826: 42 items · 5 sections   |   DF-1827: 29 items · 3 sections
+// ════════════════════════════════════════════════════════════════════════
+const DFS = {"DF-1826": {"id": "DF-1826", "rev": "REV.02", "date": "25-02-2026", "titleOriginal": "DF - 1826 (REV.02), SPM1200L - CONTINUOUS, 15 AXIS, 12 TRACKS, SPEED 180, MITSUBISHI", "model": "SPM1200L", "axes": 15, "tracks": 12, "speed": 180, "side": "", "motion": "Continuous", "features": "High Speed", "plc": "iQ-R", "panel": "Standalone", "notes": ["3 items pending ERP code (highlighted in red): S.No 12 — HMI 15 Inch GT3715-FHCBD (marked NEW); S.No 26 — Servo Motor 1.5KW HG-JR153 (ERP blank); S.No 29 — Encoder Cable 20MTR MR-J3ENSCBL20M-L (ERP blank).", "ERP 4060431 appears on two different parts: S.No 30 (Encoder Cable 0.3MTR, MR-J3JCBL03M-A2-L) and S.No 37 (Power Cable 0.3MTR, MR-PWS2CBL03M-A2-L) — please verify.", "Source sheet had two rows numbered S.No 41 — renumbered sequentially here; all 42 items retained."], "sections": ["PLC, I/O's, HMI, RTD, VFD", "SERVO AMPLIFIERS & MOTORS", "SERVO ENCODER CABLES", "SERVO POWER CONNECTORS & CABLES", "SSCNET CABLES & SERVO BATTERY"], "items": [{"erp": "4010222", "desc": "16 AXIS MOTION CONTROLLER", "part": "R16MTCPU", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4010223", "desc": "IQR PLC, 40K STEP", "part": "R04ENCPU", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4100055", "desc": "CPU POWER SUPPLY", "part": "R61P", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4010224", "desc": "12 SLOT CHASIS", "part": "R312B", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4010225", "desc": "4 CH. RTD INPUT CARD", "part": "R60TCRT4", "mfr": "MITSUBISHI", "qty": 8, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4010226", "desc": "MODULAR IO HEADER MODULE", "part": "M-CCB-H", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4010227", "desc": "16 CH. DI CARD", "part": "M-16D", "mfr": "MITSUBISHI", "qty": 5, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4010228", "desc": "16 CH. DO CARD", "part": "M-16TE", "mfr": "MITSUBISHI", "qty": 3, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4010229", "desc": "2 CH. ANALOG OUTPUT CARD", "part": "M-DA2", "mfr": "MITSUBISHI", "qty": 2, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4060518", "desc": "4 CH. ANALOG INPUT CARD", "part": "M-AD4", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4010230", "desc": "BUS END", "part": "M-BE", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "NEW", "desc": "HMI 15 Inch", "part": "GT3715-FHCBD", "mfr": "", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2040140", "desc": "VFD - 1HP", "part": "FR-D740-022-E16", "mfr": "MITSUBISHI", "qty": 4, "uom": "NO(S)", "remarks": "COLLATING(1st STAGE) + CASE PACKER CONV. + TRANSFER CONV.+ UNWIND", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2110113", "desc": "AMPLIFIER I/O CONNECTOR", "part": "MR-CCN1", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "FOR I MARK SENSOR", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2200006", "desc": "SAFE TORQUE OFF CONNECTOR", "part": "MR-D05ULD3M-B", "mfr": "MITSUBISHI", "qty": 11, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4060660", "desc": "SERVO AMPLIFIER WITH SSCNET 7KW WITH ELECTROMAGNETIC BRAKE", "part": "MR-J4-700B", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060583", "desc": "SERVO AMPLIFIER WITH SSCNET 5KW", "part": "MR-J4-500B", "mfr": "MITSUBISHI", "qty": 2, "uom": "NO(S)", "remarks": "", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "2160574", "desc": "3.5KW SERVO AMPLIFIER WITH SSCNET", "part": "MR-J4-350B", "mfr": "MITSUBISHI", "qty": 2, "uom": "NO(S)", "remarks": "", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060510", "desc": "SERVO AMPLIFIER WITH SSCNET 2KW", "part": "MR-J4-200B", "mfr": "MITSUBISHI", "qty": 3, "uom": "NO(S)", "remarks": "", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060432", "desc": "SERVO AMPLIFIER WITH SSCNET 0.75KW(DUAL AXIS)", "part": "MR-J4W2-77B", "mfr": "MITSUBISHI", "qty": 3, "uom": "NO(S)", "remarks": "", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060661", "desc": "SERVO MOTOR, 33.4NM, 7KW, 2000RPM", "part": "HG-SR702B", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "UP/DWN ASSEMBLY", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060662", "desc": "SERVO MOTOR, 15.9NM, 5KW, 3000RPM", "part": "HG-JR503", "mfr": "MITSUBISHI", "qty": 2, "uom": "NO(S)", "remarks": "HORZ. + VERT.", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060400", "desc": "SERVO MOTOR, 10.5NM, 3.5KW, 3000RPM, W/O KEYWAY", "part": "HG-JR353", "mfr": "MITSUBISHI", "qty": 2, "uom": "NO(S)", "remarks": "FILLING PISTON(2 NOS.)", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060491", "desc": "SERVO MOTOR, 6.4NM, 2KW, 3000RPM, W/O KEYWAY", "part": "HG-JR203", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "ROTARY VALVE", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060663", "desc": "SERVO MOTOR, 9.55NM, 2KW, 2000RPM", "part": "HG-SR202", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "PULLING", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "", "desc": "SERVO MOTOR, 4.8NM, 1.5KW, 3000RPM", "part": "HG-JR153", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "COLLATING(2nd STAGE)", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "2050266", "desc": "SERVO MOTOR 2.4NM, 0.7KW, 3000RPM, W/O KEYWAY", "part": "HG-KR73", "mfr": "MITSUBISHI", "qty": 6, "uom": "NO(S)", "remarks": "CODING + PERFORATION + CASE PACKER FLAPPER(3 NOS.) + SHUT OFF NOZZLE", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "2030373", "desc": "ENCODER CABLE HG-SN/JR/SR MOTORS, 1KW - 7KW,LENGTH-10 MTR", "part": "MR-J3ENSCBL10M-L", "mfr": "MITSUBISHI", "qty": 4, "uom": "NO(S)", "remarks": "UP/DWN ASSEMBLY + FILLING PISTON(2 NOS.) + ROTARY VALVE", "section": "SERVO ENCODER CABLES"}, {"erp": "", "desc": "ENCODER CABLE HG-SN/JR/SR MOTORS, 1KW - 7KW,LENGTH-20 MTR", "part": "MR-J3ENSCBL20M-L", "mfr": "MITSUBISHI", "qty": 4, "uom": "NO(S)", "remarks": "COLL ATING(2nd STAGE)+ HORZ. + VERT. + PULLING", "section": "SERVO ENCODER CABLES"}, {"erp": "4060431", "desc": "ENCODER CABLE HG-SN/JR/SR MOTORS, 0.75KW,LENGTH-0.3 MTR", "part": "MR-J3JCBL03M-A2-L", "mfr": "MITSUBISHI", "qty": 5, "uom": "NO(S)", "remarks": "CASE PACKER FLAPPER(3 NOS.)+ PERFORATION + SHUT OFF NOZZLE", "section": "SERVO ENCODER CABLES"}, {"erp": "2030772", "desc": "ENCODER CABLE HG-SN/JR/SR MOTORS, 0.75KW,LENGTH-20 MTR", "part": "MR-EKCBL20M-L", "mfr": "MITSUBISHI", "qty": 5, "uom": "NO(S)", "remarks": "", "section": "SERVO ENCODER CABLES"}, {"erp": "2030449", "desc": "ENCODER CABLE HG-SN/JR/SR MOTORS, 0.75KW,LENGTH-10 MTR", "part": "MR-J3ENCBL10M-A2-L", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "CODING", "section": "SERVO ENCODER CABLES"}, {"erp": "2110162", "desc": "POWER CONNECTOR FOR 7KW SERVO MOTORS", "part": "MS3106F3217S+TB", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "UP/DWN ASSEMBLY", "section": "SERVO POWER CONNECTORS & CABLES"}, {"erp": "2110163", "desc": "ELECTROMAGNETIC BRAKE CONNECTOR SET", "part": "MR-BKCNS1", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "SERVO POWER CONNECTORS & CABLES"}, {"erp": "2110119", "desc": "POWER CABLE CONNECTOR FOR FOR 2KW - 5KW", "part": "MS3106F2222S+TB", "mfr": "MITSUBISHI", "qty": 6, "uom": "NO(S)", "remarks": "PULLING + ROTARY VALVE + FILLING PISTON(2 NOS.) + HORZ. + VERT.", "section": "SERVO POWER CONNECTORS & CABLES"}, {"erp": "2050389", "desc": "POWER CABLE CONNECTOR FOR 1KW - 1.5KW", "part": "MS3106F1810S+TB", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "COLLATING(2nd STAGE)", "section": "SERVO POWER CONNECTORS & CABLES"}, {"erp": "4060431", "desc": "POWER CABLE 0.3 MTR FOR 0.7KW", "part": "MR-PWS2CBL03M-A2-L", "mfr": "MITSUBISHI", "qty": 6, "uom": "NO(S)", "remarks": "CODING + PERFORATION + CASE PACKER FLAPPER(3 NOS.) + SHUT OFF NOZZLE", "section": "SERVO POWER CONNECTORS & CABLES"}, {"erp": "4060430", "desc": "SSCNET CABLE, 5 METERS", "part": "MR-J3BUS5M-A", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "SSCNET CABLES & SERVO BATTERY"}, {"erp": "2030505", "desc": "SSCNET CABLE, 3 METERS", "part": "MR-J3BUS3M", "mfr": "MITSUBISHI", "qty": 2, "uom": "NO(S)", "remarks": "", "section": "SSCNET CABLES & SERVO BATTERY"}, {"erp": "2030364", "desc": "SSCNET CABLE, 1 METERS", "part": "MR-J3BUS1M", "mfr": "MITSUBISHI", "qty": 10, "uom": "NO(S)", "remarks": "", "section": "SSCNET CABLES & SERVO BATTERY"}, {"erp": "2050390", "desc": "BATTERY SET FOR MR-J4 SERVO AMPLIFIER", "part": "MR-BAT6V1SET", "mfr": "MITSUBISHI", "qty": 12, "uom": "NO(S)", "remarks": "", "section": "SSCNET CABLES & SERVO BATTERY"}, {"erp": "2050599", "desc": "DYNAMIC BRAKING RESISTOR (DBR), 6.7 OHM, 500WATT", "part": "", "mfr": "RECKON", "qty": 3, "uom": "NO(S)", "remarks": "FOR REGENERATION : UP/DWN ASSEMBLY + HORZ. + VERT.", "section": "SSCNET CABLES & SERVO BATTERY"}]}, "DF-1827": {"id": "DF-1827", "rev": "", "date": "26-02-2026", "titleOriginal": "DF-1827, SPM1200L, 8A, 12T, LHS, SPEED 120 PPM, MITSUBISHI", "model": "SPM1200L", "axes": 8, "tracks": 12, "speed": 140, "side": "LHS", "motion": "Intermittent", "features": "", "plc": "FX5", "panel": "Panel With Machine", "notes": ["Document title reads SPEED 120 PPM, while the Track/Speed data columns and filename read 140 PPM — please confirm the correct speed before approval.", "2 items pending ERP code (highlighted in red): S.No 3 — 16 Source DI Card FX5-16EX/ES (ERP blank); S.No 18 — Servo Motor 1.5KW HG-SR152K (marked NEW).", "Source serial numbering was irregular (repeated / out-of-order S.No) — renumbered sequentially here; all 29 items retained."], "sections": ["PLC, I/O's, HMI, RTD, VFD", "SERVO AMPLIFIERS & MOTORS", "SERVO CABLES"], "items": [{"erp": "4060524", "desc": "PLC(40 SINK/SOURCE DI, 40 SOURCE DO)", "part": "FX5U-80MT/ESS", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4130021", "desc": "PLC BATTERY", "part": "FX3U-32BL", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "", "desc": "16 SOURCE DI CARD", "part": "FX5-16EX/ES", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2240029", "desc": "8 SOURCE DI, 8 SOURCE DO CARD", "part": "FX5-16ET/ESS", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4100057", "desc": "POWER SUPPLY", "part": "FX5-1PSU-5V", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2050435", "desc": "4 CH. ANALOG OUTPUT CARD", "part": "FX5-4DA-ADP", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2020122", "desc": "4 CH. TEMP. CARD", "part": "FX5-4LC", "mfr": "MITSUBISHI", "qty": 7, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2240009", "desc": "8 AXIS SIMPLE MOTION CARD", "part": "FX5-80SSC-S", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4100058", "desc": "CONVERTER MODULE", "part": "FX5-CNV-BC", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2030464", "desc": "65CM CABLE", "part": "FX5-65EC", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2040140", "desc": "1HP VFD", "part": "FR-D740-022-E16", "mfr": "MITSUBISHI", "qty": 2, "uom": "NO(S)", "remarks": "UNWIND + COLLATING CONV.", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "4060513", "desc": "10 INCH HMI", "part": "GS2110-WTBD", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2110146", "desc": "CONNECTOR", "part": "LD77MHIOCON", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2200006", "desc": "SAFE TORQUE CONNECTOR MR-D05ULD3M-B", "part": "MR-D05ULD3M-B", "mfr": "MITSUBISHI", "qty": 7, "uom": "NO(S)", "remarks": "", "section": "PLC, I/O's, HMI, RTD, VFD"}, {"erp": "2160574", "desc": "SERVO AMPLIFIER WITH SSCNET 3.5KW", "part": "MR-J4-350B", "mfr": "MITSUBISHI", "qty": 4, "uom": "NO(S)", "remarks": "", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060510", "desc": "SERVO AMPLIFIER WITH SSCNET 2KW", "part": "MR-J4-200B", "mfr": "MITSUBISHI", "qty": 3, "uom": "NO(S)", "remarks": "", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060400", "desc": "SERVO MOTOR 10.5Nm,3.5KW/3000RPM", "part": "HG-JR353", "mfr": "MITSUBISHI", "qty": 4, "uom": "NO(S)", "remarks": "HORZ. + VERT. + FILLING PISTON(L) + FILLING PISTON( R)", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "NEW", "desc": "SERVO MOTOR 7.2Nm,1.5KW/2000RPM", "part": "HG-SR152K", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "PULLING", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4060491", "desc": "SERVO MOTOR 6.4Nm, 2KW/3000RPM", "part": "HG-JR203", "mfr": "MITSUBISHI", "qty": 2, "uom": "NO(S)", "remarks": "Rotary Valve", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4120007", "desc": "0.7KW SERVO AMPLIFIER", "part": "MR-JE-70B", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "PERFORATION", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "4120009", "desc": "0.7KW, 3000RPM, 2.4 NM, WITH KEYWAY", "part": "HG-KN73JK", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "SERVO AMPLIFIERS & MOTORS"}, {"erp": "2030328", "desc": "ENCODER CABLE 5 MTR", "part": "MR-J3ENSCBL5M-L", "mfr": "MITSUBISHI", "qty": 7, "uom": "NO(S)", "remarks": "", "section": "SERVO CABLES"}, {"erp": "2030449", "desc": "ENCODER CABLE HG-SN/JR/SR MOTORS 5 MTR 0.75KW", "part": "MR-J3ENCBL5M-A2-L", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "PERFORATION", "section": "SERVO CABLES"}, {"erp": "4060594", "desc": "POWER CABLE 0.3 MTR FOR 0.7KW", "part": "MR-PWS1CBL03M-A2-L", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "PERFORATION", "section": "SERVO CABLES"}, {"erp": "2110119", "desc": "POWER CABLE CONNECTOR", "part": "MS3106F2222S+TB", "mfr": "MITSUBISHI", "qty": 4, "uom": "NO(S)", "remarks": "", "section": "SERVO CABLES"}, {"erp": "2050389", "desc": "POWER CABLE CONNECTOR", "part": "MS3106F1810S+TB", "mfr": "MITSUBISHI", "qty": 3, "uom": "NO(S)", "remarks": "", "section": "SERVO CABLES"}, {"erp": "2030329", "desc": "SSCNET CABLE 0.5 MTR", "part": "MR-J3-BUS05M", "mfr": "MITSUBISHI", "qty": 7, "uom": "NO(S)", "remarks": "", "section": "SERVO CABLES"}, {"erp": "4060430", "desc": "SSCNET CABLE 5 MTR", "part": "MR-J3-BUS5M-A", "mfr": "MITSUBISHI", "qty": 1, "uom": "NO(S)", "remarks": "", "section": "SERVO CABLES"}, {"erp": "2050390", "desc": "BATTERY SET FOR MR-J4 SERVO AMPLIFIER", "part": "MR-BAT6V1SET", "mfr": "MITSUBISHI", "qty": 7, "uom": "NO(S)", "remarks": "", "section": "SERVO CABLES"}]}};
+
+let currentId = null;
+let currentBOM = [];
+let activeSectionFilter = 'ALL';
+
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const isPending = erp => erp === '' || erp === 'NEW';
+
+function loadDF(id) {
+  currentId = id;
+  const df = DFS[id];
+  currentBOM = df.items.map(it => ({...it, qtyOrig: it.qty, edited: false}));
+  activeSectionFilter = 'ALL';
+
+  document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('card-' + id).classList.add('active');
+
+  // Sidebar config (locked to DF)
+  document.getElementById('cfgFields').style.display = '';
+  document.getElementById('cfgDF').value     = df.id;
+  document.getElementById('cfgRev').value    = df.rev || '—';
+  document.getElementById('cfgModel').value  = df.model;
+  document.getElementById('cfgAxes').value   = df.axes;
+  document.getElementById('cfgTracks').value = df.tracks;
+  document.getElementById('cfgSpeed').value  = df.speed;
+  document.getElementById('cfgSide').value   = df.side || '—';
+  document.getElementById('cfgMotion').value = df.motion;
+  document.getElementById('cfgPanel').value  = df.panel;
+  const badge = document.getElementById('plcFamilyBadge');
+  badge.textContent = df.plc === 'FX5' ? 'FX5 Series' : 'iQ-R Series';
+  badge.className = 'plc-badge ' + (df.plc === 'FX5' ? 'plc-fx5' : 'plc-iqr');
+
+  renderBOM(df);
+}
+
+function renderBOM(df) {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('bomContent').style.display = 'block';
+  document.getElementById('configBar').style.display = 'flex';
+
+  // Config chips
+  const chips = [];
+  chips.push(`<span class="config-chip">${esc(df.id)}${df.rev ? ' · ' + esc(df.rev) : ''}</span>`);
+  chips.push(`<span class="config-chip lite">${esc(df.model)}</span>`);
+  chips.push(`<span class="config-chip lite">${df.axes} Axis</span>`);
+  chips.push(`<span class="config-chip lite">${df.tracks} Track</span>`);
+  chips.push(`<span class="config-chip lite">${df.speed} PPM</span>`);
+  if (df.side)   chips.push(`<span class="config-chip lite">${esc(df.side)}</span>`);
+  chips.push(`<span class="config-chip cont">${esc(df.motion)}</span>`);
+  if (df.features) chips.push(`<span class="config-chip cont">${esc(df.features)}</span>`);
+  chips.push(`<span class="config-chip ${df.plc === 'FX5' ? 'fx5' : 'iqr'}">${df.plc === 'FX5' ? 'FX5 Series' : 'iQ-R Series'}</span>`);
+  chips.push(`<span class="config-chip lite">${esc(df.panel)}</span>`);
+  document.getElementById('chipRow').innerHTML = chips.join('');
+
+  // Verbatim document title strip
+  document.getElementById('docTitle').innerHTML =
+    `📄 <b>${esc(df.titleOriginal)}</b><span class="dt-date">BOM Date: ${esc(df.date)}</span>`;
+
+  renderStats(df);
+
+  // Review notes banner
+  const banner = document.getElementById('actionBanner');
+  if (df.notes && df.notes.length) {
+    banner.style.display = '';
+    banner.innerHTML = '<strong>⚠️ Points to verify during review</strong>' +
+      df.notes.map(n => `<div>• ${esc(n)}</div>`).join('');
+  } else {
+    banner.style.display = 'none';
+  }
+
+  // Section pills
+  const pillsDiv = document.getElementById('sectionPills');
+  pillsDiv.innerHTML = '';
+  const allBtn = document.createElement('button');
+  allBtn.className = 'pill active';
+  allBtn.textContent = `All (${currentBOM.length})`;
+  allBtn.onclick = () => filterSection('ALL', allBtn);
+  pillsDiv.appendChild(allBtn);
+  df.sections.forEach(sec => {
+    const cnt = currentBOM.filter(i => i.section === sec).length;
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = `${sec} (${cnt})`;
+    b.onclick = () => filterSection(sec, b);
+    pillsDiv.appendChild(b);
+  });
+
+  // Table body
+  const tbody = document.getElementById('bomBody');
+  tbody.innerHTML = '';
+  let sno = 0;
+
+  for (const sec of df.sections) {
+    const secItems = currentBOM.map((it, idx) => ({it, idx})).filter(x => x.it.section === sec);
+    if (!secItems.length) continue;
+
+    const secTr = document.createElement('tr');
+    secTr.className = 'sec-row';
+    secTr.setAttribute('data-section', sec);
+    secTr.innerHTML = `<td colspan="9">${esc(sec)} <span>(${secItems.length} items)</span></td>`;
+    tbody.appendChild(secTr);
+
+    for (const {it, idx} of secItems) {
+      sno++;
+      const pending = isPending(it.erp);
+      const erpHtml = pending
+        ? `<span class="erp-new" title="ERP code not yet assigned">${it.erp === 'NEW' ? 'NEW' : 'PENDING'}</span>`
+        : `<span class="erp-cell">${esc(it.erp)}</span>`;
+
+      const tr = document.createElement('tr');
+      tr.className = 'data-row';
+      tr.setAttribute('data-section', sec);
+      tr.innerHTML = `
+        <td style="text-align:center;font-weight:700;">${sno}</td>
+        <td style="text-align:center;">${erpHtml}</td>
+        <td class="desc-cell">${esc(it.desc)}</td>
+        <td class="part-cell">${it.part ? esc(it.part) : '—'}</td>
+        <td style="text-align:center;">${it.mfr ? esc(it.mfr) : '—'}</td>
+        <td style="text-align:center;">
+          <input type="number" class="qty-input" value="${it.qty}" min="0"
+                 aria-label="Quantity for ${esc(it.desc)}"
+                 onchange="updateQty(this, ${idx})" title="Qty as per released DF: ${it.qtyOrig}">
+        </td>
+        <td style="text-align:center;">${esc(it.uom || 'NO(S)')}</td>
+        <td class="remarks-cell">${esc(it.remarks || '')}</td>
+        <td style="text-align:center;" id="st-${idx}">${statusHtml(it)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+}
+
+function statusHtml(it) {
+  const tags = [];
+  if (isPending(it.erp)) tags.push('<span class="formula-tag tag-pending">ERP PENDING</span>');
+  if (it.edited) tags.push('<span class="formula-tag tag-edited">QTY EDITED ✎</span>');
+  return tags.length ? tags.join('<br>') : '<span class="tag-ok">—</span>';
+}
+
+function renderStats(df) {
+  const totalItems = currentBOM.length;
+  const totalQty = currentBOM.reduce((s, i) => s + (parseInt(i.qty) || 0), 0);
+  const pendingCount = currentBOM.filter(i => isPending(i.erp)).length;
+  const editedCount = currentBOM.filter(i => i.edited).length;
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="val">${totalItems}</div><div class="lbl">Line Items</div></div>
+    <div class="stat-card"><div class="val">${totalQty}</div><div class="lbl">Total Qty</div></div>
+    <div class="stat-card"><div class="val">${df.sections.length}</div><div class="lbl">Sections</div></div>
+    <div class="stat-card"><div class="val" style="color:var(--red)">${pendingCount}</div><div class="lbl">ERP Pending</div></div>
+    <div class="stat-card"><div class="val" style="color:var(--warn)">${editedCount}</div><div class="lbl">Qty Edited</div></div>
+  `;
+}
+
+function filterSection(section, btn) {
+  activeSectionFilter = section;
+  document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#bomBody tr').forEach(tr => {
+    if (section === 'ALL') { tr.style.display = ''; return; }
+    tr.style.display = tr.getAttribute('data-section') === section ? '' : 'none';
+  });
+}
+
+function updateQty(input, idx) {
+  const it = currentBOM[idx];
+  if (!it) return;
+  it.qty = parseInt(input.value) || 0;
+  it.edited = (it.qty !== it.qtyOrig);
+  input.classList.toggle('manual', it.edited);
+  const st = document.getElementById('st-' + idx);
+  if (st) st.innerHTML = statusHtml(it);
+  renderStats(DFS[currentId]);
+}
+
+function resetView() {
+  currentId = null; currentBOM = [];
+  document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('cfgFields').style.display = 'none';
+  document.getElementById('emptyState').style.display = '';
+  document.getElementById('bomContent').style.display = 'none';
+  document.getElementById('configBar').style.display = 'none';
+}
+
+function statusText(it) {
+  const t = [];
+  if (isPending(it.erp)) t.push('ERP PENDING');
+  if (it.edited) t.push('QTY EDITED');
+  return t.join('; ');
+}
+
+function exportCSV() {
+  if (!currentId) return;
+  const df = DFS[currentId];
+  const q = s => `"${String(s).replace(/"/g, '""')}"`;
+  const rows = [
+    [q(df.titleOriginal + '  |  BOM Date: ' + df.date)],
+    ['S.NO.','ERP CODE','DESCRIPTION','MODEL NO./PART NO.','MANUFACTURER','QTY.','UOM','REMARKS','SECTION','STATUS'].map(q)
+  ];
+  let sno = 0;
+  for (const sec of df.sections) {
+    const secItems = currentBOM.filter(i => i.section === sec);
+    if (!secItems.length) continue;
+    rows.push([q(sec)]);
+    for (const it of secItems) {
+      sno++;
+      rows.push([sno, q(it.erp || 'PENDING'), q(it.desc), q(it.part), q(it.mfr),
+                 it.qty, q(it.uom || 'NO(S)'), q(it.remarks || ''), q(sec), q(statusText(it))]);
+    }
+  }
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const revPart = df.rev ? '_' + df.rev.replace(/[^A-Za-z0-9]/g, '') : '';
+  a.download = `${df.id}${revPart}_Automation_BOM.csv`;
+  a.click();
+}
+
+function copyBOM() {
+  if (!currentId) return;
+  let text = DFS[currentId].titleOriginal + '\n';
+  document.querySelectorAll('#bomBody tr').forEach(tr => {
+    if (tr.style.display === 'none') return;
+    if (tr.classList.contains('sec-row')) {
+      text += '\n' + tr.querySelector('td').textContent.trim() + '\n';
+    } else {
+      const cells = tr.querySelectorAll('td');
+      const vals = Array.from(cells).map((c, i) => {
+        const inp = c.querySelector('input');
+        return (inp ? inp.value : c.textContent).trim();
+      });
+      text += vals.join('\t') + '\n';
+    }
+  });
+  navigator.clipboard.writeText(text).then(() => alert('BOM copied to clipboard!'));
+}
+
+// Load DF-1826 by default so the shared mock opens populated
+loadDF('DF-1826');
+</script>
+</body>
+</html>
