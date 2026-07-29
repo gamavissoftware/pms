@@ -131,7 +131,7 @@
   function run() {
     if (inFlight) { inFlight.abort(); }
 
-    var $host = $('#bomTableHost');
+    var $host = $('#abomTableHost');
     $host.addClass('abom-busy');
 
     inFlight = $.ajax({
@@ -235,7 +235,7 @@
 
       data.revision = $('#cfgRev').val() === '—' ? '' : $('#cfgRev').val();
       data.qty = {};
-      $wrap.find('#bomBody .qty-input').each(function () {
+      $wrap.find('#abomBody .qty-input').each(function () {
         var $i = $(this);
         data.qty[$i.attr('data-line')] = $i.val();
       });

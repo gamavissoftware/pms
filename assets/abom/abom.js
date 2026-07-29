@@ -25,7 +25,7 @@
   // what gets saved or exported (spec 7.5).
   // -------------------------------------------------------------------
   ABOM.filterSection = function (section) {
-    var $rows = $wrap.find('#bomBody tr');
+    var $rows = $wrap.find('#abomBody tr');
 
     $rows.each(function () {
       var $row = $(this);
@@ -81,7 +81,7 @@
   ABOM.recalcStats = function () {
     var total = 0;
 
-    $wrap.find('#bomBody tr.data-row').each(function () {
+    $wrap.find('#abomBody tr.data-row').each(function () {
       var $row   = $(this);
       var $input = $row.find('.qty-input');
 

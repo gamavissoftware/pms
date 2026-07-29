@@ -37,8 +37,8 @@ foreach ($lines as $line) {
 
 $current_section = null;
 ?>
-<div class="bom-table-wrap">
-  <table id="bomTable">
+<div class="abom-table-wrap">
+  <table id="abomTable">
     <thead>
       <tr>
         <th style="width:44px;">S.NO.</th>
@@ -52,7 +52,7 @@ $current_section = null;
         <th style="width:96px;">STATUS</th>
       </tr>
     </thead>
-    <tbody id="bomBody">
+    <tbody id="abomBody">
     <?php if (empty($lines)): ?>
       <tr class="data-row">
         <td colspan="9" style="text-align:center;padding:30px;color:#555;">

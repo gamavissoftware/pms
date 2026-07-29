@@ -81,7 +81,7 @@ class Abom extends CI_Controller
         }
 
         $cfg = $this->config_from_input($this->default_config());
-        $this->load->library('Abom_engine');
+        $this->load->library('Abom_engine', null, 'abom_engine');
 
         $errors = $this->validate_config($cfg);
         if (!empty($errors)) {
@@ -89,7 +89,7 @@ class Abom extends CI_Controller
             $errors = array();
         }
 
-        $result = $this->Abom_engine->generate($cfg);
+        $result = $this->abom_engine->generate($cfg);
 
         $bom = $this->bom_header_from_config($cfg, $result);
         $this->load->model('Abom_model');
@@ -122,8 +122,8 @@ class Abom extends CI_Controller
             ));
         }
 
-        $this->load->library('Abom_engine');
-        $result = $this->Abom_engine->generate($cfg);
+        $this->load->library('Abom_engine', null, 'abom_engine');
+        $result = $this->abom_engine->generate($cfg);
 
         $bom = $this->bom_header_from_config($cfg, $result);
         $this->load->model('Abom_model');
@@ -181,10 +181,10 @@ class Abom extends CI_Controller
             $this->respond(false, 'Please correct the highlighted fields.', array('errors' => $errors));
         }
 
-        $this->load->library('Abom_engine');
+        $this->load->library('Abom_engine', null, 'abom_engine');
         $this->load->model('Abom_model');
 
-        $result = $this->Abom_engine->generate($cfg);
+        $result = $this->abom_engine->generate($cfg);
         $lines  = $result['lines'];
 
         // Client-supplied overrides, keyed by line_no. Anything equal to
@@ -374,8 +374,8 @@ class Abom extends CI_Controller
         $key     = isset($presets[$key]) ? $key : 'iqr';
         $preset  = $presets[$key];
 
-        $this->load->library('Abom_engine');
-        $result = $this->Abom_engine->generate($preset['cfg']);
+        $this->load->library('Abom_engine', null, 'abom_engine');
+        $result = $this->abom_engine->generate($preset['cfg']);
 
         $bom = $this->bom_header_from_config($preset['cfg'], $result);
         $bom->bom_no = $preset['bom_no'];
@@ -409,18 +409,18 @@ class Abom extends CI_Controller
      */
     private function render_document($bom, $lines, $editable, $result = null, $errors = array())
     {
-        $this->load->library('Abom_engine');
+        $this->load->library('Abom_engine', null, 'abom_engine');
 
         $family_code = $this->Abom_master_model->family_code((int) $bom->plc_family_id);
         $defaults    = $this->Abom_master_model->family_defaults((int) $bom->plc_family_id);
 
         $stats = ($result !== null)
             ? $result['stats']
-            : $this->Abom_engine->stats($lines);
+            : $this->abom_engine->stats($lines);
 
         $sections = ($result !== null)
             ? $result['sections']
-            : $this->Abom_engine->sections_present($lines);
+            : $this->abom_engine->sections_present($lines);
 
         $features = $this->Abom_master_model->get_features();
 

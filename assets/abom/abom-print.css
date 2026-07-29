@@ -32,7 +32,7 @@
   }
 
   .abom-wrap .sidebar,
-  .abom-wrap .bom-actions,
+  .abom-wrap .abom-actions,
   .abom-wrap .filter-pills,
   .abom-wrap .btn-reset,
   .abom-wrap .btn-sm,
@@ -42,14 +42,14 @@
 
   .abom-wrap .layout { display: block; }
   .abom-wrap .main { overflow: visible; }
-  .abom-wrap .bom-area { padding: 0; overflow: visible; }
+  .abom-wrap .abom-area { padding: 0; overflow: visible; }
 
-  .abom-wrap .bom-topbar {
+  .abom-wrap .abom-topbar {
     border: none; padding: 0 0 8px 0;
     page-break-after: avoid; break-after: avoid;
   }
 
-  .abom-wrap .bom-table-wrap { border-radius: 0; overflow: visible; border: none; }
+  .abom-wrap .abom-table-wrap { border-radius: 0; overflow: visible; border: none; }
 
   .abom-wrap table { min-width: 0; font-size: 10.5px; }
 

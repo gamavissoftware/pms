@@ -1,0 +1,45 @@
+{
+    "owned": {
+        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "fe238a6f481666b4b736fab583fb02bc",
+        "BOMMODULEDEVELOPMENT/tests/case_audit.php": "26f56c2d2a1bb1f877a326eda733c4a4",
+        "BOMMODULEDEVELOPMENT/tests/design_diff.php": "172fbb77f912cc62d551cc1e79f21a7a",
+        "BOMMODULEDEVELOPMENT/tests/dump_reference.php": "6159bced10bc99061b7ff0a66bc882d8",
+        "BOMMODULEDEVELOPMENT/tests/integrity.php": "c05cfcefb538b510599c256d4baaff57",
+        "BOMMODULEDEVELOPMENT/tests/render_view.php": "9d1d37b4fe427fded8faed20a975d00c",
+        "BOMMODULEDEVELOPMENT/tests/run_tests.php": "25f70ee4825f5571aee23924005aa3c8",
+        "BOMMODULEDEVELOPMENT/tests/seed_parser.php": "9eb3a43bf95f5f5c3b20cf808ff0e67d",
+        "BOMMODULEDEVELOPMENT/tests/stubs.php": "e9b1d531851cda41bdecc9a7cbaace67",
+        "Database/abom_001.sql": "bfc60a87f680795d5f9991e6f31e564a",
+        "Database/abom_002_seed.sql": "995bde6cae7764c85d700ab943d6ed85",
+        "application/config/abom.php": "8314da5173e276d5a169d7284d591b56",
+        "application/controllers/Abom.php": "e1d3301cee19ead4f9a39c739dc069ea",
+        "application/helpers/abom_helper.php": "94054264e422f0e73cd6b16b27697f39",
+        "application/libraries/Abom_engine.php": "c28e440cef2ff758ab8ff24ef4cb4ca4",
+        "application/models/Abom_item_model.php": "bcff73e7212f65d30c254f19180aca8b",
+        "application/models/Abom_master_model.php": "21d67464a7832152c57a99af12aac6e4",
+        "application/models/Abom_model.php": "11efebb9d057473da1b71a380105c62b",
+        "application/views/abom/_approval_block.php": "ee891fcfe816f62eab1d5d25cad4a409",
+        "application/views/abom/_config_panel.php": "41336643ca06e3167111e0aee02fb154",
+        "application/views/abom/_doc_header.php": "7f0386ea64ca71cb3fda3f779f06e823",
+        "application/views/abom/_document.php": "980aff663cf1a723edb5cfdf89a81e07",
+        "application/views/abom/_legend.php": "a420e7cdaf02e00f079086cb47ad712b",
+        "application/views/abom/_table.php": "de24f7e98c57e84730abb92b86ba6ef3",
+        "application/views/abom/generate.php": "f1eacf5a0ab554f7a4efbd25aa824419",
+        "application/views/abom/list.php": "4115fb6bd1b7863f6cf4cecbc697f05f",
+        "application/views/abom/not_installed.php": "af19b3feeca38f44464109b12c7266c0",
+        "application/views/abom/view.php": "bf5d63edda7ff73b9d71419dfc584801",
+        "assets/abom/abom-generate.js": "3a708edbd971a4eaa1d6c858cb93cc1c",
+        "assets/abom/abom-print.css": "e5b7f0d910a9312cb538d89d79bbf504",
+        "assets/abom/abom.css": "aadc00a10fd1f7e9e9c939baef9c3175",
+        "assets/abom/abom.js": "d725dbd75eb8c3bc52164591e450e45c"
+    },
+    "appended": {
+        "application/config/routes.php": "bc2036d7f5d4712b4afbf441b19f4f84"
+    },
+    "inputs": {
+        "BOMMODULEDEVELOPMENT/Automation_BOM_Module_CI3_Spec.md": "260bdd33d1ea2d15bf68b28b2e56c24d",
+        "BOMMODULEDEVELOPMENT/SPM1200L_Automation_BOM_DF1826_DF1827_Review.html": "bf9c0500f1939e4cbb11110addb766d2",
+        "BOMMODULEDEVELOPMENT/abom_schema.sql": "550688be1c157955ddff90ecb9898c8e",
+        "BOMMODULEDEVELOPMENT/abom_seed.sql": "fbddf6b311a98fde0225178d95e0f232"
+    }
+}

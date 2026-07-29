@@ -155,14 +155,14 @@
 
 /* ── MAIN CONTENT ─────────────────────────────────────────────────── */
 /* The design document is a standalone full-viewport app: it pins the
-   layout to the viewport height and scrolls .bom-area internally.
+   layout to the viewport height and scrolls .abom-area internally.
    Embedded beneath the application's own navigation that would trap the
    sheet in a nested scroller and break printing, so the module lets the
    document flow with the page instead. Only the table keeps a scroller,
    and only horizontally. */
 .abom-wrap .main { flex: 1; display: flex; flex-direction: column; overflow: visible; min-width: 0; }
 
-.abom-wrap .bom-topbar {
+.abom-wrap .abom-topbar {
   background: var(--white);
   border-bottom: 2px solid var(--border);
   padding: 10px 20px;
@@ -177,7 +177,7 @@
 .abom-wrap .config-chip.cont { background: var(--warn); }
 .abom-wrap .config-chip.lite { background: #7A8BA6; }
 .abom-wrap .config-chip.alert { background: var(--red); }
-.abom-wrap .bom-actions { margin-left: auto; display: flex; gap: 8px; }
+.abom-wrap .abom-actions { margin-left: auto; display: flex; gap: 8px; }
 .abom-wrap .btn-sm {
   padding: 6px 14px; border-radius: 5px; font-size: 12px; font-weight: 700;
   cursor: pointer; border: none; transition: opacity .15s;
@@ -189,7 +189,7 @@
 .abom-wrap .btn-copy   { background: var(--dgray); color: #fff; }
 .abom-wrap .btn-generate { background: var(--navy); color: #fff; }
 
-.abom-wrap .bom-area { flex: 1; overflow: visible; padding: 16px 20px; }
+.abom-wrap .abom-area { flex: 1; overflow: visible; padding: 16px 20px; }
 
 /* Verbatim DF title strip */
 .abom-wrap .doc-title {
@@ -214,7 +214,7 @@
 }
 
 /* ── BOM TABLE ────────────────────────────────────────────────────── */
-.abom-wrap .bom-table-wrap {
+.abom-wrap .abom-table-wrap {
   background: var(--white); border-radius: 8px;
   border: 1.5px solid var(--border); overflow-x: auto;
 }
@@ -396,7 +396,7 @@
     width: 100%; min-width: 0;
     border-right: none; border-bottom: 2px solid var(--border);
   }
-  .abom-wrap .bom-actions { margin-left: 0; width: 100%; }
+  .abom-wrap .abom-actions { margin-left: 0; width: 100%; }
   .abom-wrap .ap-grid,
   .abom-wrap .ap-grid.ap-4 { grid-template-columns: 1fr; }
 }

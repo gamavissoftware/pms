@@ -44,7 +44,7 @@ $editable = isset($editable) ? (bool) $editable : false;
 
   <main class="main">
 
-    <div class="bom-topbar" id="configBar">
+    <div class="abom-topbar" id="configBar">
       <?php
       // One chip per configuration value, per ENABLED feature gate, and
       // for the workflow status — built in the controller so the AJAX
@@ -55,7 +55,7 @@ $editable = isset($editable) ? (bool) $editable : false;
           <span class="config-chip <?php echo abom_e($chip['class']); ?>"><?php echo abom_e($chip['label']); ?></span>
         <?php endforeach; ?>
       </span>
-      <div class="bom-actions">
+      <div class="abom-actions">
         <?php if ($editable): ?>
           <button type="button" class="btn-sm btn-generate" id="btnGenerate">&#8635; Recalculate</button>
           <button type="button" class="btn-sm btn-export" id="btnSave">Save BOM</button>
@@ -68,8 +68,8 @@ $editable = isset($editable) ? (bool) $editable : false;
       </div>
     </div>
 
-    <div class="bom-area">
-      <div id="bomContent">
+    <div class="abom-area">
+      <div id="abomContent">
 
         <?php $this->load->view('abom/_doc_header'); ?>
 
@@ -86,7 +86,7 @@ $editable = isset($editable) ? (bool) $editable : false;
           <div class="qty-lock-note" id="qtyLockNote">&#128274; <?php echo abom_e($qty_locked_reason); ?></div>
         <?php endif; ?>
 
-        <div id="bomTableHost">
+        <div id="abomTableHost">
           <?php $this->load->view('abom/_table', array('qty_editable' => !empty($qty_editable))); ?>
         </div>
 

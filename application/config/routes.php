@@ -72,3 +72,6 @@ $route['abom/generate_ajax']    = 'abom/generate_ajax';      // POST, AJAX
 $route['abom/reference/(:any)'] = 'abom/reference/$1';
 $route['abom/view/(:num)']      = 'abom/view/$1';
 $route['abom/print/(:num)']     = 'abom/printable/$1';
+$route['abom/save']             = 'abom/save';                // POST, AJAX
+$route['abom/save_line_qty']    = 'abom/save_line_qty';        // POST, AJAX
+$route['abom/list']             = 'abom/bom_list';

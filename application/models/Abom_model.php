@@ -71,11 +71,11 @@ class Abom_model extends CI_Model
         // The views read row_class and status_badges off the line. For a
         // persisted line those are derived from the stored flags, not
         // recomputed from master data.
-        $this->load->library('Abom_engine');
+        $this->load->library('Abom_engine', null, 'abom_engine');
 
         foreach ($lines as $line) {
-            $line->row_class     = $this->Abom_engine->row_class($line);
-            $line->status_badges = $this->Abom_engine->status_badges($line);
+            $line->row_class     = $this->abom_engine->row_class($line);
+            $line->status_badges = $this->abom_engine->status_badges($line);
         }
 
         return $lines;
@@ -278,9 +278,9 @@ class Abom_model extends CI_Model
 
         $updated = $this->db->from($this->line_table)->where('id', (int) $line_id)->get()->row();
 
-        $this->load->library('Abom_engine');
-        $updated->row_class     = $this->Abom_engine->row_class($updated);
-        $updated->status_badges = $this->Abom_engine->status_badges($updated);
+        $this->load->library('Abom_engine', null, 'abom_engine');
+        $updated->row_class     = $this->abom_engine->row_class($updated);
+        $updated->status_badges = $this->abom_engine->status_badges($updated);
 
         return $updated;
     }

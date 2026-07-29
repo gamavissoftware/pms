@@ -70,22 +70,50 @@ CI's default routing resolves a class name directly, so a class named
 `Bom` would expose a second live `/bom/...` namespace whether or not it
 was routed.
 
-### 0.3 What deliberately keeps a bare `bom`
+### 0.3 CSS class and DOM id renames
 
-Two categories, both required for fidelity to the approved design
-document and both incapable of colliding:
+Specificity was considered as a defence and rejected: `.abom-wrap
+.bom-topbar` (0,2,0) loses to `#content .bom-topbar` (1,1,0) and to
+`!important`, and production is known to carry a BOM module with six
+controller actions and five views — almost certainly with its own
+stylesheet. Duplicate DOM ids are worse than a style clash: they are
+silently destructive, because `getElementById` returns whichever element
+appears first in the document.
 
-- **CSS class names** — `.bom-topbar`, `.bom-area`, `.bom-actions`,
-  `.bom-table-wrap`. Taken verbatim from the design. Every rule is
-  nested under `.abom-wrap`, so they cannot leak out; and module rules
-  are more specific than any bare `.bom-topbar` a production stylesheet
-  might define, so they cannot be leaked into either.
-- **DOM ids** — `bomTable`, `bomBody`, `bomContent`, `bomTableHost`.
-  From the design. All JavaScript queries them inside `.abom-wrap`.
+| Design name | Module name |
+|---|---|
+| `.bom-topbar` | `.abom-topbar` |
+| `.bom-area` | `.abom-area` |
+| `.bom-actions` | `.abom-actions` |
+| `.bom-table-wrap` | `.abom-table-wrap` |
+| `#bomTable` | `#abomTable` |
+| `#bomBody` | `#abomBody` |
+| `#bomContent` | `#abomContent` |
+| `#bomTableHost` | `#abomTableHost` |
+
+Design fidelity is unaffected, because class-name identity was only ever
+a proxy for it. `BOMMODULEDEVELOPMENT/tests/design_diff.php` holds the
+same map and applies it to the reference before comparing, so it still
+reports "47 of 47" and tests same-structure / same-palette /
+same-typography rather than same-spelling.
 
 Database columns (`bom_no`, `bom_id`) and internal method names
-(`get_bom`, `next_bom_no`) also keep the bare word; they live inside
-`abom_*` tables and `Abom_*` classes respectively.
+(`get_bom`, `next_bom_no`) keep the bare word; they live inside
+`abom_*` tables and `Abom_*` classes respectively and cannot collide.
+
+### 0.3.1 CodeIgniter loader casing
+
+`CI_Loader::library()` assigns the instance to `strtolower($class)`
+unless an object name is given, so `$this->Abom_engine` is always null.
+Models keep their case; libraries do not. Every library load in the
+module passes an explicit object name:
+
+```php
+$this->load->library('Abom_engine', null, 'abom_engine');
+```
+
+This was only caught by running against a real CodeIgniter bootstrap —
+the standalone harness injects its stubs directly and cannot see it.
 
 ### 0.4 Case sensitivity
 
@@ -100,7 +128,20 @@ its on-disk name. Re-run with:
 php BOMMODULEDEVELOPMENT/tests/case_audit.php
 ```
 
-### 0.5 Deployment (rule 12)
+### 0.5 Working-tree integrity
+
+`BOMMODULEDEVELOPMENT/tests/integrity.php` records a checksum manifest
+of every file the module owns, the one file it appends to
+(`application/config/routes.php`) and the four read-only input
+documents. Run `--write` after an intended change, and plain to verify.
+It reports CHANGED, MISSING and NEW, so a stray file cannot hide either.
+
+This exists because an unrelated change to
+`application/controllers/Spares.php` appeared in the working tree
+mid-build and was only noticed incidentally, in a `git status`. The tree
+is shared. `manifest.json` doubles as the deployment file list.
+
+### 0.6 Deployment (rule 12)
 
 This working tree must **never** be synced, rsynced, pushed or uploaded
 to the server as a whole — doing so would delete `BOM.php`,

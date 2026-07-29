@@ -34,7 +34,7 @@
   <div class="layout">
     <main class="main">
 
-      <div class="bom-topbar">
+      <div class="abom-topbar">
         <form method="get" action="<?php echo page_url; ?>abom/list" class="abom-filter-form">
           <select name="status">
             <option value="">All statuses</option>
@@ -56,12 +56,12 @@
                  value="<?php echo abom_e($filters['search']); ?>">
           <button type="submit" class="btn-sm btn-print">Filter</button>
         </form>
-        <div class="bom-actions">
+        <div class="abom-actions">
           <a class="btn-sm btn-generate" href="<?php echo page_url; ?>abom/generate">&#43; New BOM</a>
         </div>
       </div>
 
-      <div class="bom-area">
+      <div class="abom-area">
         <?php if (empty($boms)): ?>
           <div class="empty-state">
             <div class="icon">&#128203;</div>
@@ -69,7 +69,7 @@
             <p>Generate a configuration and save it to see it listed here.</p>
           </div>
         <?php else: ?>
-          <div class="bom-table-wrap">
+          <div class="abom-table-wrap">
             <table>
               <thead>
                 <tr>
