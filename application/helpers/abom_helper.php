@@ -2,13 +2,13 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * bom_helper
+ * abom_helper
  *
  * Presentation helpers for the Automation BOM module: row class, status
  * badges, the nine-column cell mapping and escaping.
  *
  * These functions FORMAT. They never decide a quantity and they never
- * decide a row's precedence — Bom_engine owns both (spec section 10).
+ * decide a row's precedence — Abom_engine owns both (spec section 10).
  * abom_row_class() reads the class the engine already put on the line.
  *
  * PHP 7.4 compatible.
@@ -220,9 +220,13 @@ if (!function_exists('abom_qty_cell')) {
         $title    = 'Computed quantity: ' . $computed;
 
         if ($editable) {
+            $line_id = isset($line->id) ? ' data-line-id="' . (int) $line->id . '"' : '';
+
             return '<input type="number" class="qty-input' . $cls . '"'
                 . ' value="' . $qty . '" min="0"'
                 . ' data-line="' . (int) $line->line_no . '"'
+                . ' data-saved="' . $qty . '"'
+                . $line_id
                 . ' data-computed="' . $computed . '"'
                 . ' aria-label="Quantity for ' . abom_e($line->description) . '"'
                 . ' title="' . abom_e($title) . '">';

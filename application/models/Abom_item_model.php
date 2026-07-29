@@ -2,10 +2,10 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * Bom_item_model
+ * Abom_item_model
  *
  * Read access to the 71 master line items. Returns rows joined to their
- * section so Bom_engine can emit section_name / section_sort without a
+ * section so Abom_engine can emit section_name / section_sort without a
  * second query.
  *
  * Read paths only at this stage (spec section 9, build order step 2).
@@ -13,11 +13,11 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * order step 8.
  *
  * This model NEVER computes a quantity. Quantity logic lives only in
- * Bom_engine (spec section 10).
+ * Abom_engine (spec section 10).
  *
  * PHP 7.4 compatible.
  */
-class Bom_item_model extends CI_Model
+class Abom_item_model extends CI_Model
 {
     private $item_table    = 'abom_item';
     private $section_table = 'abom_section';

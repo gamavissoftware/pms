@@ -2,18 +2,18 @@
 /**
  * stubs.php
  *
- * Minimal stand-ins for the CodeIgniter pieces Bom_engine touches, so
- * the real application/libraries/Bom_engine.php can be loaded and
+ * Minimal stand-ins for the CodeIgniter pieces Abom_engine touches, so
+ * the real application/libraries/Abom_engine.php can be loaded and
  * exercised with no framework and no database.
  *
  * The stub models implement the same read methods as the real
- * Bom_master_model / Bom_item_model and return the same shapes, backed
+ * Abom_master_model / Abom_item_model and return the same shapes, backed
  * by rows parsed straight out of abom_seed.sql.
  *
  * PHP 7.4 compatible.
  */
 
-/** Bom_engine calls $this->CI->load->model(...) in its constructor. */
+/** Abom_engine calls $this->CI->load->model(...) in its constructor. */
 class Abom_stub_loader
 {
     public function model($name, $alias = '')
@@ -167,7 +167,7 @@ class Abom_stub_item_model
 
     /**
      * Active items for one family, ordered by section sort_order then
-     * item id — matching Bom_item_model::get_by_family().
+     * item id — matching Abom_item_model::get_by_family().
      */
     public function get_by_family($family_id)
     {
@@ -247,8 +247,8 @@ class Abom_stub_ci
 {
     public $load;
     public $config;
-    public $Bom_master_model;
-    public $Bom_item_model;
+    public $Abom_master_model;
+    public $Abom_item_model;
 
     public function __construct(Abom_seed_parser $seed, $root = null)
     {
@@ -258,12 +258,12 @@ class Abom_stub_ci
 
         $this->load             = new Abom_stub_loader();
         $this->config           = new Abom_stub_config($root);
-        $this->Bom_master_model = new Abom_stub_master_model($seed);
-        $this->Bom_item_model   = new Abom_stub_item_model($seed);
+        $this->Abom_master_model = new Abom_stub_master_model($seed);
+        $this->Abom_item_model   = new Abom_stub_item_model($seed);
     }
 }
 
-/** Bom_engine's constructor does $this->CI =& get_instance(). */
+/** Abom_engine's constructor does $this->CI =& get_instance(). */
 if (!function_exists('get_instance')) {
     function &get_instance()
     {

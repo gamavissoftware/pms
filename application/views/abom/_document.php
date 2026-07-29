@@ -58,7 +58,9 @@ $editable = isset($editable) ? (bool) $editable : false;
       <div class="bom-actions">
         <?php if ($editable): ?>
           <button type="button" class="btn-sm btn-generate" id="btnGenerate">&#8635; Recalculate</button>
+          <button type="button" class="btn-sm btn-export" id="btnSave">Save BOM</button>
         <?php endif; ?>
+        <a class="btn-sm btn-copy" href="<?php echo page_url; ?>abom/list">Saved BOMs</a>
         <button type="button" class="btn-sm btn-print" onclick="window.print()">&#128424;&#65039; Print</button>
         <?php if (!empty($bom->id)): ?>
           <a class="btn-sm btn-export" href="<?php echo page_url; ?>abom/export/csv/<?php echo (int) $bom->id; ?>">&#128229; Export CSV</a>

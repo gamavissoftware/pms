@@ -1,4 +1,6 @@
-# Automation BOM Module — schema & design change log
+# Automation BOM Module — change log
+
+Schema deltas, naming decisions and design deviations.
 
 Deltas between the handover documents and what was actually built, so
 `Database/abom_001.sql` and `Automation_BOM_Module_CI3_Spec.md` do not
@@ -15,6 +17,99 @@ Source documents, unchanged:
 | `Automation_BOM_Module_CI3_Spec.md` | — read-only |
 | `abom_schema.sql` | — superseded by `Database/abom_001.sql` |
 | `abom_seed.sql` | — copied verbatim into `Database/abom_002_seed.sql` |
+
+---
+
+## 0. Naming — every artefact is `abom`-prefixed
+
+### 0.1 Why
+
+`application/controllers/Leads.php` — live and current — carries 17
+references to a `BOM` controller (`BOM/pis`, `BOM/bom`,
+`BOM/edit_bom_testing`, `BOM/edit_pis`, `BOM/caddataupload`,
+`BOM/caddatauploaded`) and loads five `BOM/*` views. None of it exists in
+this working tree, in the git baseline, or in the 2022 `crmbackup.zip`.
+
+A live controller does not carry 17 dead paths. The conclusion is that
+`application/` in this working tree is an **incomplete copy of
+production**, not merely a copy missing `system/`.
+
+Two consequences drive the naming:
+
+- On a case-insensitive filesystem (macOS, where this is developed)
+  `Bom.php` and `BOM.php` are the SAME FILE. Any module artefact whose
+  name differs from a production one only by case would silently
+  overwrite it.
+- The collision surface cannot be enumerated from here, because the
+  thing that would enumerate it is the part of the tree we do not have.
+  So the prefix is applied unconditionally rather than on the strength
+  of a check against a tree already known to be incomplete.
+
+### 0.2 What was renamed
+
+| Spec §4 / §5 name | Built as |
+|---|---|
+| `controllers/Bom.php` | `controllers/Abom.php` (`class Abom`) |
+| `models/Bom_model.php` | `models/Abom_model.php` |
+| `models/Bom_item_model.php` | `models/Abom_item_model.php` |
+| `models/Bom_master_model.php` | `models/Abom_master_model.php` |
+| `libraries/Bom_engine.php` | `libraries/Abom_engine.php` (`class Abom_engine`) |
+| `libraries/Bom_exporter.php` | `libraries/Abom_exporter.php` (when built) |
+| `helpers/bom_helper.php` | `helpers/abom_helper.php` |
+| `views/bom/` | `views/abom/` |
+| `assets/bom/` | `assets/abom/` |
+| `assets/bom/bom.css` | `assets/abom/abom.css` |
+| `assets/bom/bom-print.css` | `assets/abom/abom-print.css` |
+| `assets/bom/bom.js` | `assets/abom/abom.js` |
+| `assets/bom/bom-generate.js` | `assets/abom/abom-generate.js` |
+
+**Spec §4 and §5 file names are superseded by this table.**
+
+URLs are `/abom/...`. Spec §6.1's `bom/...` routes are superseded too:
+CI's default routing resolves a class name directly, so a class named
+`Bom` would expose a second live `/bom/...` namespace whether or not it
+was routed.
+
+### 0.3 What deliberately keeps a bare `bom`
+
+Two categories, both required for fidelity to the approved design
+document and both incapable of colliding:
+
+- **CSS class names** — `.bom-topbar`, `.bom-area`, `.bom-actions`,
+  `.bom-table-wrap`. Taken verbatim from the design. Every rule is
+  nested under `.abom-wrap`, so they cannot leak out; and module rules
+  are more specific than any bare `.bom-topbar` a production stylesheet
+  might define, so they cannot be leaked into either.
+- **DOM ids** — `bomTable`, `bomBody`, `bomContent`, `bomTableHost`.
+  From the design. All JavaScript queries them inside `.abom-wrap`.
+
+Database columns (`bom_no`, `bom_id`) and internal method names
+(`get_bom`, `next_bom_no`) also keep the bare word; they live inside
+`abom_*` tables and `Abom_*` classes respectively.
+
+### 0.4 Case sensitivity
+
+Development is on case-insensitive macOS; production is case-sensitive
+Linux, where `views/abom/`, `views/Abom/` and `views/ABOM/` are three
+different directories. Every `load->view()`, `load->model()`,
+`load->library()`, `load->helper()`, `load->config()` and `assets_url`
+path in the module has been verified character-for-character against
+its on-disk name. Re-run with:
+
+```bash
+php BOMMODULEDEVELOPMENT/tests/case_audit.php
+```
+
+### 0.5 Deployment (rule 12)
+
+This working tree must **never** be synced, rsynced, pushed or uploaded
+to the server as a whole — doing so would delete `BOM.php`,
+`views/BOM/` and anything else missing here. Deployment is copy-up of
+the module's own new files only, by explicit name list, reviewed first.
+
+The git baseline on `main` is a baseline of a **partial copy**, not of
+production. It is not a safe restore point, and "zero modified files"
+does not mean "safe to deploy".
 
 ---
 

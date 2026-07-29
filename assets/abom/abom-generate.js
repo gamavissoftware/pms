@@ -7,7 +7,7 @@
 
    Every input change fires a debounced POST to /abom/generate_ajax,
    which returns the re-rendered table partial. The row-class precedence
-   therefore lives in exactly one place — Bom_engine and the helper —
+   therefore lives in exactly one place — Abom_engine and the helper —
    and is never duplicated here.
    ===================================================================== */
 (function ($, window, document) {
@@ -225,6 +225,43 @@
     });
 
     $wrap.on('click', '#btnGenerate', run);
+
+    // Save posts the CONFIGURATION plus any quantity overrides. The
+    // server regenerates from the engine and treats the posted numbers
+    // as overrides only — it never trusts them as computed values.
+    $wrap.on('click', '#btnSave', function () {
+      var $btn = $(this);
+      var data = collect();
+
+      data.revision = $('#cfgRev').val() === '—' ? '' : $('#cfgRev').val();
+      data.qty = {};
+      $wrap.find('#bomBody .qty-input').each(function () {
+        var $i = $(this);
+        data.qty[$i.attr('data-line')] = $i.val();
+      });
+
+      $btn.prop('disabled', true).text('Saving…');
+
+      $.ajax({
+        url: window.ABOM_SAVE_URL,
+        type: 'POST',
+        dataType: 'json',
+        data: data
+      }).done(function (res) {
+        if (res && res.status && res.redirect) {
+          window.location.href = res.redirect;
+          return;
+        }
+        $btn.prop('disabled', false).text('Save BOM');
+      }).fail(function (xhr) {
+        clearErrors();
+        var res = null;
+        try { res = JSON.parse(xhr.responseText); } catch (e) { res = null; }
+        if (res && res.errors) { showErrors(res.errors); }
+        window.alert(res && res.message ? res.message : 'The BOM could not be saved.');
+        $btn.prop('disabled', false).text('Save BOM');
+      });
+    });
   });
 
 }(window.jQuery, window, document));

@@ -31,8 +31,8 @@ defined('page_url')   OR define('page_url', '/index.php/');
 $seed = new Abom_seed_parser($root . '/BOMMODULEDEVELOPMENT/abom_seed.sql');
 $GLOBALS['ABOM_STUB_CI'] = new Abom_stub_ci($seed);
 
-require $root . '/application/libraries/Bom_engine.php';
-require $root . '/application/helpers/bom_helper.php';
+require $root . '/application/libraries/Abom_engine.php';
+require $root . '/application/helpers/abom_helper.php';
 
 /**
  * Stands in for CI_Loader inside a view. $this->load->view(...) works
@@ -69,8 +69,8 @@ class Abom_render_loader
 
 // ---------------------------------------------------------------------
 
-$engine = new Bom_engine();
-$master = $GLOBALS['ABOM_STUB_CI']->Bom_master_model;
+$engine = new Abom_engine();
+$master = $GLOBALS['ABOM_STUB_CI']->Abom_master_model;
 
 $which    = isset($argv[1]) ? strtolower($argv[1]) : 'iqr';
 $editable = isset($argv[2]) && $argv[2] === 'generate';
@@ -208,8 +208,8 @@ $loader->view('abom/_document', array(
 ));
 $document = ob_get_clean();
 
-$css       = file_get_contents($root . '/assets/bom/bom.css');
-$print_css = file_get_contents($root . '/assets/bom/bom-print.css');
+$css       = file_get_contents($root . '/assets/abom/abom.css');
+$print_css = file_get_contents($root . '/assets/abom/abom-print.css');
 
 echo '<!DOCTYPE html>' . "\n";
 echo '<html lang="en"><head><meta charset="UTF-8">' . "\n";

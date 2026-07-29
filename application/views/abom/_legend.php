@@ -5,7 +5,7 @@
  *
  * The design's three original entries are kept verbatim and in order.
  * The row-tint entries below them describe the four modifier classes
- * Bom_engine::row_class() produces, using the same --var colours.
+ * Abom_engine::row_class() produces, using the same --var colours.
  */
 ?>
 <div class="legend">

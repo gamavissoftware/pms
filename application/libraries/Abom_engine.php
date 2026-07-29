@@ -2,7 +2,7 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * Bom_engine
+ * Abom_engine
  *
  * Pure business logic — no DB writes, no output. Takes a configuration
  * and a set of master items, returns computed BOM lines.
@@ -15,7 +15,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *
  * PHP 7.4 compatible (production runs ea-php74).
  */
-class Bom_engine
+class Abom_engine
 {
     protected $CI;
     protected $rules = null;
@@ -23,8 +23,8 @@ class Bom_engine
     public function __construct()
     {
         $this->CI =& get_instance();
-        $this->CI->load->model('Bom_master_model');
-        $this->CI->load->model('Bom_item_model');
+        $this->CI->load->model('Abom_master_model');
+        $this->CI->load->model('Abom_item_model');
     }
 
     // -----------------------------------------------------------------
@@ -43,7 +43,7 @@ class Bom_engine
     public function detect_plc_family(array $cfg)
     {
         if ($this->rules === null) {
-            $this->rules = $this->CI->Bom_master_model->get_active_rules();
+            $this->rules = $this->CI->Abom_master_model->get_active_rules();
         }
 
         $axes   = isset($cfg['axes']) ? (int) $cfg['axes'] : 0;
@@ -59,7 +59,7 @@ class Bom_engine
 
             return array(
                 'family_id'   => (int) $r->result_family_id,
-                'code'        => $this->CI->Bom_master_model->family_code((int) $r->result_family_id),
+                'code'        => $this->CI->Abom_master_model->family_code((int) $r->result_family_id),
                 'rule_id'     => (int) $r->id,
                 'priority'    => (int) $r->priority,
                 'explanation' => $r->explanation,
@@ -155,7 +155,7 @@ class Bom_engine
         // approved (spec 2.1) — the caller must render this.
         $overridden = ($family_id !== $detected['family_id']);
 
-        $items    = $this->CI->Bom_item_model->get_by_family($family_id);
+        $items    = $this->CI->Abom_item_model->get_by_family($family_id);
         $features = isset($cfg['features']) ? $cfg['features'] : array();
 
         $lines   = array();

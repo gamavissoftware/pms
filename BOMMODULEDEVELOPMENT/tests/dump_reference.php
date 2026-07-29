@@ -23,9 +23,9 @@ defined('BASEPATH') OR define('BASEPATH', true);
 $seed = new Abom_seed_parser($root . '/BOMMODULEDEVELOPMENT/abom_seed.sql');
 $GLOBALS['ABOM_STUB_CI'] = new Abom_stub_ci($seed);
 
-require $root . '/application/libraries/Bom_engine.php';
+require $root . '/application/libraries/Abom_engine.php';
 
-$engine = new Bom_engine();
+$engine = new Abom_engine();
 
 $which = isset($argv[1]) ? strtolower($argv[1]) : 'both';
 

@@ -3,7 +3,7 @@
  * seed_parser.php
  *
  * Parses abom_seed.sql into plain PHP arrays so the section 5.1 unit
- * tests can exercise Bom_engine with no database and no CodeIgniter
+ * tests can exercise Abom_engine with no database and no CodeIgniter
  * bootstrap.
  *
  * The engine is tested against THE SAME BYTES that will be loaded into

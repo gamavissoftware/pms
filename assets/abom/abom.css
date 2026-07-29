@@ -243,7 +243,7 @@
   padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle;
 }
 
-/* Row modifiers — precedence is decided in Bom_engine::row_class(),
+/* Row modifiers — precedence is decided in Abom_engine::row_class(),
    never here. Colours come only from the palette above; no new variable
    is introduced and none is renamed.
 
@@ -414,3 +414,13 @@
   padding: 8px 12px; margin-bottom: 12px;
   font-size: 11px; color: var(--dgray);
 }
+
+/* ── SAVED-BOM LIST ───────────────────────────────────────────────── */
+.abom-wrap .abom-filter-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.abom-wrap .abom-filter-form select,
+.abom-wrap .abom-filter-form input {
+  padding: 5px 9px; border: 1.5px solid var(--border); border-radius: 5px;
+  font-size: 12px; font-family: Arial, sans-serif; background: #FAFCFF;
+  color: #222; height: auto; box-shadow: none; width: auto;
+}
+.abom-wrap .abom-filter-form input { min-width: 180px; }

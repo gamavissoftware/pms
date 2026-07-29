@@ -110,6 +110,41 @@
     $wrap.on('change input', '.qty-input', function () {
       ABOM.onQtyChange(this);
     });
+
+    // On a SAVED BOM the edit must reach the server. Without this the
+    // markup would vanish on refresh and the print would come from
+    // unedited server state.
+    if (window.ABOM_LINE_QTY_URL && window.ABOM_BOM_ID) {
+      $wrap.on('change', '.qty-input[data-line-id]', function () {
+        var $input = $(this);
+
+        $.ajax({
+          url: window.ABOM_LINE_QTY_URL,
+          type: 'POST',
+          dataType: 'json',
+          data: {
+            bom_id:  window.ABOM_BOM_ID,
+            line_id: $input.attr('data-line-id'),
+            qty:     $input.val(),
+            reason:  $input.attr('data-reason') || ''
+          }
+        }).done(function (res) {
+          if (!res || !res.status) { return; }
+          $input.toggleClass('qty-edited', !!res.is_overridden);
+          $input.closest('tr').find('td').last().html(res.status_html);
+          $input.attr('data-saved', res.qty);
+          ABOM.recalcStats();
+        }).fail(function (xhr) {
+          var res = null;
+          try { res = JSON.parse(xhr.responseText); } catch (e) { res = null; }
+          window.alert(res && res.message ? res.message : 'The quantity could not be saved.');
+          // Roll the field back so the screen never shows an unsaved number.
+          var saved = $input.attr('data-saved');
+          if (saved !== undefined) { $input.val(saved); }
+          ABOM.onQtyChange($input[0]);
+        });
+      });
+    }
   });
 
   window.ABOM = ABOM;

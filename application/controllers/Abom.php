@@ -38,9 +38,9 @@ class Abom extends CI_Controller
 
         $this->config->load('abom', true);
 
-        $this->load->model('Bom_master_model');
-        $this->load->model('Bom_item_model');
-        $this->load->helper('bom_helper');
+        $this->load->model('Abom_master_model');
+        $this->load->model('Abom_item_model');
+        $this->load->helper('abom_helper');
     }
 
     // -----------------------------------------------------------------
@@ -60,9 +60,10 @@ class Abom extends CI_Controller
      * worse than no edit, because someone would mark up the sheet, print
      * it, and not notice the print came from unedited server state.
      *
-     * Flip to TRUE in the same commit that adds Abom::save_line_qty().
+     * Flipped to TRUE in the same commit that added save_line_qty(),
+     * the abom_bom_line.is_overridden write and the abom_audit_log row.
      */
-    const QTY_OVERRIDE_PERSISTENCE_AVAILABLE = false;
+    const QTY_OVERRIDE_PERSISTENCE_AVAILABLE = true;
 
     public function index()
     {
@@ -80,7 +81,7 @@ class Abom extends CI_Controller
         }
 
         $cfg = $this->config_from_input($this->default_config());
-        $this->load->library('Bom_engine');
+        $this->load->library('Abom_engine');
 
         $errors = $this->validate_config($cfg);
         if (!empty($errors)) {
@@ -88,11 +89,11 @@ class Abom extends CI_Controller
             $errors = array();
         }
 
-        $result = $this->Bom_engine->generate($cfg);
+        $result = $this->Abom_engine->generate($cfg);
 
         $bom = $this->bom_header_from_config($cfg, $result);
-        $this->load->model('Bom_model');
-        $bom->bom_no = $this->Bom_model->next_bom_no();
+        $this->load->model('Abom_model');
+        $bom->bom_no = $this->Abom_model->next_bom_no();
 
         $this->render_document($bom, $result['lines'], true, $result, $errors);
     }
@@ -121,15 +122,15 @@ class Abom extends CI_Controller
             ));
         }
 
-        $this->load->library('Bom_engine');
-        $result = $this->Bom_engine->generate($cfg);
+        $this->load->library('Abom_engine');
+        $result = $this->Abom_engine->generate($cfg);
 
         $bom = $this->bom_header_from_config($cfg, $result);
-        $this->load->model('Bom_model');
-        $bom->bom_no = $this->Bom_model->next_bom_no();
+        $this->load->model('Abom_model');
+        $bom->bom_no = $this->Abom_model->next_bom_no();
 
-        $family_code = $this->Bom_master_model->family_code((int) $result['family_id']);
-        $defaults    = $this->Bom_master_model->family_defaults((int) $result['family_id']);
+        $family_code = $this->Abom_master_model->family_code((int) $result['family_id']);
+        $defaults    = $this->Abom_master_model->family_defaults((int) $result['family_id']);
 
         // The rendered partial is returned rather than raw rows, so the
         // row-class precedence stays in one place instead of being
@@ -158,6 +159,178 @@ class Abom extends CI_Controller
     }
 
     /**
+     * Persists the current configuration as a new BOM.
+     *
+     * Quantities are RE-GENERATED from the engine rather than trusted
+     * from the request — the client may only override, and an override
+     * is recorded as such against the engine's computed value.
+     */
+    public function save()
+    {
+        $this->json_only();
+
+        if (!$this->require_tables()) {
+            return;
+        }
+
+        $cfg    = $this->config_from_input($this->default_config());
+        $errors = $this->validate_config($cfg);
+
+        if (!empty($errors)) {
+            $this->output->set_status_header(422);
+            $this->respond(false, 'Please correct the highlighted fields.', array('errors' => $errors));
+        }
+
+        $this->load->library('Abom_engine');
+        $this->load->model('Abom_model');
+
+        $result = $this->Abom_engine->generate($cfg);
+        $lines  = $result['lines'];
+
+        // Client-supplied overrides, keyed by line_no. Anything equal to
+        // the computed value is not an override.
+        $overrides = $this->input->post('qty');
+        if (is_array($overrides)) {
+            foreach ($lines as $line) {
+                $key = (string) $line->line_no;
+                if (!isset($overrides[$key]) || $overrides[$key] === '') {
+                    continue;
+                }
+                $qty = max(0, (int) $overrides[$key]);
+                if ($qty !== (int) $line->computed_qty) {
+                    $line->qty             = $qty;
+                    $line->is_overridden   = 1;
+                    $line->override_reason = null;
+                }
+            }
+        }
+
+        $user_id  = $this->current_user_id();
+        $now      = date('Y-m-d H:i:s');
+        $revision = trim((string) $this->input->post('revision'));
+
+        $header = array(
+            'bom_no'            => $this->Abom_model->next_bom_no(),
+            'revision'          => $revision !== '' ? $revision : '00',
+            'df_ref'            => isset($cfg['df_ref']) && $cfg['df_ref'] !== '' ? $cfg['df_ref'] : null,
+            'machine_model'     => $cfg['machine_model'],
+            'machine_side'      => $cfg['machine_side'],
+            'axes'              => (int) $cfg['axes'],
+            'tracks'            => (int) $cfg['tracks'],
+            'speed_ppm'         => (int) $cfg['speed_ppm'],
+            'motion_type'       => $cfg['motion_type'],
+            'plc_family_id'     => (int) $result['family_id'],
+            'plc_family_locked' => !empty($result['overridden']) ? 1 : 0,
+            'j4_units'          => (int) $cfg['j4_units'],
+            'battery_qty'       => (int) $cfg['battery_qty'],
+            'features_json'     => json_encode($cfg['features']),
+            'status'            => 'draft',
+            'prepared_by'       => $user_id > 0 ? $user_id : null,
+            'prepared_at'       => $now,
+            'notes'             => trim((string) $this->input->post('notes')),
+        );
+
+        $bom_id = $this->Abom_model->save_bom($header, $lines, $user_id);
+
+        if ($bom_id <= 0) {
+            $this->output->set_status_header(500);
+            $this->respond(false, 'The BOM could not be saved. Nothing was written.');
+        }
+
+        $this->respond(true, 'BOM ' . $header['bom_no'] . ' saved.', array(
+            'bom_id'   => $bom_id,
+            'bom_no'   => $header['bom_no'],
+            'redirect' => page_url . 'abom/view/' . $bom_id,
+        ));
+    }
+
+    /**
+     * Persists ONE line-quantity override, with an audit row.
+     *
+     * This is the write path that makes the quantity column editable on
+     * a saved BOM. Without it a markup would vanish on refresh and the
+     * print would come from unedited server state.
+     */
+    public function save_line_qty()
+    {
+        $this->json_only();
+
+        if (!$this->require_tables()) {
+            return;
+        }
+
+        $this->load->model('Abom_model');
+
+        $bom_id  = (int) $this->input->post('bom_id');
+        $line_id = (int) $this->input->post('line_id');
+        $qty     = (int) $this->input->post('qty');
+        $reason  = trim((string) $this->input->post('reason'));
+
+        $bom = $this->Abom_model->get_bom($bom_id);
+
+        if (!$bom) {
+            $this->output->set_status_header(404);
+            $this->respond(false, 'BOM not found.');
+        }
+
+        // Server-side guard. The UI hides the input, but the rule is
+        // enforced here — an approved BOM's quantities are fixed.
+        if (!abom_qty_editable($bom)) {
+            $this->output->set_status_header(403);
+            $this->respond(false, 'Quantities are locked: this BOM is ' . abom_status_label($bom->status) . '.');
+        }
+
+        if ($qty < 0 || $qty > 65535) {
+            $this->output->set_status_header(422);
+            $this->respond(false, 'Quantity must be between 0 and 65535.');
+        }
+
+        $line = $this->Abom_model->update_line_qty(
+            $bom_id, $line_id, $qty, $reason, $this->current_user_id()
+        );
+
+        if (!$line) {
+            $this->output->set_status_header(404);
+            $this->respond(false, 'Line not found on this BOM.');
+        }
+
+        $this->respond(true, 'Quantity saved.', array(
+            'line_id'       => (int) $line->id,
+            'qty'           => (int) $line->qty,
+            'computed_qty'  => (int) $line->computed_qty,
+            'is_overridden' => (int) $line->is_overridden,
+            'status_html'   => abom_status_badges($line),
+            'totals'        => $this->Abom_model->get_bom($bom_id),
+        ));
+    }
+
+    /**
+     * Saved BOMs.
+     */
+    public function bom_list()
+    {
+        if (!$this->require_tables()) {
+            return;
+        }
+
+        $this->load->model('Abom_model');
+
+        $filters = array(
+            'status'        => trim((string) $this->input->get('status')),
+            'machine_model' => trim((string) $this->input->get('model')),
+            'search'        => trim((string) $this->input->get('search')),
+        );
+
+        $this->load->view('abom/list', array(
+            'boms'          => $this->Abom_model->get_all($filters),
+            'filters'       => $filters,
+            'models'        => $this->abom('abom_models'),
+            'statuses'      => array('draft', 'submitted', 'checked', 'eng_approved',
+                                     'approved', 'rejected', 'superseded'),
+        ));
+    }
+
+    /**
      * Read-only released-document view of a saved BOM.
      *
      * @param int $bom_id
@@ -168,15 +341,15 @@ class Abom extends CI_Controller
             return;
         }
 
-        $this->load->model('Bom_model');
-        $bom = $this->Bom_model->get_bom((int) $bom_id);
+        $this->load->model('Abom_model');
+        $bom = $this->Abom_model->get_bom((int) $bom_id);
 
         if (!$bom) {
             show_404();
             return;
         }
 
-        $lines = $this->Bom_model->get_lines((int) $bom_id);
+        $lines = $this->Abom_model->get_lines((int) $bom_id);
 
         $this->render_document($bom, $lines, false);
     }
@@ -201,8 +374,8 @@ class Abom extends CI_Controller
         $key     = isset($presets[$key]) ? $key : 'iqr';
         $preset  = $presets[$key];
 
-        $this->load->library('Bom_engine');
-        $result = $this->Bom_engine->generate($preset['cfg']);
+        $this->load->library('Abom_engine');
+        $result = $this->Abom_engine->generate($preset['cfg']);
 
         $bom = $this->bom_header_from_config($preset['cfg'], $result);
         $bom->bom_no = $preset['bom_no'];
@@ -236,20 +409,20 @@ class Abom extends CI_Controller
      */
     private function render_document($bom, $lines, $editable, $result = null, $errors = array())
     {
-        $this->load->library('Bom_engine');
+        $this->load->library('Abom_engine');
 
-        $family_code = $this->Bom_master_model->family_code((int) $bom->plc_family_id);
-        $defaults    = $this->Bom_master_model->family_defaults((int) $bom->plc_family_id);
+        $family_code = $this->Abom_master_model->family_code((int) $bom->plc_family_id);
+        $defaults    = $this->Abom_master_model->family_defaults((int) $bom->plc_family_id);
 
         $stats = ($result !== null)
             ? $result['stats']
-            : $this->Bom_engine->stats($lines);
+            : $this->Abom_engine->stats($lines);
 
         $sections = ($result !== null)
             ? $result['sections']
-            : $this->Bom_engine->sections_present($lines);
+            : $this->Abom_engine->sections_present($lines);
 
-        $features = $this->Bom_master_model->get_features();
+        $features = $this->Abom_master_model->get_features();
 
         $active_features = array();
         if (!empty($bom->features_json)) {
@@ -259,13 +432,23 @@ class Abom extends CI_Controller
             }
         }
         if (empty($active_features)) {
-            $active_features = $this->Bom_master_model->default_features();
+            $active_features = $this->Abom_master_model->default_features();
         }
 
         // Quantity editability is decided by workflow state, and only
-        // offered at all where the edit can actually be persisted.
+        // offered where the edit can actually be persisted.
+        //
+        //   generator      -> editable; the value is form state and is
+        //                     posted with the save request
+        //   saved BOM      -> editable only while the workflow allows it
+        //                     AND the write path exists
+        //   unsaved preview-> never; there is no row to write to, so an
+        //                     input here would be a scribble that
+        //                     vanishes on refresh
         $qty_editable = $editable
-            || (abom_qty_editable($bom) && self::QTY_OVERRIDE_PERSISTENCE_AVAILABLE);
+            || (!empty($bom->id)
+                && abom_qty_editable($bom)
+                && self::QTY_OVERRIDE_PERSISTENCE_AVAILABLE);
 
         $data = array(
             'bom'                => $bom,
@@ -283,7 +466,7 @@ class Abom extends CI_Controller
             'overridden'         => ($result !== null) ? !empty($result['overridden'])
                                         : !empty($bom->plc_family_locked),
             'panel_location'     => $defaults['panel_location'],
-            'families'           => $this->Bom_master_model->get_families(),
+            'families'           => $this->Abom_master_model->get_families(),
             'features'           => $features,
             'active_features'    => $active_features,
             'errors'             => is_array($errors) ? $errors : array(),
@@ -439,7 +622,7 @@ class Abom extends CI_Controller
     /**
      * Reads a configuration off the request, falling back to $base for
      * anything absent. Nothing here computes a quantity or picks a
-     * family — that is Bom_engine's job alone.
+     * family — that is Abom_engine's job alone.
      *
      * @param  array $base
      * @return array
@@ -478,7 +661,7 @@ class Abom extends CI_Controller
         $posted = $this->input->post('features');
         if (is_array($posted)) {
             $features = array();
-            foreach ($this->Bom_master_model->get_features() as $code => $feature) {
+            foreach ($this->Abom_master_model->get_features() as $code => $feature) {
                 $features[$code] = !empty($posted[$code]) ? 1 : 0;
             }
             $cfg['features'] = $features;
@@ -572,7 +755,7 @@ class Abom extends CI_Controller
                 $active = $decoded;
             }
         }
-        foreach ($this->Bom_master_model->get_features() as $code => $feature) {
+        foreach ($this->Abom_master_model->get_features() as $code => $feature) {
             if (!empty($active[$code])) {
                 $chips[] = array('class' => 'cont', 'label' => $feature->label);
             }
@@ -611,6 +794,11 @@ class Abom extends CI_Controller
             return '';
         }
 
+        if (empty($bom->id)) {
+            return 'This is an unsaved preview generated from live master data. '
+                 . 'Save it before marking up quantities.';
+        }
+
         if (!abom_qty_editable($bom)) {
             return 'Quantities are locked because this BOM is ' . abom_status_label($bom->status) . '.';
         }
@@ -633,7 +821,7 @@ class Abom extends CI_Controller
      */
     private function reference_presets()
     {
-        $features = $this->Bom_master_model->default_features();
+        $features = $this->Abom_master_model->default_features();
 
         return array(
             'fx5' => array(
@@ -695,15 +883,15 @@ class Abom extends CI_Controller
      */
     private function require_tables()
     {
-        // Bom_master_model reads $this->config->item('abom_tables'), so
+        // Abom_master_model reads $this->config->item('abom_tables'), so
         // the list has to be visible outside the 'abom' section too.
         $this->config->set_item('abom_tables', $this->abom('abom_tables'));
 
-        if ($this->Bom_master_model->tables_ready()) {
+        if ($this->Abom_master_model->tables_ready()) {
             return true;
         }
 
-        $missing = $this->Bom_master_model->first_missing_table();
+        $missing = $this->Abom_master_model->first_missing_table();
 
         if ($this->input->is_ajax_request()) {
             $this->output->set_status_header(503);
@@ -770,6 +958,16 @@ class Abom extends CI_Controller
             ->where('submoduleid', $submoduleid)
             ->where('submodule_access', 1)
             ->count_all_results() > 0;
+    }
+
+    /**
+     * @return int  0 when not resolvable
+     */
+    private function current_user_id()
+    {
+        $session = $this->session->userdata('logged_in');
+
+        return isset($session['user_id']) ? (int) $session['user_id'] : 0;
     }
 
     /**

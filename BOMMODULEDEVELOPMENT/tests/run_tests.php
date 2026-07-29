@@ -3,7 +3,7 @@
  * run_tests.php — Automation BOM engine, spec section 5.1 suite
  *
  * Standalone. No CodeIgniter bootstrap, no database, no system/ needed.
- * Loads the REAL application/libraries/Bom_engine.php and drives it with
+ * Loads the REAL application/libraries/Abom_engine.php and drives it with
  * master data parsed straight out of abom_seed.sql.
  *
  *   php BOMMODULEDEVELOPMENT/tests/run_tests.php
@@ -18,13 +18,13 @@ $root = dirname(dirname(__DIR__));
 require __DIR__ . '/seed_parser.php';
 require __DIR__ . '/stubs.php';
 
-// Bom_engine guards on BASEPATH, as every CI file does.
+// Abom_engine guards on BASEPATH, as every CI file does.
 defined('BASEPATH') OR define('BASEPATH', true);
 
 $seed = new Abom_seed_parser($root . '/BOMMODULEDEVELOPMENT/abom_seed.sql');
 $GLOBALS['ABOM_STUB_CI'] = new Abom_stub_ci($seed);
 
-require $root . '/application/libraries/Bom_engine.php';
+require $root . '/application/libraries/Abom_engine.php';
 
 // =====================================================================
 //  Tiny assertion harness
@@ -113,11 +113,11 @@ function part_numbers(array $lines)
     return $out;
 }
 
-$engine = new Bom_engine();
-$items  = $GLOBALS['ABOM_STUB_CI']->Bom_item_model;
+$engine = new Abom_engine();
+$items  = $GLOBALS['ABOM_STUB_CI']->Abom_item_model;
 
 echo "\n\033[1m╔══════════════════════════════════════════════════════════════════════╗\033[0m";
-echo "\n\033[1m║  Automation BOM — Bom_engine unit tests (spec section 5.1)          ║\033[0m";
+echo "\n\033[1m║  Automation BOM — Abom_engine unit tests (spec section 5.1)          ║\033[0m";
 echo "\n\033[1m╚══════════════════════════════════════════════════════════════════════╝\033[0m\n";
 echo "  PHP " . PHP_VERSION . "   seed: BOMMODULEDEVELOPMENT/abom_seed.sql\n";
 
@@ -145,7 +145,7 @@ foreach ($all_items as $item) {
     }
 }
 
-$master = $GLOBALS['ABOM_STUB_CI']->Bom_master_model;
+$master = $GLOBALS['ABOM_STUB_CI']->Abom_master_model;
 
 check('abom_item rows',                71, count($all_items));
 check('  family 1 (FX5)',              29, $by_family[1]);

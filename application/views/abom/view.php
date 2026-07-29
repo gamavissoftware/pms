@@ -13,8 +13,8 @@
     <link href="<?php echo assets_url; ?>css/pages.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>bom/bom.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>bom/bom-print.css" rel="stylesheet" media="all">
+    <link href="<?php echo assets_url; ?>abom/abom.css" rel="stylesheet">
+    <link href="<?php echo assets_url; ?>abom/abom-print.css" rel="stylesheet" media="all">
 </head>
 <body>
 
@@ -31,6 +31,10 @@
 <script src="<?php echo assets_url; ?>js/bootstrap.min.js"></script>
 <script src="<?php echo assets_url; ?>js/jquery.core.js"></script>
 <script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
-<script src="<?php echo assets_url; ?>bom/bom.js"></script>
+<script>
+window.ABOM_LINE_QTY_URL = "<?php echo page_url; ?>abom/save_line_qty";
+window.ABOM_BOM_ID       = <?php echo (int) $bom->id; ?>;
+</script>
+<script src="<?php echo assets_url; ?>abom/abom.js"></script>
 </body>
 </html>

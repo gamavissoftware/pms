@@ -6,7 +6,7 @@
  *
  * @var object $bom    header (persisted row, or a stdClass built from
  *                     the live configuration on the generate screen)
- * @var array  $stats  from Bom_engine::stats()
+ * @var array  $stats  from Abom_engine::stats()
  * @var array  $notes  optional review notes
  * @var string $family_code
  * @var bool   $overridden

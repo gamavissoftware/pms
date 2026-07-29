@@ -26,7 +26,7 @@ $config['abom_uom_display'] = array(
 
 // Workflow states in which a line quantity may still be edited.
 // Once a BOM is engineering-approved the printed quantities must not be
-// typeable over — see abom_qty_editable() in helpers/bom_helper.php.
+// typeable over — see abom_qty_editable() in helpers/abom_helper.php.
 $config['abom_qty_editable_status'] = array('draft', 'submitted', 'checked', 'rejected');
 
 // Own numbering series. The existing DF register (DF_revision,

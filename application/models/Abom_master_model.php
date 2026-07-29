@@ -2,7 +2,7 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * Bom_master_model
+ * Abom_master_model
  *
  * Read access to the Automation BOM reference data: PLC families,
  * sections, quantity formulas, optional features and the data-driven
@@ -14,7 +14,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *
  * PHP 7.4 compatible.
  */
-class Bom_master_model extends CI_Model
+class Abom_master_model extends CI_Model
 {
     private $family_table  = 'abom_plc_family';
     private $section_table = 'abom_section';
@@ -251,7 +251,7 @@ class Bom_master_model extends CI_Model
     // -----------------------------------------------------------------
 
     /**
-     * Data-driven PLC selection (spec 2.1). Priority ASC — Bom_engine
+     * Data-driven PLC selection (spec 2.1). Priority ASC — Abom_engine
      * evaluates in this order and the first match wins. Engineering
      * retunes thresholds by editing rows, not by a code deploy.
      *
