@@ -1,0 +1,402 @@
+/* =====================================================================
+   Automation BOM Generator — module stylesheet
+
+   Reproduces SPM1200L_Automation_BOM_DF1826_DF1827_Review.html, the
+   approved design document. Same class names, same palette, same
+   spacing, same fonts.
+
+   EVERY rule is nested under .abom-wrap. There are no global selectors
+   and no element selectors outside that container, so nothing here can
+   reach an existing screen. The palette variables are declared on
+   .abom-wrap rather than :root for the same reason.
+
+   The project loads Bootstrap 3.3.7 and jQuery 2.1.4 and stays there.
+   Bootstrap styles `table`, `.badge`, `label` and form controls
+   globally, so the rules below are written to win inside the wrapper
+   without !important where possible.
+   ===================================================================== */
+
+.abom-wrap {
+  /* Palette — verbatim from the approved design document. */
+  --navy:    #1F3864;
+  --blue:    #2E75B6;
+  --lblue:   #DEEAF1;
+  --lgreen:  #E2EFDA;
+  --lyellow: #FFF2CC;
+  --orange:  #FFE0B2;
+  --red:     #C00000;
+  --gray:    #F5F5F5;
+  --dgray:   #555;
+  --border:  #D0D7E3;
+  --white:   #FFFFFF;
+  --success: #217346;
+  --warn:    #BF8F00;
+
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  background: #ECF0F5;
+  color: #222;
+  line-height: normal;
+}
+
+.abom-wrap *,
+.abom-wrap *::before,
+.abom-wrap *::after { box-sizing: border-box; }
+
+.abom-wrap h1,
+.abom-wrap h3,
+.abom-wrap p,
+.abom-wrap ul,
+.abom-wrap li { margin: 0; padding: 0; }
+
+/* ── HEADER ───────────────────────────────────────────────────────── */
+.abom-wrap .app-header {
+  background: var(--navy);
+  color: #fff;
+  padding: 14px 24px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.abom-wrap .app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: .3px; color: #fff; }
+.abom-wrap .app-header .sub { font-size: 11px; opacity: .75; margin-top: 2px; }
+.abom-wrap .badge {
+  background: var(--blue); color: #fff;
+  padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;
+  letter-spacing: .5px; line-height: normal;
+}
+.abom-wrap .badge.review { background: var(--warn); }
+.abom-wrap .badge.overridden { background: var(--red); }
+
+/* ── LAYOUT ───────────────────────────────────────────────────────── */
+.abom-wrap .layout { display: flex; gap: 0; align-items: stretch; }
+
+/* ── SIDEBAR ──────────────────────────────────────────────────────── */
+.abom-wrap .sidebar {
+  width: 300px; min-width: 300px;
+  background: var(--white);
+  border-right: 2px solid var(--border);
+  display: flex; flex-direction: column;
+}
+.abom-wrap .sidebar-title {
+  background: var(--blue); color: #fff;
+  padding: 10px 16px; font-size: 12px; font-weight: 700;
+  letter-spacing: .5px; text-transform: uppercase;
+}
+.abom-wrap .sidebar-body { padding: 16px; flex: 1; overflow-y: visible; }
+
+/* Preset DF cards */
+.abom-wrap .preset-card {
+  width: 100%; text-align: left; cursor: pointer;
+  background: #FAFCFF; border: 1.5px solid var(--border); border-radius: 7px;
+  padding: 10px 12px; margin-bottom: 10px; font-family: Arial, sans-serif;
+  transition: border .15s, background .15s;
+}
+.abom-wrap .preset-card:hover { border-color: var(--blue); }
+.abom-wrap .preset-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.abom-wrap .preset-card.active { border-color: var(--navy); background: var(--lblue); }
+.abom-wrap .preset-card .pc-df { font-size: 13px; font-weight: 700; color: var(--navy); }
+.abom-wrap .preset-card .pc-line { font-size: 11px; color: var(--dgray); margin-top: 3px; line-height: 1.5; }
+.abom-wrap .preset-card .pc-tags { margin-top: 6px; display: flex; gap: 5px; flex-wrap: wrap; }
+.abom-wrap .pc-tag {
+  font-size: 9px; font-weight: 700; letter-spacing: .4px;
+  padding: 2px 7px; border-radius: 9px; text-transform: uppercase;
+}
+.abom-wrap .pc-iqr  { background: var(--lgreen); color: #1A4001; }
+.abom-wrap .pc-fx5  { background: var(--lblue);  color: var(--navy); }
+.abom-wrap .pc-cont { background: var(--lyellow); color: var(--warn); }
+.abom-wrap .pc-int  { background: #EEE; color: #555; }
+
+.abom-wrap .form-group { margin-bottom: 12px; }
+.abom-wrap .form-group label {
+  display: block; font-size: 11px; font-weight: 700;
+  color: var(--navy); margin-bottom: 4px; text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.abom-wrap .form-group input,
+.abom-wrap .form-group select {
+  width: 100%; padding: 7px 10px; height: auto;
+  border: 1.5px solid var(--border); border-radius: 5px;
+  font-size: 13px; font-family: Arial, sans-serif;
+  background: #FAFCFF; outline: none; color: #222;
+  box-shadow: none;
+}
+.abom-wrap .form-group input:focus,
+.abom-wrap .form-group select:focus { border-color: var(--blue); box-shadow: none; }
+.abom-wrap .form-group input.ro { background: var(--gray); color: #333; font-weight: 700; cursor: default; }
+.abom-wrap .cfg-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.abom-wrap .plc-badge {
+  display: inline-block; padding: 5px 14px; border-radius: 6px;
+  font-size: 13px; font-weight: 700; margin-top: 4px;
+}
+.abom-wrap .plc-fx5 { background: var(--lblue); color: var(--navy); }
+.abom-wrap .plc-iqr { background: var(--lgreen); color: #1A4001; }
+
+.abom-wrap .divider { border: none; border-top: 1.5px solid var(--border); margin: 14px 0; }
+
+.abom-wrap .btn-reset {
+  width: 100%; padding: 7px;
+  background: transparent; color: var(--dgray);
+  border: 1.5px solid var(--border); border-radius: 6px;
+  font-size: 12px; cursor: pointer; margin-top: 4px;
+  transition: all .15s;
+}
+.abom-wrap .btn-reset:hover { border-color: var(--red); color: var(--red); }
+
+.abom-wrap .legend { font-size: 10px; color: #888; line-height: 1.7; }
+.abom-wrap .legend b { color: #555; }
+.abom-wrap .lg-chip {
+  display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+  margin-right: 4px; vertical-align: -1px;
+}
+
+/* ── MAIN CONTENT ─────────────────────────────────────────────────── */
+/* The design document is a standalone full-viewport app: it pins the
+   layout to the viewport height and scrolls .bom-area internally.
+   Embedded beneath the application's own navigation that would trap the
+   sheet in a nested scroller and break printing, so the module lets the
+   document flow with the page instead. Only the table keeps a scroller,
+   and only horizontally. */
+.abom-wrap .main { flex: 1; display: flex; flex-direction: column; overflow: visible; min-width: 0; }
+
+.abom-wrap .bom-topbar {
+  background: var(--white);
+  border-bottom: 2px solid var(--border);
+  padding: 10px 20px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.abom-wrap .config-chip {
+  background: var(--navy); color: #fff;
+  padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 700;
+}
+.abom-wrap .config-chip.fx5  { background: var(--blue); }
+.abom-wrap .config-chip.iqr  { background: var(--success); }
+.abom-wrap .config-chip.cont { background: var(--warn); }
+.abom-wrap .config-chip.lite { background: #7A8BA6; }
+.abom-wrap .config-chip.alert { background: var(--red); }
+.abom-wrap .bom-actions { margin-left: auto; display: flex; gap: 8px; }
+.abom-wrap .btn-sm {
+  padding: 6px 14px; border-radius: 5px; font-size: 12px; font-weight: 700;
+  cursor: pointer; border: none; transition: opacity .15s;
+}
+.abom-wrap .btn-sm:hover { opacity: .85; }
+.abom-wrap .btn-sm:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.abom-wrap .btn-export { background: var(--success); color: #fff; }
+.abom-wrap .btn-print  { background: var(--blue); color: #fff; }
+.abom-wrap .btn-copy   { background: var(--dgray); color: #fff; }
+.abom-wrap .btn-generate { background: var(--navy); color: #fff; }
+
+.abom-wrap .bom-area { flex: 1; overflow: visible; padding: 16px 20px; }
+
+/* Verbatim DF title strip */
+.abom-wrap .doc-title {
+  background: var(--white); border: 1.5px solid var(--border);
+  border-left: 5px solid var(--navy);
+  border-radius: 7px; padding: 10px 14px; margin-bottom: 14px;
+  font-size: 12.5px; color: #333;
+}
+.abom-wrap .doc-title b { color: var(--navy); }
+.abom-wrap .doc-title .dt-date { color: var(--dgray); font-size: 11px; margin-left: 10px; white-space: nowrap; }
+
+/* Stats row */
+.abom-wrap .stats-row { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.abom-wrap .stat-card {
+  background: var(--white); border: 1.5px solid var(--border); border-radius: 7px;
+  padding: 10px 16px; min-width: 118px;
+}
+.abom-wrap .stat-card .val { font-size: 22px; font-weight: 700; color: var(--navy); }
+.abom-wrap .stat-card .lbl {
+  font-size: 10px; color: var(--dgray); text-transform: uppercase;
+  letter-spacing: .4px; margin-top: 2px;
+}
+
+/* ── BOM TABLE ────────────────────────────────────────────────────── */
+.abom-wrap .bom-table-wrap {
+  background: var(--white); border-radius: 8px;
+  border: 1.5px solid var(--border); overflow-x: auto;
+}
+.abom-wrap table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+  min-width: 900px; margin: 0; background: transparent;
+}
+.abom-wrap thead tr { background: var(--navy); color: #fff; }
+.abom-wrap thead th {
+  padding: 9px 10px; text-align: center; font-size: 11px; font-weight: 700;
+  letter-spacing: .3px; white-space: nowrap; position: sticky; top: 0; z-index: 2;
+  border: none; color: #fff;
+}
+.abom-wrap thead th.left { text-align: left; }
+
+.abom-wrap .sec-row td {
+  background: var(--blue); color: #fff;
+  font-weight: 700; font-size: 11px; padding: 6px 10px;
+  letter-spacing: .5px; text-transform: uppercase;
+  border-top: 2px solid var(--navy);
+}
+.abom-wrap .sec-row td span { opacity: .7; font-weight: 400; margin-left: 8px; font-size: 10px; }
+
+.abom-wrap tbody tr.data-row:hover > td { background: #EEF4FF; }
+.abom-wrap tbody tr.data-row td {
+  padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+
+/* Row modifiers — precedence is decided in Bom_engine::row_class(),
+   never here. Colours come only from the palette above; no new variable
+   is introduced and none is renamed.
+
+     is-conflict  --red      ERP code on two different parts
+     is-noerp     --orange   no ERP code yet
+     is-optional  --lgreen   feature-gated item
+     is-manual    --lblue    MANUAL formula, quantity needs a human
+
+   'review' severity deliberately has NO row tint — it shows as a STATUS
+   badge only. --lyellow belongs to the QTY cell (.qty-edited). */
+.abom-wrap tbody tr.data-row.is-conflict > td { background: #F7D9D9; }
+.abom-wrap tbody tr.data-row.is-noerp   > td { background: var(--orange); }
+.abom-wrap tbody tr.data-row.is-optional > td { background: var(--lgreen); }
+.abom-wrap tbody tr.data-row.is-manual  > td { background: var(--lblue); }
+
+.abom-wrap tbody tr.data-row.is-conflict:hover > td,
+.abom-wrap tbody tr.data-row.is-noerp:hover   > td,
+.abom-wrap tbody tr.data-row.is-optional:hover > td,
+.abom-wrap tbody tr.data-row.is-manual:hover  > td { filter: brightness(.96); }
+
+.abom-wrap .erp-cell {
+  font-family: 'Courier New', monospace; font-size: 11px;
+  color: var(--navy); font-weight: 700;
+}
+.abom-wrap .erp-new {
+  font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700;
+  color: var(--red); background: var(--orange); padding: 2px 6px; border-radius: 3px;
+}
+.abom-wrap .desc-cell { max-width: 300px; }
+.abom-wrap .part-cell { font-family: 'Courier New', monospace; font-size: 11px; color: #444; }
+
+.abom-wrap .qty-input {
+  width: 55px; padding: 3px 6px; border: 1.5px solid var(--border);
+  border-radius: 4px; font-size: 12px; font-weight: 700; text-align: center;
+  font-family: Arial; background: #FAFCFF; height: auto; box-shadow: none;
+}
+.abom-wrap .qty-input:focus { border-color: var(--blue); outline: none; box-shadow: none; }
+/* "Qty edited during review (marked ✎)" — the design legend's own use
+   of --lyellow. QTY cell only, never the row. */
+.abom-wrap .qty-input.qty-edited,
+.abom-wrap .qty-input.manual { background: var(--lyellow); border-color: #E0C050; }
+.abom-wrap .qty-static { font-weight: 700; }
+.abom-wrap .qty-static.qty-edited {
+  background: var(--lyellow); border: 1.5px solid #E0C050;
+  border-radius: 4px; padding: 2px 6px; display: inline-block;
+}
+.abom-wrap .qty-mark { color: var(--warn); font-weight: 700; margin-left: 3px; }
+
+.abom-wrap .formula-tag {
+  display: inline-block; padding: 2px 7px; border-radius: 10px;
+  font-size: 10px; font-weight: 700; white-space: nowrap;
+}
+.abom-wrap .tag-pending  { background: var(--orange);  color: var(--red); }
+.abom-wrap .tag-edited   { background: var(--lyellow); color: var(--warn); }
+.abom-wrap .tag-conflict { background: #F7D9D9; color: var(--red); }
+.abom-wrap .tag-review   { background: var(--gray); color: var(--dgray); }
+.abom-wrap .tag-manual   { background: var(--lblue); color: var(--navy); }
+.abom-wrap .tag-ok       { color: #B9C2D0; font-weight: 400; }
+
+.abom-wrap .remarks-cell { color: var(--dgray); font-size: 11px; max-width: 230px; }
+
+/* Empty state */
+.abom-wrap .empty-state { text-align: center; padding: 60px 20px; color: var(--dgray); }
+.abom-wrap .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.abom-wrap .empty-state h3 { font-size: 16px; margin-bottom: 6px; color: var(--navy); }
+.abom-wrap .empty-state p { font-size: 13px; }
+
+/* Section filter pills */
+.abom-wrap .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.abom-wrap .pill {
+  padding: 4px 12px; border-radius: 12px; font-size: 11px; cursor: pointer;
+  border: 1.5px solid var(--border); background: var(--white); font-weight: 600;
+  transition: all .12s;
+}
+.abom-wrap .pill.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+.abom-wrap .pill:hover:not(.active) { border-color: var(--blue); color: var(--blue); }
+.abom-wrap .pill:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* Review notes banner */
+.abom-wrap .action-banner {
+  background: #FFF3CD; border: 1.5px solid #FFD04A; border-radius: 7px;
+  padding: 10px 14px; margin-bottom: 14px; font-size: 11px; color: #7A5800;
+}
+.abom-wrap .action-banner strong { display: block; margin-bottom: 4px; font-size: 12px; }
+.abom-wrap .action-banner div { margin-top: 3px; line-height: 1.5; }
+
+/* Approval / signature block */
+.abom-wrap .approval-block {
+  margin-top: 18px; background: var(--white);
+  border: 1.5px solid var(--border); border-radius: 8px; padding: 14px 16px;
+}
+.abom-wrap .approval-block .ap-note {
+  font-size: 11px; color: var(--dgray); margin-bottom: 12px; line-height: 1.5;
+}
+.abom-wrap .ap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+/* abom_signoff_mode = 'internal' adds a fourth box. */
+.abom-wrap .ap-grid.ap-4 { grid-template-columns: repeat(4, 1fr); }
+.abom-wrap .ap-box {
+  border: 1.5px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; min-height: 108px;
+}
+.abom-wrap .ap-box .ap-role {
+  font-size: 10px; font-weight: 700; color: var(--navy);
+  text-transform: uppercase; letter-spacing: .4px;
+}
+.abom-wrap .ap-box .ap-line { border-bottom: 1px solid #999; margin-top: 34px; }
+.abom-wrap .ap-box .ap-line.ap-signed { margin-top: 14px; }
+.abom-wrap .ap-box .ap-recorded { font-size: 11px; color: #333; margin-top: 6px; font-weight: 700; }
+.abom-wrap .ap-box .ap-lbl {
+  font-size: 10px; color: #888; margin-top: 4px;
+  display: flex; justify-content: space-between;
+}
+
+/* ── GENERATE VIEW ONLY ───────────────────────────────────────────── */
+.abom-wrap .feature-list { display: flex; flex-direction: column; gap: 7px; }
+.abom-wrap .feature-item {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 11.5px; color: #333; cursor: pointer;
+}
+.abom-wrap .feature-item input[type="checkbox"] {
+  width: auto; margin: 2px 0 0 0; accent-color: var(--blue);
+}
+.abom-wrap .feature-item .fi-help { display: block; font-size: 10px; color: #888; line-height: 1.4; }
+.abom-wrap .plc-explain { font-size: 10.5px; color: var(--dgray); line-height: 1.5; margin-top: 5px; }
+.abom-wrap .override-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }
+.abom-wrap .override-flag {
+  display: inline-block; background: var(--red); color: #fff;
+  padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700;
+  letter-spacing: .4px; text-transform: uppercase;
+}
+.abom-wrap .field-error { color: var(--red); font-size: 10px; margin-top: 3px; display: block; }
+.abom-wrap .is-invalid { border-color: var(--red) !important; }
+.abom-wrap .abom-busy { opacity: .55; pointer-events: none; }
+
+/* Not-installed guard */
+.abom-wrap .abom-guard {
+  margin: 24px; padding: 18px 20px; background: #FFF3CD;
+  border: 1.5px solid #FFD04A; border-radius: 8px; color: #7A5800; font-size: 13px;
+}
+.abom-wrap .abom-guard h3 { color: var(--navy); font-size: 15px; margin-bottom: 8px; }
+.abom-wrap .abom-guard code {
+  background: var(--white); border: 1px solid var(--border);
+  padding: 1px 5px; border-radius: 3px; color: var(--navy); font-size: 12px;
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .abom-wrap .layout { flex-direction: column; }
+  .abom-wrap .sidebar {
+    width: 100%; min-width: 0;
+    border-right: none; border-bottom: 2px solid var(--border);
+  }
+  .abom-wrap .bom-actions { margin-left: 0; width: 100%; }
+  .abom-wrap .ap-grid,
+  .abom-wrap .ap-grid.ap-4 { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .abom-wrap * { transition: none !important; }
+}

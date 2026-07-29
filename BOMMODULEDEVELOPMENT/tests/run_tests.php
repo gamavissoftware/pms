@@ -291,9 +291,6 @@ check('  (item is genuinely MANUAL)',        'MANUAL', $conflict_item->formula_c
 $noerp_item = $items->get_item(3);            // FX5-16EX/ES, no ERP code
 check('no ERP code -> is-noerp',            'is-noerp', $engine->row_class($noerp_item));
 
-$review_item = $items->get_item(7);           // FX5-4LC, review
-check('review severity -> is-review',      'is-review', $engine->row_class($review_item));
-
 $optional_item = $items->get_item(20);        // MR-JE-70B, optional, severity none
 check('optional -> is-optional',         'is-optional', $engine->row_class($optional_item));
 
@@ -303,10 +300,42 @@ check('MANUAL only -> is-manual',          'is-manual', $engine->row_class($manu
 $clean_item = $items->get_item(1);            // FX5U-80MT/ESS, clean
 check('clean line -> no modifier',                 '', $engine->row_class($clean_item));
 
+// 'review' severity must NOT tint the row — it is a STATUS badge only.
+// FX5-4LC is MANUAL + review: it tints as MANUAL, not as review.
+$review_item = $items->get_item(7);
+check('review does NOT tint the row',      'is-manual', $engine->row_class($review_item));
+check('  review still badges',
+    array('REVIEW', 'MANUAL QTY'), $engine->status_badges($review_item));
+
+// MR-D05ULD3M-B is J4_STO + review, so no category applies either.
+$review_only = $items->get_item(14);
+check('review + non-MANUAL -> no tint',            '', $engine->row_class($review_only));
+check('  but still badges REVIEW',    array('REVIEW'), $engine->status_badges($review_only));
+
 // Every flag still reaches the STATUS column even when the row class
 // can only show one of them.
 $badges = $engine->status_badges($conflict_item);
 check('conflict line badges',   array('CONFLICT', 'MANUAL QTY'), $badges);
+
+// --lyellow belongs to the QTY cell, never the row.
+$sample = $fx5['lines'][0];
+check('qty cell clean by default',                 '', $engine->qty_cell_class($sample));
+$sample->is_overridden = 1;
+check('qty cell when overridden',        'qty-edited', $engine->qty_cell_class($sample));
+$sample->is_overridden = 0;
+
+// Row-class distribution across the whole master set — this is the
+// check that keeps the sheet from drifting back to 41% tinted.
+$dist = array('is-conflict' => 0, 'is-noerp' => 0, 'is-optional' => 0, 'is-manual' => 0, '' => 0);
+foreach ($items->all() as $it) {
+    $dist[$engine->row_class($it)]++;
+}
+check('distribution — is-conflict',   2, $dist['is-conflict']);
+check('distribution — is-noerp',      5, $dist['is-noerp']);
+check('distribution — is-optional',   7, $dist['is-optional']);
+check('distribution — is-manual',    24, $dist['is-manual']);
+check('distribution — untinted',     33, $dist['']);
+check('distribution — sums to 71',   71, array_sum($dist));
 
 // =====================================================================
 //  Summary

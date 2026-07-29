@@ -1,0 +1,92 @@
+/* =====================================================================
+   Automation BOM Generator — print stylesheet
+
+   Reproduces the @media print block of the approved design document,
+   plus the spec section 7 print requirements that the design does not
+   contradict: repeating table headers, no section header orphaned from
+   its first row, and forced background printing (the colour coding is
+   meaningful, not decorative).
+
+   Scoped under .abom-wrap like bom.css. The two rules that must reach
+   outside the wrapper — hiding the application's own navigation and
+   footer chrome so the sheet prints as a document — are marked and kept
+   inside @media print, so they cannot affect any screen rendering.
+   ===================================================================== */
+
+@media print {
+
+  /* Application chrome. These are the only selectors in the module that
+     name anything outside .abom-wrap, they apply to print only, and they
+     hide rather than restyle. */
+  #topnav,
+  .navbar,
+  .topbar,
+  .side-menu,
+  .footer,
+  .info-section,
+  .breadcrumb { display: none !important; }
+
+  .abom-wrap {
+    background: #fff;
+    font-size: 10.5px;
+  }
+
+  .abom-wrap .sidebar,
+  .abom-wrap .bom-actions,
+  .abom-wrap .filter-pills,
+  .abom-wrap .btn-reset,
+  .abom-wrap .btn-sm,
+  .abom-wrap .app-header .badge,
+  .abom-wrap .abom-guard { display: none !important; }
+
+  .abom-wrap .layout { display: block; }
+  .abom-wrap .main { overflow: visible; }
+  .abom-wrap .bom-area { padding: 0; overflow: visible; }
+
+  .abom-wrap .bom-topbar {
+    border: none; padding: 0 0 8px 0;
+    page-break-after: avoid; break-after: avoid;
+  }
+
+  .abom-wrap .bom-table-wrap { border-radius: 0; overflow: visible; border: none; }
+
+  .abom-wrap table { min-width: 0; font-size: 10.5px; }
+
+  /* Repeat the header on every page. */
+  .abom-wrap thead { display: table-header-group; }
+  .abom-wrap tfoot { display: table-footer-group; }
+  .abom-wrap thead th { position: static; }
+
+  .abom-wrap tr { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Never orphan a section header from its first data row. */
+  .abom-wrap tr.sec-row {
+    page-break-after: avoid; break-after: avoid;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+
+  .abom-wrap .stats-row .stat-card { padding: 6px 10px; }
+  .abom-wrap .stat-card .val { font-size: 16px; }
+
+  .abom-wrap .qty-input {
+    border: none; background: transparent !important;
+    -webkit-appearance: none; appearance: none;
+  }
+
+  .abom-wrap .approval-block {
+    page-break-inside: avoid; break-inside: avoid;
+    page-break-before: auto;
+  }
+
+  /* The colour coding carries meaning — force it to print. */
+  .abom-wrap,
+  .abom-wrap * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 10mm 8mm 12mm 8mm;
+  }
+}

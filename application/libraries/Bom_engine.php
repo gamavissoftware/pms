@@ -218,15 +218,24 @@ class Bom_engine
     //
     //   is-conflict  --red      ERP code assigned to two different parts
     //   is-noerp     --orange   no ERP code yet
-    //   is-review    --lyellow  flagged for engineering review
     //   is-optional  --lgreen   feature-gated item
     //   is-manual    --lblue    MANUAL formula, quantity needs a human
     //
-    // Precedence, first match wins — severity outranks category, which
-    // is the rule the source spec set out and the one the reviewing
-    // engineers expect. A conflict on a manual optional line shows as a
-    // conflict. Nothing is lost by this: the STATUS column carries every
-    // applicable badge regardless of which class won here.
+    // Precedence, first match wins — severity outranks category. A
+    // conflict on a manual optional line shows as a conflict.
+    //
+    // 'review' severity deliberately produces NO row tint. It applies to
+    // 29 of 71 master items; tinting them would put 41% of the sheet in
+    // a warning colour on a document that carries a customer approval
+    // signature, and would reduce is-manual to the 3 rows that happen to
+    // carry no severity. Review surfaces as a STATUS badge instead —
+    // nothing is lost, because the STATUS column carries every
+    // applicable badge regardless of which class wins the row.
+    //
+    // --lyellow is therefore reserved for the job the design's own
+    // legend gives it: "Qty edited during review (marked ✎)". That is a
+    // qty-edited class on the QTY CELL only, never the whole row — see
+    // qty_cell_class() below.
     //
     // PLC family colour coding is deliberately absent. A generated BOM
     // is always one family and the family is shown in the configuration
@@ -247,10 +256,6 @@ class Bom_engine
             return 'is-noerp';
         }
 
-        if ($item->issue_severity === 'review') {
-            return 'is-review';
-        }
-
         if (!empty($item->is_optional)) {
             return 'is-optional';
         }
@@ -260,6 +265,18 @@ class Bom_engine
         }
 
         return '';
+    }
+
+    /**
+     * Class for the QTY cell alone. --lyellow + the ✎ marker, exactly as
+     * the reference document does it. Never applied to the row.
+     *
+     * @param  object $line  a generated line (or a persisted abom_bom_line)
+     * @return string  '' when the quantity is the computed one
+     */
+    public function qty_cell_class($line)
+    {
+        return !empty($line->is_overridden) ? 'qty-edited' : '';
     }
 
     // -----------------------------------------------------------------
