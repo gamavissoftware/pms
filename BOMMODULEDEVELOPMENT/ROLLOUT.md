@@ -11,6 +11,34 @@ wholesale `rsync` would delete them. Copy the 27 files listed in step 4
 
 ---
 
+## The safe order — read this first
+
+The module is **invisible to every user until a grant exists**, and
+`abom_003_permissions.sql` deliberately creates none. That gives a rollout
+where nothing is visible to the business until everything has been
+verified on the real server.
+
+| | Do | Visible to |
+|---|---|---|
+| **1** | Deploy everything — tables, seed, permissions (zero grants), files, config, routes, nav | **nobody** |
+| **2** | Grant **one super admin only**, then run `POST_DEPLOY_CHECK.md` | that one person |
+| **3** | Print check — both PDFs against the released DF sheet | nobody |
+| **4** | Fill in `PERMISSIONS_WORKSHEET.md` and grant the real users | **the business** |
+| **5** | Later, on a different day: `abom_004_views_invoker.sql` | nobody |
+
+Steps 1–3 are invisible to normal users. **Step 4 is the first moment
+anything changes for anyone** — by which point it has all been exercised
+on the real server, on real data, by a real person.
+
+Step 5 is a **separate change with nothing to do with this module.** Do
+not bundle it: two unrelated changes in one window means an unexplained
+symptom has two candidate causes, and someone backs out the wrong one.
+
+There is **no point of no return in steps 1–3.** The Rollback section
+undoes all of it, and it has been rehearsed.
+
+---
+
 ## Before you start
 
 | | |
@@ -304,6 +332,68 @@ directory rather than file by file.
 `Abom.php` not `ABOM.php`; `views/abom/` not `views/Abom/`. Nothing here
 may be uploaded as `BOM.php` or into `views/BOM/` — those are the
 existing module's and must not be touched.
+
+### Collision check — run this BEFORE copying anything
+
+All 27 are **new** files. If any of those names already exists on the
+server, copying would overwrite something. This checks the server as it
+is right now, and changes nothing:
+
+```bash
+# from the project root on the SERVER, before unpacking
+COLLIDE=0
+for f in \
+  application/config/abom.php \
+  application/controllers/Abom.php \
+  application/helpers/abom_helper.php \
+  application/libraries/Abom_engine.php \
+  application/libraries/Abom_exporter.php \
+  application/libraries/Abom_permission_guard.php \
+  application/models/Abom_approval_model.php \
+  application/models/Abom_item_model.php \
+  application/models/Abom_master_model.php \
+  application/models/Abom_model.php \
+  application/views/abom \
+  assets/abom ; do
+  if [ -e "$f" ]; then echo "COLLISION: $f already exists"; COLLIDE=1; fi
+done
+[ "$COLLIDE" -eq 0 ] && echo "No collisions - safe to unpack" || echo "STOP - do not unpack"
+```
+
+**If anything collides, stop and change nothing.** Report every
+collision. Do not rename, do not overwrite, do not merge — a name clash
+means something is already using that name and the situation needs
+understanding first.
+
+This replaces the "get a production file listing" step that earlier
+drafts asked for. It is strictly stronger: a listing tells you what was
+there whenever it was taken, this tells you what is there at the moment
+you copy. A listing (`find application -type f | sort`) is still useful
+hygiene for other reasons, but it is **not a prerequisite** for this
+deployment — under rule 12 nothing that exists only on the server is ever
+touched, so the gap between server and local is irrelevant here. The only
+thing that mattered was collision, and this covers it.
+
+### The two modified files — expected diff
+
+`routes.php` and `nav-menu.php` are the only existing files that change.
+After editing, confirm the diff is **only yours**:
+
+```bash
+diff application/config/routes.php.bak-$STAMP application/config/routes.php
+diff application/views/common/nav-menu.php.bak-$STAMP application/views/common/nav-menu.php
+```
+
+Expected for `routes.php`: **16 added lines and nothing else** — the
+comment block plus 16 `$route['abom...']` entries, all appended at the
+end. No deletions, no changes above them.
+
+Expected for `nav-menu.php`: **one added block** — the `<?php ... ?>`
+gate plus one `<li>` for "Automation BOM Generator", roughly 30 lines, in
+one place. No deletions.
+
+Anything else in either diff is somebody else's change. Stop and find out
+whose before proceeding.
 
 ---
 
