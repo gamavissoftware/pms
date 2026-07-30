@@ -253,10 +253,22 @@ and stores `system_users.user_id`. Measured against production data:
 
 | Check | Result |
 |---|---|
-| distinct values in `module_capablity.role_id` | 132, ranging 12–238 |
-| matching `system_users.user_id` | **131 of 132** |
-| matching `user_role.user_role_id` | 40 of 132 |
+| rows in `module_capablity` | 2,614 |
+| distinct values in `module_capablity.role_id` | 131, ranging 61–238 |
+| matching `system_users.user_id` | **131 of 131 — every one** |
+| matching `user_role.user_role_id` | 39 of 131 |
+| values above `MAX(user_role.user_role_id)` | 92 of 131 |
 | `user_role` size | 102 rows, max id 104 — below the observed maximum of 238 |
+
+*Corrected 2026-07-30.* This table previously read "132 distinct,
+ranging 12–238, 131 of 132 matching, 40 matching `user_role`". Those
+numbers were wrong. Re-measured against the untouched production dump
+(`module_capablity` extracted into a throwaway `abom_baseline` schema so
+the sandbox's own test grants could not contaminate the count), the
+correspondence is unanimous: there is no orphan value, and the single
+exception implied by "131 of 132" never existed. The finding is stronger
+than it was written, not weaker. The error was caught by mechanically
+re-running every factual claim in this document rather than re-reading it.
 
 The application agrees: every item in
 `application/views/common/nav-menu.php` gates on
@@ -575,23 +587,185 @@ need different remedies:
   (`Master_profile_guard::deny`): flashdata plus a redirect for a page,
   403 JSON for AJAX
 
-**Read paths are deliberately NOT gated.** `view`, `list`, `print`,
-`export` and `reference` stay open to any logged-in user. An approver
-holding only `APPROVALS` must be able to open the BOM they are approving,
-and the spec defines no view permission. Gating reads on `generate` would
-have locked approvers out of their own job.
+**Read paths were left open at this point** — `view`, `list`, `print`,
+`export` and `reference` accepted any logged-in user, on the reasoning
+that an approver holding only `APPROVALS` must be able to open the BOM
+they are approving and the spec defines no view permission. That reasoning
+was sound; the conclusion was too broad. **Superseded by §0.14**, which
+gates reads on holding *any one* of the three permissions — which
+protects the approver without leaving the whole BOM library open to every
+account in the company.
 
-**Verified:**
+Six regression assertions added to the separation-of-duty suite.
 
-| Actor | generate | save | view / list / export |
+---
+
+## 0.14 Full guard-surface audit — `reject` and `reopen` were ungated
+
+§0.9.2 and §0.13 were each found by accident, while checking a sentence
+that was about to be written into a document. Two accidents is a pattern,
+not luck, so the whole guard surface was audited rather than patched
+again: **every public entry point, every guard, in a table, because an
+empty cell is visible in a way an absent `if` is not.**
+
+`BOMMODULEDEVELOPMENT/tests/guard_matrix.php` builds it statically
+(tracking brace depth, resolving delegation so `approve()` shows the
+guards inside `workflow_action()`). A companion probe drives all 17 entry
+points over HTTP as three real users. Both are reproducible.
+
+**The audit found a third instance of the same defect.** `reject` and
+`reopen` had no permission check whatsoever — not even the per-stage one
+the other transitions use, because §6.3 says "any stage may reject" and
+that was implemented literally as *anyone*:
+
+```
+  ungranted REJECT      HTTP 200  status now 'rejected'
+  ungranted REOPEN      HTTP 200  status now 'draft'
+  approval trail rows written by user 63: 2
+```
+
+A user with zero grants rejected a submitted BOM, reopened it, and left
+their name twice in the approval history. This is worse than §0.13: the
+generate gap let an ungranted user create their own BOM, this one let them
+interfere with someone else's and write to the audit trail.
+
+**The fix.** `reject` requires `check` (rejection is an act of approval
+authority, not of merely being logged in). `reopen` requires `save`
+(returning a rejected BOM to draft is a generator action). Both now answer
+403 and write nothing.
+
+**Read paths, per §0.13's supersession.** A single
+`Abom::require_any_perm()` gates `view`, `reference`, `bom_list` and
+`export` on holding **any one** of `generate` / `check` / `master_edit`.
+The approver case was re-verified after the change and still passes — an
+`APPROVALS`-only user reads every BOM and exports all three formats.
+
+**Measured access matrix, after the fixes** (`REDIRECT` = flashdata +
+redirect for a page request, `403` = JSON refusal for AJAX, `422` = the
+request was authorised and then refused by workflow state or separation of
+duty, which is the correct answer for a permitted user at the wrong time):
+
+| Entry point | no grants | `APPROVALS` only | all three |
 |---|---|---|---|
-| no grants | redirected | **403**, wrote nothing | — |
-| `APPROVALS` only | redirected | 403 | **200** |
-| `GENERATOR` + `APPROVALS` | 200, 42 rows | 200, `ABOM-1` | 200 |
+| `index` | REDIRECT | REDIRECT | REDIRECT |
+| `generate` | REDIRECT | REDIRECT | ALLOWED |
+| `generate_ajax` | 403 | 403 | ALLOWED |
+| `save` | 403 | 403 | ALLOWED |
+| `save_line_qty` | 403 | 403 | ALLOWED |
+| `acknowledge_line` | 403 | 403 | ALLOWED |
+| `submit` | 403 | 403 | 422 |
+| `approve` | 403 | 403 | 422 |
+| `reject` | **403** | 422 | 422 |
+| `reopen` | **403** | 403 | 422 |
+| `create_revision` | 403 | 403 | 422 |
+| `view` | **REDIRECT** | ALLOWED | ALLOWED |
+| `printable` | **REDIRECT** | ALLOWED | ALLOWED |
+| `bom_list` | **REDIRECT** | ALLOWED | ALLOWED |
+| `reference` | **REDIRECT** | ALLOWED | ALLOWED |
+| `export` csv/xlsx/pdf | **REDIRECT** | ALLOWED | ALLOWED |
 
-Six regression assertions added to the separation-of-duty suite, which is
-now 29. Both the closed URL and the still-open read path are covered, so
-neither can silently reverse.
+Bold cells changed in this pass. `index` redirects for everyone by
+design — it is a router to `generate` or `bom_list`, not a screen.
+
+### 0.14.1 Object-level checks — what is enforced and what is a decision
+
+Permission answers *may this user do this kind of thing*. It does not
+answer *may they do it to this particular record*. Probed separately:
+
+| Question | Measured | Status |
+|---|---|---|
+| `generate` holder edits a line on **someone else's** draft | **succeeds** (qty 1 → 999) | **accepted, see below** |
+| `APPROVALS` holder advances a BOM they are unconnected to | refused (422) | see caveat below |
+| `/abom/view/{non-existent id}` | 404 | enforced |
+| `/abom/view/{soft-deleted id}` | 404 | enforced |
+| `export` of a soft-deleted BOM | 404 | enforced |
+| soft-deleted BOM in `bom_list` | absent | enforced |
+| `/abom/view/{superseded id}` | renders, 0 editable qty inputs | enforced |
+| editing a line on a superseded BOM | 403 | enforced |
+| `line_id` from BOM B posted with `bom_id` of BOM A | 404, nothing written | enforced |
+| same smuggling on `acknowledge_line` | 422, `is_confirmed` stayed 0 | enforced |
+
+**ACCEPTED, DELIBERATE: BOMs have no per-user ownership.** Any holder of
+`AUTOMATION BOM GENERATOR` may edit any BOM in `draft`. This is a
+recorded decision, not an oversight:
+
+- The spec defines no owner column and no ownership rule, and
+  `abom_bom` has no `owner_id`. Inventing one is a schema and behaviour
+  change beyond this module's brief.
+- It matches how the rest of the PMS works — DF dispatch plans and
+  master records are editable by anyone holding the capability.
+- It is the behaviour the business needs. A production engineer who is
+  away should not block their colleague from correcting a BOM before
+  submission.
+- The exposure is bounded: only `draft` BOMs are editable at all, every
+  change is attributed in `abom_audit_log`, and the moment a BOM is
+  submitted the qty inputs disappear for everyone.
+
+If per-user ownership is ever wanted, it is an `owner_id` column plus one
+check in `save_line_qty` — not a redesign. Listed as future work.
+
+**Caveat on the second row, stated precisely.** The 422 comes from
+workflow state and separation-of-duty rules, **not** from an ownership
+check — there is no code asking "is this approver connected to this BOM".
+The refusal is real and reproducible, but it must not be described as
+object-level authorisation, because a future workflow change could remove
+it without anyone realising a protection was lost.
+
+### 0.14.2 `master_edit` grants nothing today
+
+`AUTOMATION BOM MASTER ITEMS` is defined in `abom_perms`, is created by
+`abom_003_permissions.sql`, and is accepted by `require_any_perm()` as one
+of the three read keys. **No screen consumes it**, because the master-item
+maintenance screens are not part of this module — item, section, formula
+and PLC-rule editing is done in SQL. Granting it today confers read access
+to BOM screens and nothing more.
+
+This is recorded rather than removed, because removing the submodule row
+later would orphan any grants made against it. See the future-work entry.
+
+### 0.14.3 CSRF — a known, accepted, application-level risk
+
+`config['csrf_protection']` is **FALSE application-wide** and this module
+does not change it. Every module POST endpoint — `save`, `save_line_qty`,
+`submit`, `approve`, `reject`, `reopen`, `create_revision`,
+`acknowledge_line` — is therefore vulnerable to cross-site request forgery
+in exactly the same way as every other POST endpoint in the PMS. The
+module inherits this posture; it does not add to it, and it is out of
+scope to fix here.
+
+**Stated as accepted, deliberately not fixed.** Enabling it means setting
+`csrf_protection = TRUE` in `application/config/config.php` and then
+adding the CSRF token to **every** AJAX call and form in the entire
+application — several hundred call sites across all existing controllers
+and views — because CI3's CSRF check is global and unconditional: the day
+it is switched on, every POST in the PMS that does not carry a valid token
+starts failing. That is an application-wide project with its own testing
+and rollback plan, not a line in a module changelog.
+
+### 0.14.4 Deliberate blanks in the matrix
+
+Every cell the matrix leaves empty, and why:
+
+- **`index` has no permission, workflow or object guard.** It only
+  redirects to `generate` or `bom_list`, both of which are gated. It
+  reaches no data and renders no view.
+- **`__construct` has only the session check.** Table and config guards
+  are per-action because the diagnostics differ per action; putting them
+  in the constructor would mean every route returned the same unhelpful
+  message.
+- **`generate_ajax`, `save`, `submit`, `approve`, `reject`, `reopen`,
+  `create_revision` have no `object/id` cell.** They resolve the BOM
+  through the model, which filters `deleted_at IS NULL`, and answer 404 or
+  422 on a miss rather than calling `show_404()` — so the guard exists but
+  under a different name. `save_line_qty` and `acknowledge_line` were
+  probed directly for cross-BOM id smuggling (both refuse).
+- **`generate_ajax` and `save` have no `workflow` cell.** Neither acts on
+  an existing BOM: one computes a preview, the other creates a new BOM in
+  `draft`. There is no prior state to validate.
+- **No entry point has an ownership cell.** Accepted by design, §0.14.1.
+- **`export` has no workflow cell.** Exporting is read-only and valid in
+  every status, including superseded — a superseded BOM must remain
+  printable for the record.
 
 ---
 
@@ -725,7 +899,7 @@ state, not print layout.
 
 `BOMMODULEDEVELOPMENT/tests/` — standalone, no CodeIgniter bootstrap and
 no database. Parses `abom_seed.sql` directly and drives the real
-`application/libraries/Bom_engine.php`.
+`application/libraries/Abom_engine.php`.
 
 ```bash
 php BOMMODULEDEVELOPMENT/tests/run_tests.php      # spec §5.1 suite
@@ -738,3 +912,42 @@ iQ-R 42 lines — are asserted, and cross-checked line by line against the
 dataset embedded in the approved design document: exact match on part
 number and quantity, in order, for both reference configurations, with
 total quantities 74 and 129.
+
+---
+
+## 4. Future work — carried forward, not done here
+
+Each of these is a deliberate decision to defer, with the trigger that
+should bring it back.
+
+1. **Wire `AUTOMATION BOM MASTER ITEMS` before any master-item screen
+   ships.** The permission exists and is grantable today, but no screen
+   consumes it (§0.14.2) — item, section, formula and PLC-rule editing is
+   done in SQL. **If** master-item maintenance screens are ever built,
+   every one of them must call `require_perm('master_edit')` before the
+   first of them is deployed. Shipping such a screen without that call
+   would repeat §0.13 exactly: a declared permission that gates nothing,
+   on the module's most sensitive data — the seed every BOM is generated
+   from. `PERMISSIONS_WORKSHEET.md` says plainly that the grant confers
+   nothing today, so nobody grants it expecting protection that is not
+   there.
+
+2. **Six views carry a host-pinned definer.** `SQL SECURITY INVOKER` is
+   the right fix (§0.11) and `abom_004_views_invoker.sql` is written and
+   rehearsed, with the six current definitions captured verbatim in
+   `abom_004_views_invoker_ROLLBACK.sql`. **Deliberately not bundled with
+   this module** — it touches host application objects, so it lands as its
+   own reviewed change after this module is verified in production, and
+   not on the same evening.
+
+3. **Per-user BOM ownership**, if wanted: an `owner_id` column on
+   `abom_bom` plus one check in `save_line_qty`. Currently any `generate`
+   holder may edit any draft, accepted and reasoned in §0.14.1.
+
+4. **CSRF protection** is off application-wide and stays off (§0.14.3).
+   Trigger: an application-wide security pass, not a module change.
+
+5. **`Database/abom_003_permissions.sql` prints suggested grants as
+   comments and creates none.** Ongoing administration — a new engineer,
+   a leaver, a role change — is manual `module_capablity` maintenance,
+   the same as every other module in the PMS. Per user, not per role.

@@ -447,9 +447,23 @@ class Abom extends CI_Controller
             $r = $this->Abom_approval_model->advance($bom, $user_id, $user_name, $comment);
 
         } elseif ($what === 'reject') {
+            // Spec 6.3: any stage may reject. A rejector is therefore
+            // someone who holds approval authority, not merely anyone
+            // logged in. Without this an ungranted user could reject and
+            // reopen BOMs and leave their name in the approval trail.
+            if (!$this->has_perm('check')) {
+                $this->output->set_status_header(403);
+                $this->respond(false, 'You do not have permission to reject a BOM.');
+            }
             $r = $this->Abom_approval_model->reject($bom, $user_id, $user_name, $comment);
 
         } elseif ($what === 'reopen') {
+            // Reopening returns a rejected BOM to draft for editing,
+            // which is a generator action.
+            if (!$this->has_perm('save')) {
+                $this->output->set_status_header(403);
+                $this->respond(false, 'You do not have permission to reopen a BOM.');
+            }
             $r = $this->Abom_approval_model->reopen($bom, $user_id, $user_name, $comment);
 
         } else {
@@ -491,6 +505,10 @@ class Abom extends CI_Controller
     public function export($format = 'csv', $bom_id = 0)
     {
         if (!$this->require_tables()) { return; }
+
+        if (!$this->require_any_perm()) {
+            return;
+        }
 
         $this->load->model('Abom_model');
         $bom = $this->Abom_model->get_bom((int) $bom_id);
@@ -625,6 +643,10 @@ class Abom extends CI_Controller
             return;
         }
 
+        if (!$this->require_any_perm()) {
+            return;
+        }
+
         $this->load->model('Abom_model');
 
         $filters = array(
@@ -650,6 +672,10 @@ class Abom extends CI_Controller
     public function view($bom_id = 0)
     {
         if (!$this->require_tables()) {
+            return;
+        }
+
+        if (!$this->require_any_perm()) {
             return;
         }
 
@@ -679,6 +705,10 @@ class Abom extends CI_Controller
     public function reference($key = 'iqr')
     {
         if (!$this->require_tables()) {
+            return;
+        }
+
+        if (!$this->require_any_perm()) {
             return;
         }
 
@@ -1270,6 +1300,52 @@ class Abom extends CI_Controller
         }
 
         $message = 'You do not have permission to use the Automation BOM generator. '
+                 . 'Ask an administrator to grant you access.';
+
+        if ($this->input->is_ajax_request()) {
+            $this->output->set_status_header(403);
+            $this->output->set_content_type('application/json');
+            echo json_encode(array('status' => 0, 'message' => $message));
+            return false;
+        }
+
+        $this->session->set_flashdata(
+            'message',
+            '<div class="alert alert-danger alert-dismissable">' . $message . '</div>'
+        );
+        redirect(page_url . 'Dashboard');
+
+        return false;
+    }
+
+    /**
+     * Gate a READ path on holding ANY of the module's three permissions.
+     *
+     * Reads cannot be gated on a single permission: an approver holding
+     * only APPROVALS must be able to open the BOM they are approving, and
+     * the spec defines no view permission. But "open to any logged-in
+     * user" is a wider door than that argument needs — it would let every
+     * account in the company list and export every automation BOM, part
+     * numbers and all, as XLSX or PDF.
+     *
+     * Holding any one of the three is the narrowest rule that still lets
+     * every legitimate reader in.
+     *
+     * @return bool
+     */
+    private function require_any_perm()
+    {
+        if (!$this->require_permissions_configured()) {
+            return false;
+        }
+
+        foreach (array('generate', 'check', 'master_edit') as $action) {
+            if ($this->has_perm($action)) {
+                return true;
+            }
+        }
+
+        $message = 'You do not have access to Automation BOMs. '
                  . 'Ask an administrator to grant you access.';
 
         if ($this->input->is_ajax_request()) {

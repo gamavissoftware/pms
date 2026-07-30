@@ -73,18 +73,40 @@ Names: ______________________________________________________________
 
 ### 3. `AUTOMATION BOM MASTER ITEMS`
 
-**Allows:** editing the 71 master line items — descriptions, ERP codes,
-base quantities, which feature gates an item.
+> **READ THIS FIRST: today this permission grants nothing.**
+>
+> The screens for editing master items **do not exist yet**. Item,
+> section, formula and PLC-rule changes are made in SQL by a developer,
+> and no screen in this module asks for this permission before allowing
+> an edit — because there is no such screen to ask.
+>
+> Granting it today gives a person read access to the BOM screens (the
+> same as either other permission) **and nothing else**. It does not
+> enable master-data editing, and withholding it does not prevent
+> master-data editing.
+>
+> **You may leave this list empty.** Nothing breaks, and nobody loses a
+> capability they would otherwise have had. It exists now so that grants
+> are already in place, and already thought about, on the day the screens
+> are built.
 
-**Risk of over-granting: the highest of the three, and the least
-obvious.** Approving a BOM affects one document, and it is signed, dated
-and recorded in the approval trail. Editing a master item silently
-changes **what every future BOM generates** — a changed quantity or ERP
-code propagates into every BOM generated afterwards, with no signature on
-it and nobody reviewing the change.
+**Will allow, once those screens exist:** editing the 71 master line
+items — descriptions, ERP codes, base quantities, which feature gates an
+item.
 
-**Keep this the shortest list.** Two or three people who own the master
-data.
+**Risk of over-granting, once it does something: the highest of the
+three, and the least obvious.** Approving a BOM affects one document, and
+it is signed, dated and recorded in the approval trail. Editing a master
+item silently changes **what every future BOM generates** — a changed
+quantity or ERP code propagates into every BOM generated afterwards, with
+no signature on it and nobody reviewing the change.
+
+That is why it is worth deciding the names now rather than later: the
+decision is the hard part, and it should not be made in a hurry on the
+day a new screen ships.
+
+**Keep this the shortest list** — or empty. Two or three people who own
+the master data.
 
 ```
 Names: ______________________________________________________________
@@ -151,8 +173,15 @@ SELECT s.submodule,
 Confirm before going live:
 
 - `AUTOMATION BOM APPROVALS` has **2 or more** people.
-- `AUTOMATION BOM MASTER ITEMS` is the shortest list.
+- `AUTOMATION BOM MASTER ITEMS` is the shortest list, **or empty** — it
+  grants nothing today, and that is expected, not a mistake.
 - Every name is someone who should be there.
+
+One more thing that is easy to get wrong: **holding any one of the three
+permissions lets a person read every BOM** — view, print, and export to
+CSV, Excel and PDF. The three lists differ in what a person may *change*,
+not in what they may *see*. If someone should not see the BOM library at
+all, they belong on none of the three lists.
 
 ---
 

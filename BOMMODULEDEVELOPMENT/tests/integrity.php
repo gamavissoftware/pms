@@ -62,9 +62,27 @@ $patterns = array(
     'assets/abom/*',
     'Database/abom_*.sql',
     'BOMMODULEDEVELOPMENT/tests/*.php',
-    'BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md',
-    'BOMMODULEDEVELOPMENT/ROLLOUT.md',
-    'BOMMODULEDEVELOPMENT/NAV_SNIPPET.md',
+    // Globbed, NOT enumerated. Three module documents were named here
+    // individually, and PERMISSIONS_WORKSHEET.md and POST_DEPLOY_CHECK.md —
+    // both written later — were therefore invisible to this check: edited
+    // without being reported CHANGED, and created without being reported
+    // NEW. An enumerated list only ever covers what was already thought
+    // of, which is the opposite of what this file is for. The four
+    // read-only input documents are excluded below so they stay in
+    // $inputs, where a checksum change means the spec moved.
+    'BOMMODULEDEVELOPMENT/*.md',
+    'BOMMODULEDEVELOPMENT/*.sql',
+);
+
+/**
+ * Read-only handover inputs live in the same directory as the module's own
+ * documents, so the glob above sweeps them up. They belong in $inputs.
+ */
+$input_names = array(
+    'BOMMODULEDEVELOPMENT/Automation_BOM_Module_CI3_Spec.md',
+    'BOMMODULEDEVELOPMENT/CLAUDE_CODE_PROMPT.md',
+    'BOMMODULEDEVELOPMENT/abom_schema.sql',
+    'BOMMODULEDEVELOPMENT/abom_seed.sql',
 );
 
 /**
@@ -105,8 +123,9 @@ $owned = collect($root, $patterns);
 
 // The manifest cannot checksum itself: writing it changes its own hash,
 // which would report CHANGED on every run.
-$owned = array_values(array_filter($owned, function ($rel) {
-    return $rel !== 'BOMMODULEDEVELOPMENT/tests/manifest.json';
+$owned = array_values(array_filter($owned, function ($rel) use ($input_names) {
+    return $rel !== 'BOMMODULEDEVELOPMENT/tests/manifest.json'
+        && !in_array($rel, $input_names, true);
 }));
 
 // ---------------------------------------------------------------------
