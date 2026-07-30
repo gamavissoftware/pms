@@ -75,3 +75,14 @@ $route['abom/print/(:num)']     = 'abom/printable/$1';
 $route['abom/save']             = 'abom/save';                // POST, AJAX
 $route['abom/save_line_qty']    = 'abom/save_line_qty';        // POST, AJAX
 $route['abom/list']             = 'abom/bom_list';
+
+// Approval workflow (step 6) — all POST, AJAX
+$route['abom/submit/(:num)']          = 'abom/submit/$1';
+$route['abom/approve/(:num)']         = 'abom/approve/$1';
+$route['abom/reject/(:num)']          = 'abom/reject/$1';
+$route['abom/reopen/(:num)']          = 'abom/reopen/$1';
+$route['abom/create_revision/(:num)'] = 'abom/create_revision/$1';
+$route['abom/acknowledge_line']       = 'abom/acknowledge_line';
+
+// Export (step 7) — csv | xlsx | pdf
+$route['abom/export/(:any)/(:num)']   = 'abom/export/$1/$2';

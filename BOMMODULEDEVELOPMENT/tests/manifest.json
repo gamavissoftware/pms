@@ -1,6 +1,6 @@
 {
     "owned": {
-        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "4d6987bdbb1fa9b2793648af88d532ba",
+        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "51e1b0cec3e0bee9b0cb61479a14ede6",
         "BOMMODULEDEVELOPMENT/tests/case_audit.php": "26f56c2d2a1bb1f877a326eda733c4a4",
         "BOMMODULEDEVELOPMENT/tests/design_diff.php": "172fbb77f912cc62d551cc1e79f21a7a",
         "BOMMODULEDEVELOPMENT/tests/dump_reference.php": "6159bced10bc99061b7ff0a66bc882d8",
@@ -12,12 +12,13 @@
         "BOMMODULEDEVELOPMENT/tests/stubs.php": "e9b1d531851cda41bdecc9a7cbaace67",
         "Database/abom_001.sql": "bfc60a87f680795d5f9991e6f31e564a",
         "Database/abom_002_seed.sql": "995bde6cae7764c85d700ab943d6ed85",
+        "Database/abom_003_permissions.sql": "03e471bc9b9d74943ae9c8985fdade10",
         "application/config/abom.php": "3524a4ff9820ecd58fd08b94dd5b42e1",
         "application/controllers/Abom.php": "6c784eb91ff8d462d53698b833cf7279",
         "application/helpers/abom_helper.php": "94054264e422f0e73cd6b16b27697f39",
         "application/libraries/Abom_engine.php": "c28e440cef2ff758ab8ff24ef4cb4ca4",
         "application/libraries/Abom_exporter.php": "6dc205a65800a0300d950e3d98e0a94d",
-        "application/libraries/Abom_permission_guard.php": "c18a75e22e6b8f7751b6a8b5656ecc61",
+        "application/libraries/Abom_permission_guard.php": "88b64a7e48b21755a57449f730abab6a",
         "application/models/Abom_approval_model.php": "1692e0797b4c1865545c5865a7b7c939",
         "application/models/Abom_item_model.php": "bcff73e7212f65d30c254f19180aca8b",
         "application/models/Abom_master_model.php": "21d67464a7832152c57a99af12aac6e4",
@@ -41,7 +42,7 @@
         "assets/abom/abom.js": "f7bb0ff45ed8c05aa33b6b9dd80e054c"
     },
     "appended": {
-        "application/config/routes.php": "bc2036d7f5d4712b4afbf441b19f4f84"
+        "application/config/routes.php": "eae5e8897658a5a1093a06f4dd1281f2"
     },
     "inputs": {
         "BOMMODULEDEVELOPMENT/Automation_BOM_Module_CI3_Spec.md": "260bdd33d1ea2d15bf68b28b2e56c24d",

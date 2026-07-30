@@ -160,15 +160,28 @@ class Abom_permission_guard
             return false;
         }
 
+        // `module_capablity`.`role_id` holds a USER id, not a role id,
+        // despite the column name. Verified against production data:
+        // 131 of its 132 distinct values match system_users.user_id,
+        // only 40 match user_role.user_role_id, and the values run to
+        // 238 while user_role tops out at 104.
+        //
+        // application/views/common/nav-menu.php does the same thing —
+        // `->where('role_id', $user_id)` — so this matches the
+        // application's own convention, not just the data.
+        //
+        // (Master_profile_guard's use of $session['role'] is a different
+        // check against a different table, user_role, and is correct
+        // there.)
         $session = $this->CI->session->userdata('logged_in');
-        $role_id = !empty($session['role']) ? (int) $session['role'] : 0;
+        $user_id = !empty($session['user_id']) ? (int) $session['user_id'] : 0;
 
-        if ($role_id <= 0) {
+        if ($user_id <= 0) {
             return false;
         }
 
         return $this->CI->db->from('module_capablity')
-            ->where('role_id', $role_id)
+            ->where('role_id', $user_id)
             ->where('moduleid', $module_id)
             ->where('submoduleid', $submodule_id)
             ->where('submodule_access', 1)

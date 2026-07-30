@@ -17,8 +17,28 @@ wholesale `rsync` would delete them. Copy the 27 files listed in step 4
 |---|---|
 | Take a database backup | `mysqldump -u USER -p DBNAME > backup_before_abom.sql` |
 | Confirm PHP | must be **7.4** (`ea-php74`). The module is 7.4-safe; CodeIgniter 3.1.4 is not PHP 8 clean. |
-| Confirm ext-zip | cPanel → Select PHP Version → Extensions → `zip`. **Only needed for Excel export.** CSV and PDF work without it; if it is off, the module says so and offers the other two. |
+| Confirm ext-zip | **Run the probe below.** Only needed for Excel export; CSV and PDF work without it. |
 | Confirm MariaDB | 11.x. Proven against 11.4. |
+
+### ext-zip probe
+
+The XLSX writer needs `ZipArchive`. The module degrades gracefully
+without it — a 503 and a page offering CSV and PDF — but that is a
+mitigation, not a fix. Check before you start:
+
+```bash
+php -m | grep -i '^zip$' && echo "zip: OK" || echo "zip: MISSING"
+```
+
+Or, if you only have browser access, put this in a temporary file at the
+web root, load it, then delete it:
+
+```php
+<?php echo extension_loaded('zip') ? 'zip: OK' : 'zip: MISSING';
+```
+
+If missing: cPanel → **Select PHP Version** → **Extensions** → tick
+`zip`. No restart needed on cPanel. Re-run the probe to confirm.
 
 ---
 
@@ -33,7 +53,11 @@ SELECT id, modulename FROM system_modules WHERE id = 4;
 ```
 
 **`abom_tables` must be 0.** If it is not, STOP — something already owns
-that prefix. Note `max_submodule_id`; you need it in step 3.
+that prefix.
+
+You do **not** need `max_submodule_id` for anything — step 3 asks the
+database for the ids it assigns. The query is here only so you can see
+the table's state before and after.
 
 ---
 
@@ -67,28 +91,48 @@ loudly rather than overwriting. It is safe to run once and only once.
 
 ## Step 3 — permissions
 
-`Database/abom_003_permissions.sql` **is not written yet** — it needs the
-live `MAX(submodule.id)` from step 1. Send that number and it will be
-produced.
+```bash
+mysql -u USER -p DBNAME < Database/abom_003_permissions.sql
+```
 
-It will create three rows under module 4 (BOM CORRECTION TOOL):
+The script **never hardcodes an id.** `submodule.id` is `AUTO_INCREMENT`,
+so it inserts, asks the database what it assigned, and prints the result.
+It works the same on a scratch copy and on production.
 
-| submodule | covers |
-|---|---|
-| AUTOMATION BOM GENERATOR | generate, save |
-| AUTOMATION BOM APPROVALS | check, eng_approve, proc_approve |
-| AUTOMATION BOM MASTER ITEMS | master_edit |
+It pre-flights itself and **aborts without changing anything** if module 4
+is missing, if step 2 has not run, or if it has already been run — so it
+is safe to re-run by mistake.
 
-**Check** — note the three ids it created:
+Output looks like this. **Copy it; you need it in step 5.**
+
+```
+PASTE THIS INTO application/config/abom.php
+$config['abom_submodule_ids'] = array(
+    'generator'    => 907,
+    'approvals'    => 908,
+    'master_items' => 909,
+);
+
+generator  approvals  master_items  grant_rows_created  note
+907        908        909           27                  Grants mirrored from the existing module 4 submodule.
+```
+
+Your numbers will differ — that is the point.
+
+**Grants** are mirrored from whoever already holds the existing BOM
+Correction Tool submodule under module 4, so the same people can reach
+the new module. Adjust afterwards in `module_capablity` if that is not
+what you want. Note that **`module_capablity.role_id` holds a user id**,
+not a role id, despite the name — the whole application works that way.
+
+If `grant_rows_created` is 0, nobody has access yet; add rows explicitly.
+
+**Check:**
 
 ```sql
 SELECT id, moduleid, submodule, status FROM submodule
  WHERE moduleid = 4 ORDER BY id;
 ```
-
-Then grant them to the roles that should have them, in
-`module_capablity` (`role_id`, `moduleid = 4`, `submoduleid`,
-`submodule_access = 1`).
 
 ---
 
@@ -207,12 +251,21 @@ point — the module config is loaded explicitly by the controller.
 
 ## Step 7 — navigation
 
-**Not yet written.** It gates on the submodule id from step 3, so it
-comes with `abom_003_permissions.sql`. It will be a single `<li>` block
-for `application/views/common/nav-menu.php`, to paste at **line 1352** —
-between the `<?php }?>` that closes the M/cs Dispatch Report block
-(line 1350) and the `</ul>` at line 1354 — following the same
-`module_capablity` gate pattern the surrounding items use.
+The snippet is in **`BOMMODULEDEVELOPMENT/NAV_SNIPPET.md`**. Paste it
+into `application/views/common/nav-menu.php` at **line 1352** — between
+the `<?php }?>` that closes the M/cs Dispatch Report block (line 1350)
+and the `</ul>` at line 1354.
+
+It contains **no literal submodule id** — it reads the id from
+`application/config/abom.php`, so it is correct on every environment with
+no edit. If step 5 has not been done, no menu item renders rather than a
+broken one.
+
+Verified by pasting it at that exact line in the sandbox: the file lints,
+the item renders, the rest of the menu is unchanged, zero PHP errors.
+
+**Check:** `php -l application/views/common/nav-menu.php`, then load any
+page and click the item.
 
 ---
 
@@ -252,6 +305,38 @@ In order. Stop at the first failure.
 | 404 on `/abom/...` | step 6 not done | append the routes |
 | Blank page, no error | PHP 8 on the server | the app needs `ea-php74` |
 
-**Rollback:** remove the 27 files, revert the `routes.php` append, and
-`DROP TABLE` the eleven `abom_*` tables. Nothing outside the `abom_`
-prefix is touched at any point, so no existing data is at risk.
+**Rollback:** remove the 27 files, revert the `routes.php` append, remove
+the nav snippet, and `DROP TABLE` the eleven `abom_*` tables. To undo the
+permissions, delete the three `AUTOMATION BOM %` rows from `submodule`
+and their `module_capablity` grants. Nothing outside the `abom_` prefix
+is touched at any point, so no existing data is at risk.
+
+---
+
+## Step 9 — tear down the local test environment
+
+**Do this once the rollout is verified on the server, and not before.**
+
+Two Docker containers hold a copy of production data. They are bound to
+`127.0.0.1` only and nothing has left the machine, but they should not
+outlive the rollout.
+
+```bash
+docker rm -f abom-web abom-mysql
+docker network rm abom-net
+docker rmi abom-php74
+rm -rf ~/pms-sandbox
+```
+
+`~/pms-sandbox` also contains a copy of the application and a
+`database.php` pointing at the container, plus a sandbox-only login shim
+(`application/controllers/Abomdevlogin.php`) that bypasses
+authentication. **That file must never reach the server.** It is not in
+the step 4 file list and does not exist in the working tree.
+
+Confirm afterwards:
+
+```bash
+docker ps -a | grep abom     # expect nothing
+ls ~/pms-sandbox             # expect: no such directory
+```

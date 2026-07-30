@@ -242,6 +242,69 @@ must not call it.
 
 ---
 
+## 0.9 `module_capablity.role_id` holds a USER id
+
+The column is named `role_id` but stores `system_users.user_id`.
+Verified against production data in the container:
+
+| Check | Result |
+|---|---|
+| distinct values in `module_capablity.role_id` | 132, ranging 12–238 |
+| matching `system_users.user_id` | **131 of 132** |
+| matching `user_role.user_role_id` | 40 of 132 |
+| `user_role` size | 102 rows, max id 104 — below the observed maximum of 238 |
+
+The application agrees: `application/views/common/nav-menu.php` gates
+every menu item with `->where('role_id', $user_id)`.
+
+`Abom_permission_guard::allows()` originally used
+`$session['logged_in']['role']` and denied everyone. It now uses
+`$session['logged_in']['user_id']`, matching both the data and the
+application's own convention.
+
+Note that `Master_profile_guard`'s use of `$session['role']` is correct —
+it queries a different table (`user_role.user_role_id`) for a different
+purpose. Only `module_capablity` has the misleading column name.
+
+This was invisible to every offline test. It surfaced only when the
+approval button failed to appear for a user who demonstrably held the
+grant.
+
+---
+
+## 0.10 `abom_003_permissions.sql` is id-agnostic
+
+`submodule`.`id` is `AUTO_INCREMENT` (confirmed in the production dump:
+`MODIFY id int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=74`). The
+permissions script therefore never hardcodes an id — it inserts, reads
+`LAST_INSERT_ID()`, and prints the three assigned numbers for pasting
+into `application/config/abom.php`.
+
+Consequences: no dependency on a `MAX(submodule.id)` reading, no way for
+a stale number to make the script wrong, and identical behaviour on a
+scratch copy and on production.
+
+Proven in the container by forcing `AUTO_INCREMENT` to 907 — the script
+assigned 907/908/909, printed them, and the module picked them up from
+config with no code change.
+
+Also in the script:
+
+- **Pre-flight, inside the script** — aborts via `SIGNAL SQLSTATE
+  '45000'` if module 4 is missing, if `abom_item` does not exist
+  (001/002 not run), or if `AUTOMATION BOM %` submodules already exist.
+- **Transactional** — `START TRANSACTION` plus an `EXIT HANDLER FOR
+  SQLEXCEPTION` that rolls back and re-signals, so a partial permission
+  set cannot survive a failure.
+- **Safe to re-run** — verified: the second run aborted with a clear
+  message, exit code 1, and left the 3 submodules and 27 grants
+  untouched.
+- **Grants mirrored** from whoever already holds the existing module 4
+  submodule, rather than guessed. If module 4 has no other submodule,
+  none are created and the summary says so.
+
+---
+
 ## 1. Schema deltas — `abom_schema.sql` → `Database/abom_001.sql`
 
 ### 1.1 Three new columns on `abom_bom_line` — approved
