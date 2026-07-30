@@ -15,10 +15,62 @@ wholesale `rsync` would delete them. Copy the 27 files listed in step 4
 
 | | |
 |---|---|
-| Take a database backup | `mysqldump -u USER -p DBNAME > backup_before_abom.sql` |
+| Take a database backup | **See the box below — a plain `mysqldump` silently truncates on this database.** |
 | Confirm PHP | must be **7.4** (`ea-php74`). The module is 7.4-safe; CodeIgniter 3.1.4 is not PHP 8 clean. |
 | Confirm ext-zip | **Run the probe below.** Only needed for Excel export; CSV and PDF work without it. |
 | Confirm MariaDB | 11.x. Proven against 11.4. |
+
+### Database backup — and why the obvious command fails
+
+A plain `mysqldump` **aborts partway through this database** and leaves a
+file that looks like a backup:
+
+```
+mysqldump: Got error: 1449: "The user specified as a definer
+('u537620103_shuser'@'127.0.0.1') does not exist" when using LOCK TABLES
+```
+
+The database contains **6 views** whose `DEFINER` may not resolve in the
+context you run the dump from. In the rehearsal this produced an
+**870-byte file** — and nothing said so. The entire rollback plan rests
+on this backup, so it is verified, not assumed.
+
+```bash
+mysqldump -u USER -p --single-transaction --quick DBNAME > backup_before_abom.sql
+```
+
+`--single-transaction` avoids `LOCK TABLES` and so avoids the definer
+error. On MariaDB 11 the binary may be named `mariadb-dump`; either name
+works, `mysqldump` is normally a symlink.
+
+**Verify it before going further:**
+
+```bash
+ls -lh backup_before_abom.sql
+grep -c '^CREATE TABLE' backup_before_abom.sql
+tail -1 backup_before_abom.sql
+```
+
+- Size must be **tens of megabytes**, not kilobytes.
+- `CREATE TABLE` count should be around **287** (293 objects, 6 of which
+  are views and appear as `CREATE VIEW`).
+- The last line must read `-- Dump completed on ...`. If it does not, the
+  dump was truncated. **Do not proceed.**
+
+### Back up the two existing files this module modifies
+
+These are the **only** two files outside the module's own that change.
+Two `cp` commands now are the difference between a five-minute rollback
+and an outage.
+
+```bash
+STAMP=$(date +%Y%m%d-%H%M%S)
+cp application/config/routes.php            application/config/routes.php.bak-$STAMP
+cp application/views/common/nav-menu.php    application/views/common/nav-menu.php.bak-$STAMP
+ls -la application/config/routes.php.bak-* application/views/common/nav-menu.php.bak-*
+```
+
+Record `$STAMP`. The rollback section needs it.
 
 ### ext-zip probe
 
@@ -119,13 +171,58 @@ generator  approvals  master_items  grant_rows_created  note
 
 Your numbers will differ — that is the point.
 
-**Grants** are mirrored from whoever already holds the existing BOM
-Correction Tool submodule under module 4, so the same people can reach
-the new module. Adjust afterwards in `module_capablity` if that is not
-what you want. Note that **`module_capablity.role_id` holds a user id**,
-not a role id, despite the name — the whole application works that way.
+### Grants — the script creates NONE, on purpose
 
-If `grant_rows_created` is 0, nobody has access yet; add rows explicitly.
+`grant_rows_created` will be **0**. Nobody acquires the authority to
+approve an automation BOM because a script assumed it.
+
+The script's third output is a set of **commented-out** `INSERT`
+statements, one per user who already holds the existing BOM Correction
+Tool submodule, annotated with their name. That list is a **starting
+point for review, not a recommendation** — those people were granted a
+different feature for different reasons.
+
+Decide three separate lists. They should not be the same:
+
+| Submodule | Who belongs on it |
+|---|---|
+| `AUTOMATION BOM GENERATOR` | Engineering — whoever builds BOMs. Usually the longest list. |
+| `AUTOMATION BOM APPROVALS` | The reviewers and approvers. **Read the stage-authority note below first.** |
+| `AUTOMATION BOM MASTER ITEMS` | **The smallest list of the three.** |
+
+**Why `MASTER ITEMS` is the tightest.** Approving a BOM affects one
+document, and it is signed, dated and recorded in the approval trail.
+Editing a master item silently changes what **every future BOM
+generates** — a corrected quantity or ERP code propagates into every BOM
+generated afterwards, with no signature on it and nobody reviewing the
+change. It is the widest blast radius of the three and the least obvious.
+
+> **Separation of duty is enforced on the transition, not the grant.**
+> Granting one person `APPROVALS` does **not** let them approve a BOM
+> alone. Two rules apply, regardless of what the grants say:
+>
+> 1. No user may perform two consecutive forward transitions on the same
+>    BOM.
+> 2. Whoever created the BOM cannot give it the final approval.
+>
+> So a released BOM has been touched by at least **two** distinct people,
+> normally three. Grants decide who is in the pool; these rules decide
+> the floor.
+>
+> Governed by `$config['abom_require_distinct_approvers']`, default
+> `TRUE`, failing closed. Setting it `FALSE` restores the older behaviour
+> where one approver does all three stages — a deliberate written
+> decision, not an accident. See MODULE_CHANGELOG.md §0.9.2.
+>
+> Practical consequence for your grant lists: `APPROVALS` needs **at
+> least two people** or no BOM can ever be released.
+
+Note: **`module_capablity.role_id` holds a user id**, not a role id,
+despite the name. The whole application works that way — see
+MODULE_CHANGELOG.md §0.9.
+
+Until at least one `APPROVALS` grant exists, the module generates, saves
+and views BOMs normally; only the approval controls are unavailable.
 
 **Check:**
 
@@ -173,6 +270,29 @@ assets/abom/abom.js
 ```
 
 Two new directories: `application/views/abom/` and `assets/abom/`.
+
+**Do not hand-copy 27 paths.** That is 27 chances to mistype one. Build a
+tarball from a checkout and unpack it on the server — the file list then
+cannot drift from what was tested:
+
+```bash
+# on the machine holding the module, from the project root
+tar czf abom-module.tar.gz   application/config/abom.php   application/controllers/Abom.php   application/helpers/abom_helper.php   application/libraries/Abom_engine.php   application/libraries/Abom_exporter.php   application/libraries/Abom_permission_guard.php   application/models/Abom_approval_model.php   application/models/Abom_item_model.php   application/models/Abom_master_model.php   application/models/Abom_model.php   application/views/abom   assets/abom
+
+tar tzf abom-module.tar.gz | wc -l     # expect 27 files + 2 directory entries
+```
+
+Upload `abom-module.tar.gz`, then on the server, **from the project
+root**:
+
+```bash
+tar xzf abom-module.tar.gz
+rm abom-module.tar.gz
+```
+
+`tar` preserves the paths and the casing, which is the whole risk this
+step carries. If you must use a File Manager instead, copy directory by
+directory rather than file by file.
 
 **Case matters.** The server is case-sensitive; this Mac is not.
 `Abom.php` not `ABOM.php`; `views/abom/` not `views/Abom/`. Nothing here
@@ -264,8 +384,29 @@ broken one.
 Verified by pasting it at that exact line in the sandbox: the file lints,
 the item renders, the rest of the menu is unchanged, zero PHP errors.
 
-**Check:** `php -l application/views/common/nav-menu.php`, then load any
-page and click the item.
+**The line numbers are a hint, not the anchor.** 1350/1352/1354 are
+correct for `nav-menu.php` as it stands today. If anyone has edited that
+file since, they will have moved. Anchor on the **text** instead: find the
+last `<?php }?>` before the `</ul>` that closes the main menu list — the
+one immediately after the "M/cs Dispatch Report (Accounts)" item — and
+paste between them.
+
+**Check:**
+
+```bash
+php -l application/views/common/nav-menu.php
+```
+
+Then load any page.
+
+> **If no menu item appears, that is expected until a grant exists.**
+> Step 3 deliberately grants nobody. The item renders only for a user who
+> holds the `AUTOMATION BOM GENERATOR` grant, so if you have not yet
+> inserted any `module_capablity` rows, the menu is unchanged and nothing
+> is wrong. Insert a grant for yourself and reload.
+>
+> The module is still reachable directly at `/index.php/abom/generate`
+> regardless — the menu item is navigation, not access control.
 
 ---
 
@@ -290,6 +431,42 @@ In order. Stop at the first failure.
 | 13 | Export CSV, PDF, Excel | Download; PDF shows `6.7Ω, 500W` and `NO(S)`, never `?` |
 | 14 | Print preview the BOM | Sidebar and workflow panel hidden, 3 sign-off boxes, colours print |
 | 15 | Load Dashboard, DF Dispatch, Task Management | Unchanged, no PHP errors |
+| 16 | **Confirm the dev login shim is absent** — see below | 404 and an empty grep |
+
+### Step 8b — confirm the dev shim is not reachable
+
+A sandbox-only controller, `Abomdevlogin.php`, bypasses authentication
+entirely. It is not in the step 4 file list, it does not exist in the
+working tree, and teardown deletes it — but "it isn't in the list" is a
+promise about the list, and the risk is someone copying a folder instead.
+So confirm its absence **positively**, not by assumption.
+
+**1. The URL must 404:**
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://YOURHOST/index.php/abomdevlogin
+```
+
+Must print `404`. Anything else — 200, 302, 500 — means the file is
+present and reachable. Delete it immediately and check the access log for
+prior hits.
+
+**2. No file of that name, any casing:**
+
+```bash
+ls application/controllers/ | grep -i abomdevlogin
+find application -iname '*abomdevlogin*'
+```
+
+Both must print **nothing**. The case-insensitive match matters: the
+server is case-sensitive, so `AbomDevLogin.php` would be a different file
+that CI would still route to.
+
+Three independent things would have to fail for an auth bypass to be
+reachable: the file would have to be copied, `ENVIRONMENT` would have to
+not be `production`, and a `.abom-sandbox` marker file would have to exist
+beside `index.php`. The guard **fails closed** — any unknown, unreadable
+or ambiguous signal denies, including a stale filesystem stat.
 
 ---
 
@@ -305,11 +482,181 @@ In order. Stop at the first failure.
 | 404 on `/abom/...` | step 6 not done | append the routes |
 | Blank page, no error | PHP 8 on the server | the app needs `ea-php74` |
 
-**Rollback:** remove the 27 files, revert the `routes.php` append, remove
-the nav snippet, and `DROP TABLE` the eleven `abom_*` tables. To undo the
-permissions, delete the three `AUTOMATION BOM %` rows from `submodule`
-and their `module_capablity` grants. Nothing outside the `abom_` prefix
-is touched at any point, so no existing data is at risk.
+---
+
+## Rollback
+
+The whole premise of this module is that the existing software is not
+affected. The honest form of that guarantee is a documented undo, not
+just a careful install.
+
+Rehearsed in the sandbox: the database and file tree return to their
+pre-install state. Run the steps in this order.
+
+### R1 — remove the module's own files
+
+The same explicit list used in step 4. By name, not by folder.
+
+```bash
+rm -f  application/config/abom.php \
+       application/controllers/Abom.php \
+       application/helpers/abom_helper.php \
+       application/libraries/Abom_engine.php \
+       application/libraries/Abom_exporter.php \
+       application/libraries/Abom_permission_guard.php \
+       application/models/Abom_approval_model.php \
+       application/models/Abom_item_model.php \
+       application/models/Abom_master_model.php \
+       application/models/Abom_model.php
+rm -rf application/views/abom
+rm -rf assets/abom
+```
+
+**Check:**
+
+```bash
+ls application/views/abom assets/abom          # expect: No such file or directory
+ls application/controllers/ | grep -i abom     # expect: NOTHING AT ALL
+find application assets -iname '*abom*'        # expect: nothing
+```
+
+**A match on the second or third command means investigate, not
+continue.** In the rehearsal these checks caught two files that should not
+have been there:
+
+- `application/controllers/Abom_model.php` — a *model* sitting in
+  `controllers/`, from a careless copy. CI would have tried to route
+  `/abom_model` to it.
+- `application/controllers/Abomdevlogin.php` — the sandbox dev login
+  shim, which **bypasses authentication entirely**. If this is on a
+  server, delete it immediately and check the access log for hits on
+  `/abomdevlogin`.
+
+Anything matching `abom` that is not in the step 4 list is a stray.
+Delete it.
+
+### R2 — restore the two modified files from the step 0 backups
+
+```bash
+cp application/config/routes.php.bak-$STAMP         application/config/routes.php
+cp application/views/common/nav-menu.php.bak-$STAMP application/views/common/nav-menu.php
+```
+
+**Check:** `grep -c abom application/config/routes.php` → `0`.
+`php -l application/config/routes.php` and
+`php -l application/views/common/nav-menu.php` → no syntax errors.
+
+If the backups were not taken, remove the appended block from
+`routes.php` by hand (everything from the
+`| Automation BOM Generator` comment to the end of file) and remove the
+nav snippet from `nav-menu.php` — but take the backups.
+
+### R3 — remove the permissions
+
+Use the ids recorded at install. **Do not use a wildcard on
+`module_capablity`** — deleting by `moduleid = 4` alone would remove the
+existing BOM Correction Tool grants too.
+
+```sql
+-- Confirm what you are about to delete, and note the ids.
+SELECT id, moduleid, submodule FROM submodule
+ WHERE submodule LIKE 'AUTOMATION BOM %';
+
+-- Grants first (child rows), then the submodules.
+DELETE FROM module_capablity
+ WHERE moduleid = 4
+   AND submoduleid IN (SELECT id FROM submodule WHERE submodule LIKE 'AUTOMATION BOM %');
+
+DELETE FROM submodule WHERE submodule LIKE 'AUTOMATION BOM %';
+```
+
+**Check:** both queries return 0 rows afterwards, and the existing
+submodule 27 grants are untouched:
+
+```sql
+SELECT COUNT(*) AS should_be_unchanged FROM module_capablity
+ WHERE moduleid = 4 AND submoduleid = 27;
+```
+
+### R4 — drop the module's tables
+
+All eleven named explicitly. **No wildcard** — a `LIKE 'abom%'` loop is
+how the wrong table gets dropped.
+
+```sql
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS `abom_audit_log`;
+DROP TABLE IF EXISTS `abom_bom_approval`;
+DROP TABLE IF EXISTS `abom_bom_revision`;
+DROP TABLE IF EXISTS `abom_bom_line`;
+DROP TABLE IF EXISTS `abom_bom`;
+DROP TABLE IF EXISTS `abom_item`;
+DROP TABLE IF EXISTS `abom_plc_rule`;
+DROP TABLE IF EXISTS `abom_section`;
+DROP TABLE IF EXISTS `abom_feature`;
+DROP TABLE IF EXISTS `abom_formula`;
+DROP TABLE IF EXISTS `abom_plc_family`;
+SET FOREIGN_KEY_CHECKS = 1;
+```
+
+**Check:**
+
+```sql
+SELECT COUNT(*) AS abom_tables FROM information_schema.tables
+  WHERE table_schema = DATABASE() AND table_name LIKE 'abom\_%';
+```
+
+Must be **0**.
+
+### R5 — confirm the application is unaffected
+
+Load three existing pages and confirm HTTP 200 with no PHP errors:
+Dashboard, DF Dispatch Morning Meeting, Task Management.
+
+Nothing outside the `abom_` prefix and the two backed-up files is touched
+at any point, so no existing data is at risk. The `mysqldump` from step 0
+remains the backstop.
+
+---
+
+## Ongoing administration
+
+Grants are per **user**, not per **role** — `module_capablity.role_id`
+holds a `system_users.user_id`. **Access therefore does not follow a job
+change.** A new engineer has no access until someone inserts rows; a
+departing one keeps approval rights until someone deletes them. This is
+true of every existing module in this application, not just this one.
+
+Substitute the submodule id from step 3 for `<SUBMODULE_ID>`.
+
+**Grant** a user access:
+
+```sql
+INSERT INTO `module_capablity`
+  (`acessid`,`role_id`,`moduleid`,`submoduleid`,`submodule_access`,
+   `madd`,`medit`,`mremove`,`addedOn`,`upadtedOn`)
+VALUES (0, <USER_ID>, 4, <SUBMODULE_ID>, 1, 1, 1, 0, NOW(), NOW());
+```
+
+**Revoke** a user's access:
+
+```sql
+DELETE FROM `module_capablity`
+ WHERE `role_id` = <USER_ID> AND `moduleid` = 4 AND `submoduleid` = <SUBMODULE_ID>;
+```
+
+**Audit** who currently holds what — worth running when someone leaves:
+
+```sql
+SELECT s.submodule, mc.role_id AS user_id,
+       CONCAT(u.first_name, ' ', u.last_name) AS user_name
+  FROM module_capablity mc
+  JOIN submodule s     ON s.id = mc.submoduleid
+  LEFT JOIN system_users u ON u.user_id = mc.role_id
+ WHERE mc.moduleid = 4 AND mc.submodule_access = 1
+   AND s.submodule LIKE 'AUTOMATION BOM %'
+ ORDER BY s.submodule, mc.role_id;
+```
 
 ---
 
@@ -328,11 +675,22 @@ docker rmi abom-php74
 rm -rf ~/pms-sandbox
 ```
 
+**Delete the shim first**, before anything else, so it cannot outlive
+the sandbox by accident:
+
+```bash
+rm -f ~/pms-sandbox/application/controllers/Abomdevlogin.php
+rm -f ~/pms-sandbox/.abom-sandbox
+find ~/pms-sandbox -iname '*abomdevlogin*'      # must print nothing
+```
+
 `~/pms-sandbox` also contains a copy of the application and a
-`database.php` pointing at the container, plus a sandbox-only login shim
-(`application/controllers/Abomdevlogin.php`) that bypasses
-authentication. **That file must never reach the server.** It is not in
-the step 4 file list and does not exist in the working tree.
+`database.php` pointing at the container. The shim
+(`application/controllers/Abomdevlogin.php`) bypasses authentication
+entirely. **It must never reach the server.** It is not in the step 4
+file list, does not exist in the working tree, refuses to run outside the
+sandbox, and step 8b confirms its absence on the live site — deleting it
+here is the fourth of those four defences, not the only one.
 
 Confirm afterwards:
 

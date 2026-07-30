@@ -242,10 +242,14 @@ must not call it.
 
 ---
 
-## 0.9 `module_capablity.role_id` holds a USER id
+## 0.9 HOST APPLICATION: `module_capablity.role_id` holds a USER id
 
-The column is named `role_id` but stores `system_users.user_id`.
-Verified against production data in the container:
+**This is a property of the Shubham Packaging PMS, not of this module.**
+It is recorded here because there is nowhere else it is written down, and
+anyone who touches permissions in this codebase needs it.
+
+The column is named `role_id`, sits in a table called `module_capablity`,
+and stores `system_users.user_id`. Measured against production data:
 
 | Check | Result |
 |---|---|
@@ -254,21 +258,126 @@ Verified against production data in the container:
 | matching `user_role.user_role_id` | 40 of 132 |
 | `user_role` size | 102 rows, max id 104 — below the observed maximum of 238 |
 
-The application agrees: `application/views/common/nav-menu.php` gates
-every menu item with `->where('role_id', $user_id)`.
+The application agrees: every item in
+`application/views/common/nav-menu.php` gates on
+`->where('role_id', $user_id)`.
 
-`Abom_permission_guard::allows()` originally used
-`$session['logged_in']['role']` and denied everyone. It now uses
-`$session['logged_in']['user_id']`, matching both the data and the
-application's own convention.
+**`Master_profile_guard`'s use of `$session['role']` is correct** and must
+not be "fixed" to match. It queries a different table —
+`user_role.user_role_id` — for a different purpose (whether a profile may
+write master records). Only `module_capablity` has the misleading column
+name.
 
-Note that `Master_profile_guard`'s use of `$session['role']` is correct —
-it queries a different table (`user_role.user_role_id`) for a different
-purpose. Only `module_capablity` has the misleading column name.
+`Abom_permission_guard::allows()` originally used `$session['role']` and
+would have denied every user on production while presenting as a
+permissions problem. It now uses `$session['user_id']`.
 
-This was invisible to every offline test. It surfaced only when the
+This was invisible to every offline test. It surfaced only when an
 approval button failed to appear for a user who demonstrably held the
 grant.
+
+### 0.9.1 Consequence: access does not follow a job
+
+Because grants are per **user** rather than per **role**, they do not
+travel with a person's position. A new engineer has no access until
+someone inserts rows; someone who leaves or changes department keeps
+whatever they had until someone deletes them.
+
+That is true of every existing module in this application today, not just
+this one. `ROLLOUT.md` carries the grant and revoke queries under
+"Ongoing administration".
+
+---
+
+## 0.9.2 Separation of duty — FIXED
+
+### The defect
+
+A single grant on `AUTOMATION BOM APPROVALS` let one user perform **all
+three** approval transitions. Proven: user 61, holding only that grant,
+walked a BOM prepared by user 91 from `submitted` to `approved` in three
+consecutive requests, producing this trail:
+
+```
+stage         action   user_id  user_name
+check         approve  61       Virendra Sharma
+eng_approve   approve  61       Virendra Sharma
+proc_approve  approve  61       Virendra Sharma
+```
+
+The printed sheet carries three signature boxes. One person clicking four
+times produced a document implying three independent reviews of something
+procurement orders parts against. The four stages certified nothing.
+
+### Why the fix is NOT in the permission table
+
+`module_capablity` **does** carry per-capability columns —
+`submodule_access`, `madd`, `medit`, `mremove` — and mapping the four
+transitions onto them was considered and rejected:
+
+- `Reporting.php:16974` (the existing **Set Access Permission** admin
+  screen) writes all four, labelled Add / Edit / Remove.
+- Production data: 1,388 rows have `madd = 1`; `medit` and `mremove` are
+  effectively always 0.
+
+Overloading them would mean someone ticking **"Edit"** in an existing
+admin screen silently granted **engineering approval authority**, with no
+indication in that UI. That is a worse defect than the one being fixed.
+
+More fundamentally: a grant says what a person may do **in general**. It
+cannot say "not on this particular document", and any grant-based scheme
+collapses the moment an administrator gives one person everything —
+which is exactly how this happened.
+
+### The rule
+
+Enforced on the transition, against the recorded history in
+`abom_bom_approval` and `abom_bom.created_by`:
+
+1. **No user may perform two CONSECUTIVE forward transitions on the same
+   BOM.**
+2. **The user who created the BOM may not perform the final approval.**
+
+Only *forward* transitions (`submit`, `approve`) count towards rule 1 — a
+reject or reopen is a return, not a certification, so it neither confers
+nor consumes a turn.
+
+Minimum distinct people to reach `approved`: **two**, three in the normal
+case. It holds whatever the grants say.
+
+Implemented in `Abom_approval_model::separation_blockers()`, reached from
+`blockers()`, which `advance()` already refuses on — so the server
+enforces it whether or not the UI offered the control. The disabled
+button additionally carries the reason as readable text next to it, not
+just a tooltip.
+
+### `$config['abom_require_distinct_approvers']`
+
+Default `TRUE`. **Fails closed**: if the value cannot be read the rule
+applies anyway, because a separation rule that switches itself off
+because it could not find its own config is worse than none.
+
+Setting it `FALSE` restores the previous behaviour — one approver may do
+all three stages. Note that this flag does **not** govern the spec §6.3
+`prepared_by` check, which is unconditional: the preparer can never check
+their own work either way. So `FALSE` means two people minimum, not one.
+
+### Verified — 23 assertions, two real users
+
+| | |
+|---|---|
+| A submits, then is refused at check | 422, cites separation |
+| B checks, then is refused at eng_approve (consecutive) | 422 |
+| A may eng_approve — not consecutive for A | allowed |
+| A refused the final approval as **creator**, with B as last actor | 422, cites creation |
+| Direct POST bypassing the disabled control | 422, **no** approval row written, status untouched |
+| Completed trail | ≥ 2 distinct users |
+| Flag `FALSE` | one approver does all three again; still 2 people minimum |
+| Flag back `TRUE` | the same path blocked again |
+
+`e2e67` was rewritten to walk the workflow with two actors, which is what
+a real workflow does — it now proves separation of duty as part of the
+normal path. **38 of 38.**
 
 ---
 

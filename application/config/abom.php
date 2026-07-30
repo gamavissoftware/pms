@@ -24,6 +24,30 @@ $config['abom_uom_display'] = array(
     'NOS' => 'NO(S)',
 );
 
+// ---------------------------------------------------------------------
+// SEPARATION OF DUTY
+// ---------------------------------------------------------------------
+// The four-stage workflow only certifies anything if more than one person
+// is involved. Grants cannot express this: a grant says what a person may
+// do in general, not "not on this particular document", and any
+// grant-based scheme is defeated by an administrator giving one person
+// everything — which is exactly how a single user was able to record
+// themselves as checker, engineer AND procurement (MODULE_CHANGELOG §0.9.2).
+//
+// So it is enforced on the TRANSITION, against the recorded history:
+//
+//   1. No user may perform two CONSECUTIVE forward transitions on the
+//      same BOM.
+//   2. The user who created the BOM may not perform the final approval.
+//
+// That requires at minimum two distinct people, three in the normal case,
+// and holds whatever the grants say.
+//
+// Setting this FALSE restores the single-user path. A site that genuinely
+// cannot staff separate reviewers can make that choice — but it is then a
+// deliberate, written decision rather than an accident.
+$config['abom_require_distinct_approvers'] = TRUE;
+
 // Workflow states in which a line quantity may still be edited.
 // Once a BOM is engineering-approved the printed quantities must not be
 // typeable over — see abom_qty_editable() in helpers/abom_helper.php.

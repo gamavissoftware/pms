@@ -111,7 +111,164 @@ class Abom_approval_model extends CI_Model
             $out[] = 'A BOM must be checked by someone other than the person who prepared it.';
         }
 
+        foreach ($this->separation_blockers($bom, $user_id) as $blocker) {
+            $out[] = $blocker;
+        }
+
         return $out;
+    }
+
+    /**
+     * SEPARATION OF DUTY.
+     *
+     * Decided against the recorded history, not against grants. A grant
+     * says what a person may do in general; it cannot say "not on this
+     * document", and any grant scheme collapses the moment an
+     * administrator gives one person everything.
+     *
+     *   1. No user may perform two CONSECUTIVE forward transitions on the
+     *      same BOM.
+     *   2. The user who created the BOM may not perform the final
+     *      approval.
+     *
+     * Only FORWARD transitions count towards rule 1 — a reject or a
+     * reopen is a return, not a certification, so it neither confers nor
+     * consumes a turn.
+     *
+     * Governed by $config['abom_require_distinct_approvers'] (default
+     * TRUE). With it FALSE the single-user path is restored.
+     *
+     * @param  object $bom
+     * @param  int    $user_id
+     * @return array  operator-facing messages; empty means allowed
+     */
+    public function separation_blockers($bom, $user_id)
+    {
+        $out = array();
+
+        // Load the section if a caller reached this model without the
+        // controller having done so. Fail CLOSED if the value is absent
+        // or unreadable: a separation rule that switches itself off
+        // because it could not read its own config is worse than none.
+        $required = $this->config->item('abom_require_distinct_approvers', 'abom');
+
+        if ($required === null) {
+            $this->config->load('abom', true, true);
+            $required = $this->config->item('abom_require_distinct_approvers', 'abom');
+        }
+
+        if ($required === null) {
+            $required = true;              // fail closed
+        }
+        if (!$required) {
+            return $out;
+        }
+
+        $user_id = (int) $user_id;
+        if ($user_id <= 0) {
+            $out[] = 'Your user could not be identified, so this transition cannot be recorded.';
+            return $out;
+        }
+
+        $t = $this->next_transition($bom->status);
+        if (!$t) {
+            return $out;
+        }
+
+        // Rule 1 — not two forward transitions in a row.
+        $last = $this->last_forward_actor((int) $bom->id);
+
+        if ($last !== null && (int) $last['user_id'] === $user_id) {
+            $out[] = sprintf(
+                '%s by you already; another user must perform the next stage.',
+                $this->action_past_tense($last['stage'])
+            );
+        }
+
+        // Rule 2 — the creator may not give final approval.
+        if ($t['next'] === 'approved') {
+            $creator = $this->creator_id($bom);
+
+            if ($creator > 0 && $creator === $user_id) {
+                $out[] = 'You created this BOM, so you cannot give it the final '
+                       . 'procurement approval. Another user must.';
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The user behind the most recent FORWARD transition on this BOM.
+     *
+     * Read from abom_bom_approval, which records every transition with
+     * its actor — not from the abom_bom.*_by columns, which record only
+     * the latest occupant of each named slot and would miss a repeat.
+     *
+     * @param  int $bom_id
+     * @return array|null  ['user_id'=>int, 'stage'=>string]
+     */
+    public function last_forward_actor($bom_id)
+    {
+        $row = $this->db->select('user_id, stage')
+            ->from($this->approval_table)
+            ->where('bom_id', (int) $bom_id)
+            ->where_in('action', array('submit', 'approve'))
+            ->order_by('id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row();
+
+        if (!$row || $row->user_id === null) {
+            return null;
+        }
+
+        return array('user_id' => (int) $row->user_id, 'stage' => (string) $row->stage);
+    }
+
+    /**
+     * Who created this BOM.
+     *
+     * abom_bom.created_by is authoritative. abom_audit_log is the
+     * fallback for a row created before that column was populated —
+     * the create event is recorded there too.
+     *
+     * @param  object $bom
+     * @return int  0 when unknown
+     */
+    public function creator_id($bom)
+    {
+        if (!empty($bom->created_by)) {
+            return (int) $bom->created_by;
+        }
+
+        $row = $this->db->select('user_id')
+            ->from('abom_audit_log')
+            ->where('entity', 'abom_bom')
+            ->where('entity_id', (int) $bom->id)
+            ->where('action', 'create')
+            ->order_by('id', 'ASC')
+            ->limit(1)
+            ->get()
+            ->row();
+
+        return ($row && $row->user_id !== null) ? (int) $row->user_id : 0;
+    }
+
+    /**
+     * @param  string $stage
+     * @return string
+     */
+    private function action_past_tense($stage)
+    {
+        $map = array(
+            'prepare'      => 'Submitted',
+            'check'        => 'Checked',
+            'eng_approve'  => 'Engineering-approved',
+            'proc_approve' => 'Procurement-approved',
+        );
+
+        return isset($map[$stage]) ? $map[$stage] : 'Advanced';
     }
 
     /**

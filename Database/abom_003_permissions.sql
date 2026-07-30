@@ -2,9 +2,16 @@
 --  AUTOMATION BOM GENERATOR MODULE — PERMISSIONS (install 003)
 --
 --  Creates three submodule rows under module 4 (BOM CORRECTION TOOL)
---  and grants them to the roles that already hold the existing BOM
---  Correction Tool submodule, so the same people can reach the new
---  module without anyone hand-editing a role matrix.
+--  and grants access to NOBODY.
+--
+--  GRANTS ARE DELIBERATELY NOT CREATED
+--  -----------------------------------
+--  Nobody should acquire the authority to approve an automation BOM
+--  because an install script assumed it. The script prints a SUGGESTED
+--  set of INSERT statements, commented out, derived from whoever already
+--  holds the existing BOM Correction Tool submodule — review them, decide
+--  who actually belongs on each of the three lists, and run the ones you
+--  want. See ROLLOUT.md step 3.
 --
 --  ID-AGNOSTIC BY DESIGN
 --  ---------------------
@@ -102,16 +109,7 @@ BEGIN
     SET v_master_id = LAST_INSERT_ID();
 
     -- -----------------------------------------------------------------
-    -- GRANTS
-    --
-    -- Mirrored from whoever already holds the existing BOM Correction
-    -- Tool submodule under module 4. That is a deliberate choice rather
-    -- than a guess: it is the closest existing audience, and it is
-    -- trivially adjustable afterwards in module_capablity.
-    --
-    -- If module 4 has no existing submodule, no grants are created and
-    -- the summary says so — the module still installs, and an
-    -- administrator grants access explicitly.
+    -- NO GRANTS ARE CREATED HERE. See the header.
     -- -----------------------------------------------------------------
     SELECT MIN(`id`) INTO v_seed_submodule
       FROM `submodule`
@@ -120,45 +118,73 @@ BEGIN
 
     SET v_grants = 0;
 
-    IF v_seed_submodule IS NOT NULL THEN
-        INSERT INTO `module_capablity`
-            (`acessid`, `role_id`, `moduleid`, `submoduleid`, `submodule_access`,
-             `madd`, `medit`, `mremove`, `addedOn`, `upadtedOn`)
-        SELECT 0, `role_id`, v_module_id, s.`new_id`, 1,
-               `madd`, `medit`, 0, NOW(), NOW()
-          FROM `module_capablity` mc
-          JOIN (SELECT v_generator_id AS `new_id`
-                UNION ALL SELECT v_approvals_id
-                UNION ALL SELECT v_master_id) s
-         WHERE mc.`moduleid` = v_module_id
-           AND mc.`submoduleid` = v_seed_submodule
-           AND mc.`submodule_access` = 1;
-
-        SET v_grants = ROW_COUNT();
-    END IF;
-
     COMMIT;
 
     -- -----------------------------------------------------------------
-    -- WHAT TO PASTE INTO application/config/abom.php
-    -- -----------------------------------------------------------------
+    -- OUTPUT 1: what to paste into application/config/abom.php
+    --
     -- One row per line, so it reads correctly in the mysql client, in
     -- phpMyAdmin and in anything else: a single multi-line string gets
     -- backslash-escaped by the default tabular output mode.
-    SELECT '$config[\'abom_submodule_ids\'] = array('        AS `PASTE THIS INTO application/config/abom.php`
+    -- -----------------------------------------------------------------
+    SELECT '$config[\'abom_submodule_ids\'] = array('        AS `1. PASTE THIS INTO application/config/abom.php`
     UNION ALL SELECT CONCAT('    \'generator\'    => ', v_generator_id, ',')
     UNION ALL SELECT CONCAT('    \'approvals\'    => ', v_approvals_id, ',')
     UNION ALL SELECT CONCAT('    \'master_items\' => ', v_master_id, ',')
     UNION ALL SELECT ');';
 
+    -- -----------------------------------------------------------------
+    -- OUTPUT 2: the three submodule ids and the grant status
+    -- -----------------------------------------------------------------
     SELECT v_generator_id AS `generator`,
            v_approvals_id AS `approvals`,
            v_master_id    AS `master_items`,
-           v_grants       AS `grant_rows_created`,
-           CASE WHEN v_grants = 0
-                THEN 'No roles were granted access - grant them in module_capablity (moduleid 4).'
-                ELSE 'Grants mirrored from the existing module 4 submodule.'
-           END AS `note`;
+           0              AS `grant_rows_created`,
+           'NO grants created by design. Review OUTPUT 3 and run only the lines you want.' AS `note`;
+
+    -- -----------------------------------------------------------------
+    -- OUTPUT 3: SUGGESTED grants, COMMENTED OUT.
+    --
+    -- Derived from whoever already holds the existing BOM Correction Tool
+    -- submodule under module 4. That is a starting point for review, NOT
+    -- a recommendation — those people were granted a different feature
+    -- for different reasons.
+    --
+    -- The three lists should differ:
+    --   GENERATOR     engineering, whoever builds BOMs
+    --   APPROVALS     the reviewers and approvers
+    --   MASTER ITEMS  the smallest list — editing a master item silently
+    --                 changes what EVERY future BOM generates
+    --
+    -- Note: module_capablity.role_id holds a USER id, not a role id.
+    -- -----------------------------------------------------------------
+    SELECT CONCAT('-- Suggested grants for review. Uncomment the lines you want, then run them.')
+             AS `3. SUGGESTED GRANTS (COMMENTED OUT - REVIEW BEFORE RUNNING)`
+    UNION ALL
+    SELECT CONCAT('-- Source list: users holding submodule ',
+                  COALESCE(CAST(v_seed_submodule AS CHAR), 'n/a'),
+                  ' under module ', v_module_id, '.')
+    UNION ALL
+    SELECT '--'
+    UNION ALL
+    SELECT CONCAT(
+        '-- INSERT INTO `module_capablity` (`acessid`,`role_id`,`moduleid`,`submoduleid`,',
+        '`submodule_access`,`madd`,`medit`,`mremove`,`addedOn`,`upadtedOn`) VALUES (0, ',
+        mc.`role_id`, ', ', v_module_id, ', <SUBMODULE_ID>, 1, 1, 1, 0, NOW(), NOW());',
+        '   -- user ', mc.`role_id`,
+        COALESCE(CONCAT(' = ', u.`first_name`, ' ', u.`last_name`), ' (not found in system_users)')
+    )
+      FROM `module_capablity` mc
+      LEFT JOIN `system_users` u ON u.`user_id` = mc.`role_id`
+     WHERE mc.`moduleid` = v_module_id
+       AND mc.`submoduleid` = v_seed_submodule
+       AND mc.`submodule_access` = 1
+    UNION ALL
+    SELECT CONCAT('-- Replace <SUBMODULE_ID> with ', v_generator_id,
+                  ' (generator), ', v_approvals_id, ' (approvals) or ',
+                  v_master_id, ' (master items).')
+    UNION ALL
+    SELECT '-- Until at least one grant exists, the module generates and views BOMs but no one can approve.';
 
 END $$
 

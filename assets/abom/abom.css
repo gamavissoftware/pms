@@ -468,3 +468,7 @@
 .abom-wrap .wf-when  { color: #888; margin-right: 8px; font-family: 'Courier New', monospace; }
 .abom-wrap .wf-what  { font-weight: 700; color: var(--navy); margin-right: 8px; }
 .abom-wrap .wf-comment { font-style: italic; }
+.abom-wrap .wf-why {
+  font-size: 11px; color: var(--dgray); align-self: center;
+  max-width: 520px; line-height: 1.5;
+}

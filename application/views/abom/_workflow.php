@@ -54,12 +54,20 @@ if (empty($workflow['enabled'])) {
             <?php echo abom_e($workflow['next']['label']); ?>
           </button>
         <?php else: ?>
+          <?php
+            // The reason is spelled out on the control itself. Disabling
+            // a button silently is how "why can't I approve this?" turns
+            // into a support call. The server enforces the same rule
+            // independently — see Abom_approval_model::blockers().
+            $why = !$workflow['may']
+                ? 'You do not have permission for this stage.'
+                : implode(' ', $workflow['blockers']);
+          ?>
           <button type="button" class="btn-sm btn-export" disabled
-                  title="<?php echo abom_e(!$workflow['may']
-                      ? 'You do not have permission for this stage.'
-                      : 'Resolve the blocking items first.'); ?>">
+                  title="<?php echo abom_e($why); ?>">
             <?php echo abom_e($workflow['next']['label']); ?>
           </button>
+          <span class="wf-why"><?php echo abom_e($why); ?></span>
         <?php endif; ?>
       <?php endif; ?>
 

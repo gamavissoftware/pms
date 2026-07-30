@@ -1,8 +1,15 @@
 # Navigation snippet
 
 **File:** `application/views/common/nav-menu.php`
-**Paste at:** **line 1352** — between the `<?php }?>` on line 1350 that
-closes the M/cs Dispatch Report block, and the `</ul>` on line 1354.
+
+**Paste at:** **line 1352** as the file stands today — but anchor on the
+**text**, not the number. Find the last `<?php }?>` before the `</ul>`
+that closes the main menu list: the one immediately after the
+`M/cs Dispatch Report (Accounts)` item. Paste between that `<?php }?>`
+and the `</ul>`.
+
+The line numbers move the moment anyone else edits that file, which is a
+1,671-line file that several features already touch.
 
 Apply this yourself. It is not in the module's file list and has not
 been applied here.
@@ -84,8 +91,17 @@ if ($abom_generator_id > 0) {
    rest of the menu is unchanged.
 3. Click it — `/index.php/abom/generate` loads.
 
-If the item does not appear, in order: is
-`$config['abom_submodule_ids']['generator']` set? Does that id exist in
-`submodule` under module 4? Does the user have a `module_capablity` row
-with `role_id = <their user_id>`, that `submoduleid`, and
-`submodule_access = 1`?
+**If the item does not appear, the most likely reason is that nobody has
+been granted anything yet** — `abom_003_permissions.sql` deliberately
+creates no grants. That is expected, not a fault.
+
+Check in this order:
+
+1. Is `$config['abom_submodule_ids']['generator']` set to a real id?
+2. Does that id exist in `submodule` with `moduleid = 4` and `status = 1`?
+3. Does the user have a `module_capablity` row with
+   `role_id = <their user_id>` (yes — **user** id), that `submoduleid`,
+   and `submodule_access = 1`?
+
+The module itself is reachable at `/index.php/abom/generate` regardless.
+This snippet only adds navigation.
