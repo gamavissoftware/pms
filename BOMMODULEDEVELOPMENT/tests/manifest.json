@@ -1,10 +1,12 @@
 {
     "owned": {
-        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "a9a9b8c9d60593db7d5dde4c1e43617a",
+        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "ee220f0381acfff752319a13a9350dbe",
+        "BOMMODULEDEVELOPMENT/NAV_SNIPPET.md": "72f5b73755b095a8051758a24b3b47a7",
+        "BOMMODULEDEVELOPMENT/ROLLOUT.md": "a665699b78f8e69cee3f1724fcffe53d",
         "BOMMODULEDEVELOPMENT/tests/case_audit.php": "26f56c2d2a1bb1f877a326eda733c4a4",
         "BOMMODULEDEVELOPMENT/tests/design_diff.php": "172fbb77f912cc62d551cc1e79f21a7a",
         "BOMMODULEDEVELOPMENT/tests/dump_reference.php": "6159bced10bc99061b7ff0a66bc882d8",
-        "BOMMODULEDEVELOPMENT/tests/integrity.php": "c05cfcefb538b510599c256d4baaff57",
+        "BOMMODULEDEVELOPMENT/tests/integrity.php": "1b0c8ee00f4346cfe8cb601a57bedfb3",
         "BOMMODULEDEVELOPMENT/tests/pdf_glyph_probe.php": "5d481427c8bb09c4002b49fd2d29a146",
         "BOMMODULEDEVELOPMENT/tests/render_view.php": "9d1d37b4fe427fded8faed20a975d00c",
         "BOMMODULEDEVELOPMENT/tests/run_tests.php": "25f70ee4825f5571aee23924005aa3c8",

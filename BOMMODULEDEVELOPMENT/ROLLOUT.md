@@ -171,6 +171,12 @@ generator  approvals  master_items  grant_rows_created  note
 
 Your numbers will differ — that is the point.
 
+**Deciding who gets what:** use
+`BOMMODULEDEVELOPMENT/PERMISSIONS_WORKSHEET.md`. It lists your users by
+name, role and department (not ids), explains in one sentence what each
+permission allows and what over-granting risks, and gives the exact
+INSERT statements. Five minutes.
+
 ### Grants — the script creates NONE, on purpose
 
 `grant_rows_created` will be **0**. Nobody acquires the authority to
@@ -322,7 +328,7 @@ Other values worth knowing, all with working defaults:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `abom_signoff_mode` | `'customer'` | 3 printed boxes. `'internal'` gives 4. |
+| `abom_signoff_mode` | `'customer'` | **3 printed boxes** — Prepared By (Engineering) / Checked By / Approved By (Customer). `'internal'` gives 4, splitting the last into Engineering and Procurement. |
 | `abom_bom_no_format` | `'ABOM-%d'` | Own series; does not touch the DF register. |
 | `abom_pdf_font` | `'dejavusans'` | **Must stay a Unicode font** — see MODULE_CHANGELOG.md §0.8.1. |
 | `abom_uom_display` | `NOS → NO(S)` | Human-readable output only. |
@@ -616,6 +622,40 @@ Dashboard, DF Dispatch Morning Meeting, Task Management.
 Nothing outside the `abom_` prefix and the two backed-up files is touched
 at any point, so no existing data is at risk. The `mysqldump` from step 0
 remains the backstop.
+
+---
+
+## Print check — the one thing no container can verify
+
+Two reference BOMs have been generated from a freshly installed sandbox
+and exported to PDF, ready to print:
+
+| File | Configuration | Items | Total qty |
+|---|---|---|---|
+| `DF-1827_FX5_29items.pdf` | FX5 · 8 axes / 12 tracks / 140 PPM / Intermittent / LHS | **29** | 74 |
+| `DF-1826_iQ-R_42items.pdf` | iQ-R · 15 axes / 12 tracks / 180 PPM / Continuous | **42** | 129 |
+
+Both are **landscape A4** (841.89 × 595.276 pt), 2 pages, and were
+generated with **`abom_signoff_mode = 'customer'`** — so each carries
+**three** sign-off boxes: Prepared By (Engineering), Checked By, Approved
+By (Customer). If the paper in your hand has four boxes, it was generated
+in `'internal'` mode and is a different document.
+
+Verified mechanically before printing: 29 and 42 `NO(S)` cells
+respectively, **zero** `?` characters, and the `Ω` in
+`DYNAMIC BRAKING RESISTOR (DBR), 6.7Ω, 500W` present in the iQ-R sheet.
+`Ω` is correctly absent from the FX5 sheet — the braking resistor is an
+iQ-R item.
+
+**On the department's actual printer, hold each next to the released DF
+sheet and check:**
+
+- Page breaks — no section header stranded at the foot of a page.
+- Column widths — nothing truncated, especially DESCRIPTION and REMARKS.
+- The three signature boxes are present and large enough to sign.
+- `6.7Ω` reads as an omega, not a box, a question mark or a gap.
+- Row background colours print (they are meaningful, not decorative).
+- The footer carries BOM number, revision, page x of y and a timestamp.
 
 ---
 

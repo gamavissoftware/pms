@@ -414,6 +414,134 @@ Also in the script:
 
 ---
 
+## 0.11 HOST APPLICATION: six views with a host-pinned definer
+
+**A correction first.** In an earlier report I said a plain `mysqldump`
+aborts on this database and that production backups may therefore be
+broken. **That was wrong, and the alarm was overstated.** The failure was
+specific to the test container.
+
+### What is actually true
+
+Six views carry `DEFINER = u537620103_shuser@127.0.0.1` with
+`SQL SECURITY DEFINER`:
+
+| View | Shape | Used by live code |
+|---|---|---|
+| `system_users_view` | has logic | **25 files** |
+| `units_view` | passthrough | 2 files |
+| `poinstructions_view` | passthrough | 1 file |
+| `service_order_report` | has logic | 2 files (view-file name collision) |
+| `module_capablity_view` | passthrough | 0 |
+| `dfmom_points_view` | passthrough | 0 |
+
+In the container, which has no such user, **all six are completely
+unreadable** — `ERROR 1449` on a bare `SELECT COUNT(*)`, not merely on
+dump — and `mysqldump` aborted after 870 bytes.
+
+Creating `u537620103_shuser@127.0.0.1` in the container fixed everything
+at once: all six views readable, and `mysqldump` succeeding with **no
+flags** — 50 MB, 287 `CREATE TABLE`, `-- Dump completed`.
+
+**So the definer resolves on production, and production backups are
+fine.** The corroborating evidence is that 25 live files select from
+`system_users_view` and the application works daily; if the definer did
+not resolve there, those paths would be erroring loudly.
+
+### The real risk, which is not about backups
+
+The definer is pinned to the host `127.0.0.1`. MySQL treats
+`user@127.0.0.1` and `user@localhost` as **different accounts**, and
+`application/config/database.php` connects to `localhost`. Both grants
+evidently exist on production today. But:
+
+1. **Restore portability.** Restoring this dump into any environment that
+   lacks that exact `user@host` gives six broken views and 25 broken code
+   paths. Anyone standing up a staging copy, a new host or a developer
+   machine hits exactly what this build hit. It is silent for the
+   application until a page touches one, and loud for `mysqldump`.
+2. **Single point of failure.** If the host part of that grant ever
+   changes — a migration, a switch from TCP to socket — all six views
+   break simultaneously and take 25+ code paths with them.
+
+The definer almost certainly dates from a hosting migration: it is the
+application's own DB user, host-qualified in a way the application itself
+does not use.
+
+### Two fixes, neither applied
+
+**Option A — `SQL SECURITY INVOKER`.** Recreate each view with
+`SQL SECURITY INVOKER`, so permissions are evaluated as the *calling*
+user rather than a stored definer.
+
+- *For:* removes the dependency on any particular account existing.
+  Restores and migrations stop being fragile. Smallest permanent change.
+- *Against:* the calling user must hold `SELECT` on the underlying tables.
+  The application's DB user already does, so no practical loss here — but
+  it is a genuine semantic change, and any future least-privilege account
+  would need the underlying grants.
+
+**Option B — recreate with a definer that exists.** Keep
+`SQL SECURITY DEFINER`, change the definer to an account that reliably
+exists, e.g. `u537620103_shuser@localhost` or `@%`.
+
+- *For:* preserves current semantics exactly. Lowest behavioural risk.
+- *Against:* keeps the fragility, just repoints it. `@%` weakens host
+  restriction. A future migration can break it again.
+
+**Recommendation: Option A** for these six, because all six are simple
+reads over tables the application user can already select, so the
+`DEFINER` semantics are buying nothing while costing portability.
+
+Either way, it is six `CREATE OR REPLACE VIEW` statements and **has
+nothing to do with this module.** Nothing has been changed.
+
+**One thing worth doing regardless:** four of the six are 1:1
+passthroughs of a single table (`system_users_view` is a column-for-column
+mirror of `system_users`). They add a failure mode and no behaviour.
+Retiring them would be a larger change and is not proposed here.
+
+### Check on production
+
+```sql
+SELECT TABLE_NAME, DEFINER, SECURITY_TYPE
+  FROM information_schema.VIEWS WHERE TABLE_SCHEMA = DATABASE();
+
+SELECT User, Host FROM mysql.user WHERE User = 'u537620103_shuser';
+-- needs privileges; if unavailable, this is equivalent:
+SELECT COUNT(*) FROM system_users_view;   -- errors 1449 if the definer is missing
+```
+
+`ROLLOUT.md` keeps `--single-transaction` and the backup verification
+regardless: it costs nothing, and it is what turned an 870-byte file that
+looked like a backup into a caught error.
+
+---
+
+## 0.12 Stray file provenance — `controllers/Abom_model.php`
+
+Caught by the rollback rehearsal's R1 check. Traced:
+
+- **Not** in the working tree (only `Abom.php`), **never committed** (0
+  commits for that path), **not** in the manifest, and **not** in any
+  `ROLLOUT.md` copy instruction. Not an eighth document defect.
+- Cause was a careless `cp` of mine into the sandbox:
+  `cp application/controllers/Abom.php application/models/Abom_model.php <dest>/application/controllers/`
+  — two sources, one destination, so both landed in `controllers/`.
+- Requesting `/abom_model` returns **HTTP 500**,
+  `Class 'CI_Model' not found` — loud, and only because that class extends
+  `CI_Model`. A stray extending `CI_Controller` would have executed.
+
+**The manifest would have missed it.** Its controller pattern was the
+exact filename `application/controllers/Abom.php`, so a sibling was
+invisible to the NEW-file detection. Every pattern is now a glob
+(`Abom*.php`, both cases, in every directory the module writes to), and
+`manifest.json` is excluded from its own checksum set. Verified: dropping
+a stray into `controllers/` now reports
+`NEW module application/controllers/Abom_model.php` and exits 1.
+
+---
+
 ## 1. Schema deltas — `abom_schema.sql` → `Database/abom_001.sql`
 
 ### 1.1 Three new columns on `abom_bom_line` — approved

@@ -31,18 +31,40 @@ $root     = dirname(dirname(__DIR__));
 $manifest = __DIR__ . '/manifest.json';
 $write    = in_array('--write', $argv, true);
 
-/** Files the module owns. Everything else in the tree is not ours. */
+/**
+ * Files the module owns. Everything else in the tree is not ours.
+ *
+ * NOTE ON THE GLOBS. These must be WIDER than the exact filenames the
+ * module ships, or the NEW-file detection cannot see a stray.
+ *
+ * The rollback rehearsal caught `application/controllers/Abom_model.php`
+ * — a model sitting in controllers/, from a careless copy. A controller
+ * is publicly routable, so CI resolved `/abom_model` to it and returned
+ * a 500 (`Class 'CI_Model' not found`). Loud rather than dangerous, but
+ * only because that class happens to extend CI_Model.
+ *
+ * The earlier pattern for controllers was the exact filename
+ * `application/controllers/Abom.php`, so that stray was invisible to
+ * this check. It is now `Abom*.php`, and every other directory the
+ * module writes to is globbed the same way.
+ */
 $patterns = array(
-    'application/config/abom.php',
-    'application/controllers/Abom.php',
-    'application/models/Abom_*.php',
-    'application/libraries/Abom_*.php',
-    'application/helpers/abom_helper.php',
-    'application/views/abom/*.php',
+    'application/config/abom*.php',
+    'application/controllers/Abom*.php',
+    'application/controllers/abom*.php',
+    'application/models/Abom*.php',
+    'application/models/abom*.php',
+    'application/libraries/Abom*.php',
+    'application/libraries/abom*.php',
+    'application/helpers/abom*.php',
+    'application/helpers/Abom*.php',
+    'application/views/abom/*',
     'assets/abom/*',
     'Database/abom_*.sql',
     'BOMMODULEDEVELOPMENT/tests/*.php',
     'BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md',
+    'BOMMODULEDEVELOPMENT/ROLLOUT.md',
+    'BOMMODULEDEVELOPMENT/NAV_SNIPPET.md',
 );
 
 /**
@@ -80,6 +102,12 @@ function collect($root, array $patterns)
 }
 
 $owned = collect($root, $patterns);
+
+// The manifest cannot checksum itself: writing it changes its own hash,
+// which would report CHANGED on every run.
+$owned = array_values(array_filter($owned, function ($rel) {
+    return $rel !== 'BOMMODULEDEVELOPMENT/tests/manifest.json';
+}));
 
 // ---------------------------------------------------------------------
 if ($write) {
