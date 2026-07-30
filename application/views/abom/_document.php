@@ -19,6 +19,10 @@ $editable = isset($editable) ? (bool) $editable : false;
 ?>
 
 <header class="app-header">
+  <a class="abom-home" href="<?php echo page_url; ?>Dashboard" title="Back to Dashboard">
+    <span class="abom-home-icon" aria-hidden="true">&#8962;</span>
+    <span class="abom-home-text">Dashboard</span>
+  </a>
   <div>
     <h1>&#9881;&#65039; Automation BOM Generator</h1>
     <div class="sub">

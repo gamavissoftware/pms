@@ -56,6 +56,34 @@
   padding: 14px 24px;
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
 }
+/* Home button. This module does not load the application sidebar (see the
+   comment at the top of generate.php), so this is the only way back out —
+   it must never be conditional or hidden on screen. */
+.abom-wrap .app-header .abom-home {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 12px; margin-right: 4px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.30);
+  border-radius: 4px;
+  color: #fff; text-decoration: none;
+  font-size: 12px; font-weight: 700; letter-spacing: .3px;
+  line-height: normal; white-space: nowrap;
+}
+.abom-wrap .app-header .abom-home:hover,
+.abom-wrap .app-header .abom-home:focus {
+  background: rgba(255,255,255,.24);
+  border-color: rgba(255,255,255,.55);
+  color: #fff; text-decoration: none;
+}
+.abom-wrap .app-header .abom-home-icon { font-size: 15px; line-height: 1; }
+
+/* The label is the affordance; below the design's phone breakpoint the
+   icon alone is unambiguous and the header needs the room. */
+@media (max-width: 480px) {
+  .abom-wrap .app-header .abom-home-text { display: none; }
+  .abom-wrap .app-header .abom-home { padding: 6px 9px; }
+}
+
 .abom-wrap .app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: .3px; color: #fff; }
 .abom-wrap .app-header .sub { font-size: 11px; opacity: .75; margin-top: 2px; }
 .abom-wrap .badge {

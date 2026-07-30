@@ -903,6 +903,57 @@ the three, because the rollback runs when something has already gone wrong.
 
 ---
 
+## 0.16 The application sidebar is not loaded on module screens
+
+**Reported from production**: the left sidebar overlapped the BOM table,
+hiding the first ~250px of every screen — the config panel and the start of
+the page title.
+
+**Cause.** Every other page in the PMS wraps its content in
+`<div class="wrapper">`, and the theme uses that class to offset content
+past the fixed sidebar. This module's screens are full-bleed document
+sheets, not `.wrapper` pages, so nothing offset them and the sidebar sat on
+top of the content.
+
+Two fixes were possible: add `.wrapper` and keep the sidebar, or drop the
+sidebar. **Dropped, at the operator's request**, and it is the better fit
+here anyway: a BOM is a 9-column document with editable quantity inputs,
+and the ~250px the sidebar costs is the difference between the table
+fitting and scrolling sideways.
+
+`common/nav-menu.php` and `common/info-section.php` are simply **not
+loaded** by `generate.php`, `view.php` and `list.php`. Neither shared file
+is modified — rule 11 still holds, and nav-menu still carries the module's
+own menu entry, so the module is reached from every other page exactly as
+before.
+
+`common/info-section.php` was dropped in the same change for a different
+reason: **its entire body is wrapped in an HTML comment**, so it renders
+nothing at all while still running a `SELECT` against `system_reports` on
+every page load.
+
+**Navigating back out** is a home button in `.app-header`, present on all
+four screens. It is the only way out now, so it is unconditional — never
+permission-gated, never hidden on screen. It links to `page_url` +
+`Dashboard`, capital D, matching `Dashboard.php` on disk and the eight
+existing links in `nav-menu.php` — this module runs on case-sensitive
+Linux and `dashboard` would 404 there while working locally.
+
+Hidden in `@media print` alongside the other controls: a printed BOM must
+not carry a navigation button.
+
+New CSS is scoped under `.abom-wrap` like every other rule in this module,
+including the one media query, which hides the button's text label below
+480px and leaves the icon.
+
+**Verified on all four screens** (`generate`, `view`, `list`, `print`):
+`id="topnav"` absent, the meeting bar absent, the home button present and
+pointing at `Dashboard`. Design diff still reports 47 of 47 — removing the
+app chrome moves the module *closer* to the approved design document, which
+is itself a standalone sheet with no application navigation.
+
+---
+
 ## 1. Schema deltas — `abom_schema.sql` → `Database/abom_001.sql`
 
 ### 1.1 Three new columns on `abom_bom_line` — approved

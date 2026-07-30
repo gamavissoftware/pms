@@ -18,12 +18,37 @@
 </head>
 <body>
 
-<header id="topnav"><?php $this->load->view('common/nav-menu'); ?></header>
-<?php $this->load->view('common/info-section.php'); ?>
+<?php
+/**
+ * The application chrome (common/nav-menu, common/info-section) is
+ * DELIBERATELY NOT LOADED on this module's screens.
+ *
+ * Two reasons:
+ *   1. nav-menu renders a fixed left sidebar, and the theme offsets the
+ *      content for it via `<div class="wrapper">`. This module's document
+ *      layout is not a .wrapper page — it is a full-bleed sheet — so the
+ *      sidebar overlapped the BOM table.
+ *   2. A BOM is a wide document: 9 columns plus editable quantities. The
+ *      ~250px the sidebar costs is the difference between the table
+ *      fitting and scrolling horizontally.
+ *
+ * common/nav-menu.php itself is UNCHANGED and still carries this module's
+ * menu entry, so the module is reached from any other page as normal.
+ * Navigation back out is the home button in .app-header.
+ *
+ * info-section.php is not loaded either: its entire body is wrapped in an
+ * HTML comment, so it renders nothing while still running a query
+ * against system_reports.
+ */
+?>
 
 <div class="abom-wrap">
 
   <header class="app-header">
+    <a class="abom-home" href="<?php echo page_url; ?>Dashboard" title="Back to Dashboard">
+      <span class="abom-home-icon" aria-hidden="true">&#8962;</span>
+      <span class="abom-home-text">Dashboard</span>
+    </a>
     <div>
       <h1>&#9881;&#65039; Automation BOM Generator</h1>
       <div class="sub">Saved bills of material</div>
