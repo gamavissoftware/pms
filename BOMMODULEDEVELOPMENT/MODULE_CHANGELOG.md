@@ -839,6 +839,70 @@ Every cell the matrix leaves empty, and why:
 
 ---
 
+## 0.15 `abom_002_seed.sql` failed in phpMyAdmin — TRUNCATE vs FK checks
+
+**Found on production, during the real deployment.** Step 2 of the rollout
+reported:
+
+```
+#1701 Cannot truncate a table referenced in a foreign key constraint
+      (`abom_item`, CONSTRAINT `fk_abom_item_section`
+       FOREIGN KEY (`section_id`) REFERENCES `abom_section` (`id`))
+```
+
+**Cause.** The seed cleared its six tables with `TRUNCATE`, guarded by
+`SET FOREIGN_KEY_CHECKS = 0`. TRUNCATE on a parent table is refused
+whenever FK checks are on — regardless of whether the child table holds any
+rows — so the whole block depended on that session variable surviving.
+
+It does through the `mysql` command line, which is the only way it was
+ever tested. It does **not** through phpMyAdmin, which applies its own
+"Enable foreign key checks" setting (on by default) and overrides it.
+
+**This is a testing failure, not just a coding one.** Every verification of
+this script — the 11-table import, the `71 · 29 · 42 · 8 · 4 · 4 · 6`
+counts, the rollout rehearsal — ran through the CLI. The rollout document
+tells the operator to use phpMyAdmin. The script was never once executed
+the way the instructions say to execute it, so a whole class of
+tool-dependent behaviour was invisible.
+
+**The fix.** `DELETE FROM` in child-before-parent order, no
+`FOREIGN_KEY_CHECKS` manipulation at all, wrapped in a transaction. It
+needs no session flag, so it behaves identically through phpMyAdmin, the
+mysql client, or anything else.
+
+Two things improved as a side effect:
+
+- **It can no longer orphan live BOMs.** With FK checks disabled, TRUNCATE
+  would have emptied `abom_plc_family` even while `abom_bom` rows
+  referenced it. `DELETE` is refused instead — the correct outcome, since
+  re-seeding must not be able to break existing BOMs.
+- **A refused re-seed no longer half-applies.** `START TRANSACTION` /
+  `COMMIT` means a failure at `abom_plc_family` rolls back the already-run
+  deletes, instead of leaving the module with no master data.
+
+`SET FOREIGN_KEY_CHECKS = 1` at the end of the file was also removed: the
+script no longer turns them off, and unconditionally turning them *on*
+would corrupt a session that had deliberately disabled them.
+
+**Verified, with FK checks explicitly ON:**
+
+| Case | Result |
+|---|---|
+| fresh install | `71 · 29 · 42 · 8 · 4 · 4 · 6` |
+| run a second time | clean, still 71 items |
+| re-seed while a BOM exists | refused (1451), **and fully rolled back** — items, sections and the BOM all intact |
+| seed data section vs handover | md5 `a5bba49541eca67b5e9482472cbb7564`, byte-identical |
+
+**Checked for the same class of bug everywhere else:** no `TRUNCATE` or
+`FOREIGN_KEY_CHECKS` remains in `abom_001.sql`,
+`abom_003_permissions.sql`, or either `abom_004` views file. The rollback's
+11 `DROP TABLE` statements were re-run with FK checks ON — they are already
+in child-before-parent order and complete cleanly. That mattered most of
+the three, because the rollback runs when something has already gone wrong.
+
+---
+
 ## 1. Schema deltas — `abom_schema.sql` → `Database/abom_001.sql`
 
 ### 1.1 Three new columns on `abom_bom_line` — approved

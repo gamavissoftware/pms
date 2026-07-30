@@ -1,6 +1,6 @@
 {
     "owned": {
-        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "5478b83b27f65209b93962fc7bf55151",
+        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "38050f328a51053cf5c546bd194676e6",
         "BOMMODULEDEVELOPMENT/NAV_SNIPPET.md": "72f5b73755b095a8051758a24b3b47a7",
         "BOMMODULEDEVELOPMENT/PERMISSIONS_WORKSHEET.md": "a5b10960316f6e198a656aa93cf6a450",
         "BOMMODULEDEVELOPMENT/POST_DEPLOY_CHECK.md": "35ad2030d6d0c6e501b9e7b31cb60950",
@@ -21,7 +21,7 @@
         "BOMMODULEDEVELOPMENT/tests/stubs.php": "e9b1d531851cda41bdecc9a7cbaace67",
         "BOMMODULEDEVELOPMENT/tests/verify_docs.php": "97f642230add4c4cfe8f6d172bc3cf67",
         "Database/abom_001.sql": "bfc60a87f680795d5f9991e6f31e564a",
-        "Database/abom_002_seed.sql": "995bde6cae7764c85d700ab943d6ed85",
+        "Database/abom_002_seed.sql": "7ee110ef9eb8a38db722c30cf016d925",
         "Database/abom_003_permissions.sql": "7402313651074bce59ca4e202f956bef",
         "application/config/abom.php": "6676221af6f4af94bcab5ee69b212ef8",
         "application/controllers/Abom.php": "a3d99fbb881e5c77127ee95d2c9e30b0",

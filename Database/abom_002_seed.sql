@@ -13,18 +13,48 @@
 --  battery-vs-J4 count mismatch (id 70). Engineering resolves these
 --  through the module UI, with an audit trail.
 --
---  TRUNCATE below touches abom_* tables ONLY. Nothing outside the
---  abom_ prefix is read or written by this script.
+--  The DELETE statements below touch abom_* tables ONLY. Nothing outside
+--  the abom_ prefix is read or written by this script.
+--
+--  WHY DELETE AND NOT TRUNCATE
+--  ---------------------------
+--  This block used TRUNCATE, guarded by SET FOREIGN_KEY_CHECKS = 0. That
+--  works through the mysql command line, which is how it was tested, and
+--  FAILS in phpMyAdmin with
+--
+--    #1701 Cannot truncate a table referenced in a foreign key constraint
+--
+--  because phpMyAdmin's import applies its own "Enable foreign key checks"
+--  setting (on by default) and overrides the session variable this script
+--  set. TRUNCATE on a parent table is refused whenever FK checks are on,
+--  regardless of whether the child table holds any rows.
+--
+--  DELETE needs no session flag, so it behaves identically through
+--  phpMyAdmin, the mysql client, and any other import tool.
+--
+--  It is also safer on a re-run. With FK checks disabled, TRUNCATE would
+--  have emptied abom_plc_family even when live BOMs referenced it,
+--  silently orphaning them. DELETE refuses instead, which is the correct
+--  outcome: re-seeding must not be able to break existing BOMs.
+--
+--  Order is children before parents. All ids in this file are explicit,
+--  so not resetting AUTO_INCREMENT (which TRUNCATE did) changes nothing.
 -- =====================================================================
 SET NAMES utf8mb4;
-SET FOREIGN_KEY_CHECKS = 0;
 
-TRUNCATE TABLE `abom_item`;
-TRUNCATE TABLE `abom_section`;
-TRUNCATE TABLE `abom_plc_rule`;
-TRUNCATE TABLE `abom_feature`;
-TRUNCATE TABLE `abom_formula`;
-TRUNCATE TABLE `abom_plc_family`;
+-- All of it, or none of it. Without this, a re-seed that is refused at
+-- abom_plc_family (because a live BOM references it) would already have
+-- emptied abom_item and abom_section, leaving the module with no master
+-- data and a BOM that cannot be re-rendered. InnoDB makes these DELETEs
+-- and INSERTs transactional, so the rollback is complete.
+START TRANSACTION;
+
+DELETE FROM `abom_item`;         -- child of section, formula, plc_family
+DELETE FROM `abom_section`;      -- child of plc_family
+DELETE FROM `abom_plc_rule`;     -- no foreign keys
+DELETE FROM `abom_feature`;      -- no foreign keys
+DELETE FROM `abom_formula`;      -- parent of abom_item
+DELETE FROM `abom_plc_family`;   -- parent of section, item and abom_bom
 
 -- --- PLC families ----------------------------------------------------
 INSERT INTO `abom_plc_family`
@@ -143,4 +173,8 @@ INSERT INTO `abom_item`
 (70,'2050390','BATTERY SET FOR MR-J4 SERVO AMPLIFIER','MR-BAT6V1SET','MITSUBISHI',12,'BATTERY',2,8,0,NULL,NULL,'Qty = Servo Battery Count (sidebar). ⚠ DF-1826 shows 12, J4 unit count = 11 — verify with engineering.','review','Standalone','NOS','DF-1826',1),
 (71,'2050599','DYNAMIC BRAKING RESISTOR (DBR), 6.7Ω, 500W','—','RECKON',3,'MANUAL',2,8,1,'feat_dbr','FOR REGENERATION: UP/DWN ASSEMBLY + HORZ. + VERT.',NULL,'none','Standalone','NOS','DF-1826',1);
 
-SET FOREIGN_KEY_CHECKS = 1;
+COMMIT;
+
+-- No SET FOREIGN_KEY_CHECKS = 1 here: this script never turned them off,
+-- so there is nothing to restore. Leaving the re-enable in would silently
+-- turn FK checks ON in a session that had deliberately disabled them.
