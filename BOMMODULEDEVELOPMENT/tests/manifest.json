@@ -1,8 +1,8 @@
 {
     "owned": {
-        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "ee220f0381acfff752319a13a9350dbe",
+        "BOMMODULEDEVELOPMENT/MODULE_CHANGELOG.md": "6a7dbf54044430145986445aac4fde26",
         "BOMMODULEDEVELOPMENT/NAV_SNIPPET.md": "72f5b73755b095a8051758a24b3b47a7",
-        "BOMMODULEDEVELOPMENT/ROLLOUT.md": "f1447655367579ba06fa541d956497b5",
+        "BOMMODULEDEVELOPMENT/ROLLOUT.md": "c630843f051e471992fea329fd2f1b85",
         "BOMMODULEDEVELOPMENT/tests/case_audit.php": "26f56c2d2a1bb1f877a326eda733c4a4",
         "BOMMODULEDEVELOPMENT/tests/design_diff.php": "172fbb77f912cc62d551cc1e79f21a7a",
         "BOMMODULEDEVELOPMENT/tests/dump_reference.php": "6159bced10bc99061b7ff0a66bc882d8",
@@ -16,7 +16,7 @@
         "Database/abom_002_seed.sql": "995bde6cae7764c85d700ab943d6ed85",
         "Database/abom_003_permissions.sql": "7402313651074bce59ca4e202f956bef",
         "application/config/abom.php": "6676221af6f4af94bcab5ee69b212ef8",
-        "application/controllers/Abom.php": "6c784eb91ff8d462d53698b833cf7279",
+        "application/controllers/Abom.php": "1e54dd49a31a60925d96755c53e1f40c",
         "application/helpers/abom_helper.php": "94054264e422f0e73cd6b16b27697f39",
         "application/libraries/Abom_engine.php": "c28e440cef2ff758ab8ff24ef4cb4ca4",
         "application/libraries/Abom_exporter.php": "6dc205a65800a0300d950e3d98e0a94d",

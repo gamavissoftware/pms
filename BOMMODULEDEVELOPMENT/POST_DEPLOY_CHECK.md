@@ -196,13 +196,29 @@ Look at your left-hand navigation menu.
 **Expect:** an **"Automation BOM Generator"** entry, because you have been
 granted access.
 
-Now ask a colleague who has **not** been granted anything to look at their
-menu.
+Now **sign in as a second account that has not been granted anything** —
+your own second login, or a colleague's with their permission. Do not just
+ask them to glance at it; log in and look.
 
-**Expect:** they do **not** see it, and their menu is otherwise unchanged.
+**Expect:** the "Automation BOM Generator" entry is **absent**, and the
+rest of their menu is unchanged.
 
-**If they do see it:** the grant list is wider than intended. Check
-`ROLLOUT.md` → Ongoing administration.
+**If it appears for an ungranted user, stop and report it.** Do not
+continue to step 4 of `ROLLOUT.md` and do not grant anyone else. It would
+mean the permission gate is not working, and that is a finding worth
+having before anyone else logs in — which is the whole reason this check
+runs while only you have access.
+
+**Then confirm the URL is closed too, not just the menu.** While signed in
+as that ungranted account, type `YOURSITE/index.php/abom/generate`
+directly.
+
+**Expect:** you are sent back to the Dashboard with a red message —
+*"You do not have permission to use the Automation BOM generator."* You
+should **not** see a working generator screen.
+
+**If you do see the generator**, stop and report it. A hidden menu item is
+not access control; the URL has to be closed as well.
 
 ### 15. One person cannot approve a BOM alone
 

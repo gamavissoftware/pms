@@ -542,6 +542,59 @@ a stray into `controllers/` now reports
 
 ---
 
+## 0.13 `generate` and `save` were not permission-gated
+
+Found while verifying a claim I had just written into
+`POST_DEPLOY_CHECK.md` step 14 — that an ungranted user is refused at
+`/abom/generate`. It was not true.
+
+**What was wrong.** Spec §4.1 defines six permission keys. Only the three
+approval ones were ever checked. `generate`, `save` and the line-edit
+paths ran `require_tables()` and nothing else, so **any logged-in user
+could open the generator by URL and save a BOM**, regardless of grants.
+
+Demonstrated: user 63, holding zero `AUTOMATION BOM` grants, could not see
+the menu item — correctly — but reached `/abom/generate` with all 42 rows
+and **successfully saved a BOM**.
+
+This also falsified the premise the rollout order rests on. "The module is
+invisible to every user until a grant exists" was true of the *menu* and
+false of the *URL*, which is a meaningful difference when the argument
+being made is that step 1 is safe because nobody can see anything.
+
+Same class of defect as §0.9.2: a permission that gates nothing is
+decorative, and `AUTOMATION BOM GENERATOR` was gating nothing at all.
+
+**The fix.** `Abom::require_perm($action)` gates
+`generate`, `generate_ajax`, `save`, `save_line_qty` and
+`acknowledge_line`. It distinguishes the two failure modes, because they
+need different remedies:
+
+- **unconfigured** → the configuration diagnostic naming the key and file
+- **not granted** → an access denial following the house convention
+  (`Master_profile_guard::deny`): flashdata plus a redirect for a page,
+  403 JSON for AJAX
+
+**Read paths are deliberately NOT gated.** `view`, `list`, `print`,
+`export` and `reference` stay open to any logged-in user. An approver
+holding only `APPROVALS` must be able to open the BOM they are approving,
+and the spec defines no view permission. Gating reads on `generate` would
+have locked approvers out of their own job.
+
+**Verified:**
+
+| Actor | generate | save | view / list / export |
+|---|---|---|---|
+| no grants | redirected | **403**, wrote nothing | — |
+| `APPROVALS` only | redirected | 403 | **200** |
+| `GENERATOR` + `APPROVALS` | 200, 42 rows | 200, `ABOM-1` | 200 |
+
+Six regression assertions added to the separation-of-duty suite, which is
+now 29. Both the closed URL and the still-open read path are covered, so
+neither can silently reverse.
+
+---
+
 ## 1. Schema deltas — `abom_schema.sql` → `Database/abom_001.sql`
 
 ### 1.1 Three new columns on `abom_bom_line` — approved

@@ -13,14 +13,21 @@ wholesale `rsync` would delete them. Copy the 27 files listed in step 4
 
 ## The safe order — read this first
 
-The module is **invisible to every user until a grant exists**, and
-`abom_003_permissions.sql` deliberately creates none. That gives a rollout
-where nothing is visible to the business until everything has been
-verified on the real server.
+The module is **unreachable by every user until a grant exists** — both
+the menu item and the URL — and `abom_003_permissions.sql` deliberately
+creates none. An ungranted user who types `/abom/generate` is redirected
+to the Dashboard with a permission message; an ungranted POST to
+`/abom/save` gets a 403 and writes nothing. Read paths (viewing, listing
+and exporting an existing BOM) stay open to any logged-in user, because an
+approver holding only `APPROVALS` must be able to open the document they
+are approving.
+
+That gives a rollout where nothing is reachable by the business until
+everything has been verified on the real server.
 
 | | Do | Visible to |
 |---|---|---|
-| **1** | Deploy everything — tables, seed, permissions (zero grants), files, config, routes, nav | **nobody** |
+| **1** | Deploy everything — tables, seed, permissions (zero grants), files, config, routes, **and the nav snippet** | **nobody** |
 | **2** | Grant **one super admin only**, then run `POST_DEPLOY_CHECK.md` | that one person |
 | **3** | Print check — both PDFs against the released DF sheet | nobody |
 | **4** | Fill in `PERMISSIONS_WORKSHEET.md` and grant the real users | **the business** |
@@ -33,6 +40,12 @@ on the real server, on real data, by a real person.
 Step 5 is a **separate change with nothing to do with this module.** Do
 not bundle it: two unrelated changes in one window means an unexplained
 symptom has two candidate causes, and someone backs out the wrong one.
+
+**Apply the nav snippet in step 1, not later.** With zero grants nobody
+can see the menu item anyway, so it changes nothing for anyone — and it
+keeps step 14 of `POST_DEPLOY_CHECK.md` a real test rather than a skipped
+one. Verified during the rehearsal: with the snippet applied and no grants
+in place, the item did **not** render; after a grant was inserted, it did.
 
 There is **no point of no return in steps 1–3.** The Rollback section
 undoes all of it, and it has been rehearsed.

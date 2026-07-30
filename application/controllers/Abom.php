@@ -80,6 +80,10 @@ class Abom extends CI_Controller
             return;
         }
 
+        if (!$this->require_perm('generate')) {
+            return;
+        }
+
         $cfg = $this->config_from_input($this->default_config());
         $this->load->library('Abom_engine', null, 'abom_engine');
 
@@ -107,6 +111,10 @@ class Abom extends CI_Controller
         $this->json_only();
 
         if (!$this->require_tables()) {
+            return;
+        }
+
+        if (!$this->require_perm('generate')) {
             return;
         }
 
@@ -170,6 +178,10 @@ class Abom extends CI_Controller
         $this->json_only();
 
         if (!$this->require_tables()) {
+            return;
+        }
+
+        if (!$this->require_perm('save')) {
             return;
         }
 
@@ -256,6 +268,10 @@ class Abom extends CI_Controller
         $this->json_only();
 
         if (!$this->require_tables()) {
+            return;
+        }
+
+        if (!$this->require_perm('save')) {
             return;
         }
 
@@ -351,6 +367,7 @@ class Abom extends CI_Controller
         $this->json_only();
 
         if (!$this->require_tables()) { return; }
+        if (!$this->require_perm('save')) { return; }
 
         $this->load->model('Abom_model');
         $this->load->model('Abom_approval_model');
@@ -1220,6 +1237,55 @@ class Abom extends CI_Controller
         $this->load->library('Abom_permission_guard', null, 'abom_permission_guard');
 
         return $this->abom_permission_guard->allows($action);
+    }
+
+    /**
+     * Gate an action. Returns FALSE when the caller may not proceed, and
+     * has already emitted the response.
+     *
+     * Distinguishes the two failures, because they need different
+     * remedies and conflating them wastes a day:
+     *
+     *   unconfigured -> a CONFIGURATION diagnostic naming the key and file
+     *   not granted  -> an access denial, following the house convention
+     *                   (Master_profile_guard::deny): flashdata plus a
+     *                   redirect for a page, 403 JSON for AJAX
+     *
+     * Read paths (view, list, print, export, reference) are deliberately
+     * NOT gated on this: an approver who holds only APPROVALS must be
+     * able to open the BOM they are approving, and the spec defines no
+     * view permission.
+     *
+     * @param  string $action  generate|save|master_edit
+     * @return bool
+     */
+    private function require_perm($action)
+    {
+        if (!$this->require_permissions_configured()) {
+            return false;
+        }
+
+        if ($this->has_perm($action)) {
+            return true;
+        }
+
+        $message = 'You do not have permission to use the Automation BOM generator. '
+                 . 'Ask an administrator to grant you access.';
+
+        if ($this->input->is_ajax_request()) {
+            $this->output->set_status_header(403);
+            $this->output->set_content_type('application/json');
+            echo json_encode(array('status' => 0, 'message' => $message));
+            return false;
+        }
+
+        $this->session->set_flashdata(
+            'message',
+            '<div class="alert alert-danger alert-dismissable">' . $message . '</div>'
+        );
+        redirect(page_url . 'Dashboard');
+
+        return false;
     }
 
     /**
