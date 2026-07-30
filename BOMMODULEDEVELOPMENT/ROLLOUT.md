@@ -60,6 +60,32 @@ undoes all of it, and it has been rehearsed.
 | Confirm PHP | must be **7.4** (`ea-php74`). The module is 7.4-safe; CodeIgniter 3.1.4 is not PHP 8 clean. |
 | Confirm ext-zip | **Run the probe below.** Only needed for Excel export; CSV and PDF work without it. |
 | Confirm MariaDB | 11.x. Proven against 11.4. |
+| **Confirm no other deployment is in flight** | **See the box below.** Ask before you start, not after. |
+
+### Is anyone else deploying tonight?
+
+This module **appends** to two files that every feature shares:
+
+- `application/config/routes.php`
+- `application/views/common/nav-menu.php`
+
+Almost any other feature touches the same two. If two people deploy on the
+same evening, both appending, **one set of changes silently overwrites the
+other** — and the symptom is not an error, it is a menu item or a route
+that quietly stops existing.
+
+Parallel work was in progress on `Df_dispatch_plan` while this module was
+built: its controller, model, view and a new migration were all being
+edited in the same working folder. That is normal, and not a problem in
+itself — but it is exactly the kind of change that also edits those two
+files.
+
+**Before you start, ask whoever else is deploying: who goes first?** Agree
+an order and do not do both the same night. It takes five minutes and it
+is the single most likely way this goes wrong.
+
+The expected-diff check at the end of step 4 **will** catch a collision if
+one happens. Knowing to look is better than discovering it.
 
 ### Database backup — and why the obvious command fails
 

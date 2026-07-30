@@ -704,12 +704,82 @@ recorded decision, not an oversight:
 If per-user ownership is ever wanted, it is an `owner_id` column plus one
 check in `save_line_qty` — not a redesign. Listed as future work.
 
-**Caveat on the second row, stated precisely.** The 422 comes from
-workflow state and separation-of-duty rules, **not** from an ownership
-check — there is no code asking "is this approver connected to this BOM".
-The refusal is real and reproducible, but it must not be described as
-object-level authorisation, because a future workflow change could remove
-it without anyone realising a protection was lost.
+**CORRECTION to the second row — the earlier reading was wrong.** It was
+first reported as "refused, 422". That figure was **an artefact of the test
+fixture**, not a protection. The BOM used had approval history that
+happened to trip the consecutive-transition rule. Re-probed against a BOM
+with a clean approval trail:
+
+```
+  APPROVALS-only holder, no link to the BOM   HTTP 200
+  status submitted -> checked
+```
+
+**An unconnected `APPROVALS` holder CAN advance a BOM.** The original
+caveat — that the 422 came from workflow rules and not from an ownership
+check — was correct in kind but understated: there was no reliable refusal
+there at all. The protection I declined to overclaim turned out not to
+exist, which is why it was worth not claiming.
+
+This is the same accepted decision as drafts, applied to transitions:
+**stage authority is decided by permission plus separation of duty, not by
+connection to the BOM.** Anyone holding the stage's permission may act at
+that stage on any BOM. That is what a shared engineering and procurement
+team needs, and it is consistent with the no-ownership decision above.
+
+### 0.14.1a Incidental protections — read before changing the workflow
+
+What genuinely stops one person walking a BOM to fully approved is
+**separation of duty, enforced against recorded approval history** — not
+grants, and not ownership. Measured:
+
+| Attempt | Result |
+|---|---|
+| unconnected approver advances `submitted → checked` | **200 — permitted, by design** |
+| the **same** user then advances `checked → eng_approved` | 422 *"Checked by you already; another user must perform the next stage."* |
+| the **creator** advances `eng_approved → approved` | 422 *"You created this BOM, so you cannot give it the final procurement approval."* |
+
+Those last two are the load-bearing ones, and they are config-gated on
+`abom_require_distinct_approvers` (default `TRUE`). **If that default is
+ever changed to `FALSE`, a single approver can take a BOM from submitted
+to approved alone.**
+
+All three are pinned by assertions 15a–15c in the separation-of-duty
+suite, with a comment at the top of that block saying no ownership check
+enforces them and the test is the tripwire. 15a deliberately asserts the
+*permitted* case, so that adding an ownership check later also fails the
+suite — the behaviour is a decision, and a change in either direction
+should be made on purpose rather than discovered afterwards.
+
+### 0.14.1b Guard ORDER leaked status and existence
+
+Found while hunting for anything else protected only as a side effect.
+In `workflow_action('advance')` the per-stage permission check runs
+**after** `next_transition()`, so an ungranted user was answered before
+being refused:
+
+```
+  ungranted + already-approved BOM   HTTP 422
+    "There is no next stage from \"Approved — Procurement\"."   <- status leaked
+  ungranted + non-existent BOM       HTTP 404                  <- existence leaked
+```
+
+Not a write — the approval trail stayed empty — but with reads now gated
+(§0.14) it was inconsistent to leave this path narrating BOM state to
+someone refused everywhere else.
+
+**Fixed** by calling `require_any_perm()` as a floor at the top of
+`workflow_action`, before the BOM is loaded. It is weaker than every
+per-action check below it, so it relaxes nothing. Both cases now answer a
+uniform 403 disclosing nothing. Pinned by assertion block 16.
+
+**That is the complete list.** Every other refusal in the matrix traces to
+an explicit check: `save_line_qty` and `acknowledge_line` both scope the
+line by `bom_id` in the model and abort when it does not match (verified
+in `Abom_model::update_line_qty` and
+`Abom_approval_model::acknowledge_line`); soft-deleted records are filtered
+by `deleted_at IS NULL`; superseded BOMs are refused by
+`abom_qty_editable()` on status. None of those is incidental.
 
 ### 0.14.2 `master_edit` grants nothing today
 

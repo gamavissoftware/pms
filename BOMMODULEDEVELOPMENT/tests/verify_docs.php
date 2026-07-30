@@ -249,8 +249,26 @@ c('CHANGELOG', 'reject requires check', true, (bool) preg_match(
 c('CHANGELOG', 'require_any_perm exists', true, (bool) strpos(
     file_get_contents($ROOT . '/application/controllers/Abom.php'), 'private function require_any_perm'));
 $ctl = file_get_contents($ROOT . '/application/controllers/Abom.php');
-c('CHANGELOG', 'require_any_perm called on 4 read paths', 4,
+// 4 read paths + 1 floor at the top of workflow_action, minus the
+// declaration itself. This assertion caught the fifth call site being
+// added, which is exactly what it is for.
+c('CHANGELOG', 'require_any_perm: 4 read paths + 1 workflow floor', 5,
     preg_match_all('/require_any_perm\\(\\)/', $ctl) - 1);
+c('CHANGELOG', 'workflow_action carries the floor', true, (bool) preg_match(
+    '/private function workflow_action.*?require_any_perm\\(\\)/s', $ctl));
+c('CHANGELOG', 'guard-order leak documented', true, strpos($C, '0.14.1b Guard ORDER') !== false);
+c('CHANGELOG', 'Q2 correction recorded', true,
+    strpos($C, 'CORRECTION to the second row') !== false);
+c('CHANGELOG', 'incidental protections section exists', true,
+    strpos($C, '0.14.1a Incidental protections') !== false);
+c('CHANGELOG', 'SoD is config-gated as documented', true, (bool) preg_match(
+    "/abom_require_distinct_approvers'\\]\\s*=\\s*TRUE/",
+    file_get_contents($ROOT . '/application/config/abom.php')));
+c('ROLLOUT',   'warns about concurrent deployments', true,
+    strpos($R, 'Is anyone else deploying tonight?') !== false);
+c('ROLLOUT',   'names both shared files', true,
+    strpos($R, 'application/views/common/nav-menu.php') !== false
+    && strpos($R, 'application/config/routes.php') !== false);
 c('CHANGELOG', '17 public entry points as documented', 17,
     preg_match_all('/^\\s*public function (\\w+)/m', $ctl));
 c('CHANGELOG', 'section 0.13 marked superseded', true, strpos($C, 'Superseded by §0.14') !== false);

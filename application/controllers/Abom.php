@@ -420,6 +420,15 @@ class Abom extends CI_Controller
         if (!$this->require_tables()) { return; }
         if (!$this->require_permissions_configured()) { return; }
 
+        // A floor, checked BEFORE the BOM is loaded. The per-action checks
+        // below are the real authority, but they run after the transition
+        // is looked up, so without this an ungranted user learned a BOM's
+        // status ("There is no next stage from Approved — Procurement")
+        // or its existence from the 404. Reads are gated the same way, so
+        // leaving this path open would have been inconsistent with them.
+        // Weaker than every check below it, so it relaxes nothing.
+        if (!$this->require_any_perm()) { return; }
+
         $this->load->model('Abom_model');
         $this->load->model('Abom_approval_model');
 

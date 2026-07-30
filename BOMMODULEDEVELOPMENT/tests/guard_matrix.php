@@ -168,12 +168,19 @@ foreach ($methods as $name => $m) {
 
     $perm = array();
     foreach ($g as $x) { if (strpos($x, 'perm:') === 0) { $perm[] = substr($x, 5); } }
+
+    $explicit = !empty($perm);
     if (in_array('any_perm', $g, true)) { $perm[] = 'any-of-3'; }
 
     // A has_perm() reached only via workflow_state() decides whether a
     // BUTTON is shown; it does not refuse the request. Distinguish it,
     // because counting it as enforcement is how a gap hides.
-    if (in_array('has_perm', $g, true) && empty($perm)) {
+    //
+    // Classified INDEPENDENTLY of any-of-3. The transitions carry both a
+    // floor (require_any_perm, so an ungranted user cannot learn a BOM's
+    // status) and a real per-stage check, and reporting only the weaker of
+    // the two would understate what actually gates them.
+    if (in_array('has_perm', $g, true) && !$explicit) {
         $gates = in_array('wf_trans', $g, true) && !in_array('wf_state', $g, true);
         $perm[] = $gates ? 'per-stage' : 'ui-only';
     }
