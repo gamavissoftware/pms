@@ -737,6 +737,75 @@ class Abom extends CI_Controller
     }
 
     /**
+     * User guide / training screen.
+     *
+     * Everything factual on this page is READ FROM THE DATABASE, not
+     * written into the view: the formula list, the PLC selection rules,
+     * the feature switches and the per-formula item counts all come from
+     * the same tables the engine uses. A guide that restates the rules in
+     * prose drifts the first time someone edits abom_plc_rule, and a
+     * training document that is quietly wrong is worse than none.
+     *
+     * The worked examples are generated live by Abom_engine for the same
+     * reason — the two reference numbers a trainee is told to expect are
+     * produced by the engine as the page renders, so they cannot be
+     * stale.
+     */
+    public function guide()
+    {
+        if (!$this->require_tables()) {
+            return;
+        }
+
+        if (!$this->require_any_perm()) {
+            return;
+        }
+
+        $this->load->model('Abom_master_model');
+        $this->load->model('Abom_approval_model');
+        $this->load->library('Abom_engine', null, 'abom_engine');
+
+        $data = array(
+            'formulas' => $this->Abom_master_model->formulas_with_usage(),
+            'rules'    => $this->Abom_master_model->plc_rules_readable(),
+            'features' => $this->Abom_master_model->features_with_usage(),
+            'families' => $this->Abom_master_model->families(),
+            'stages'   => $this->Abom_approval_model->stage_ladder(),
+            'examples' => array(),
+        );
+
+        // Worked examples, computed now — not transcribed.
+        //
+        // generate() returns 'family' as an ARRAY from detect_plc_family()
+        // (family_id / code / rule_id / priority / explanation), not as a
+        // family row. The readable name comes from the family record.
+        foreach ($this->reference_presets() as $key => $preset) {
+            $result = $this->abom_engine->generate($preset['cfg']);
+
+            $family_name = '';
+            $fam = $this->Abom_master_model->get_family((int) $result['family_id']);
+            if ($fam) {
+                $family_name = $fam->name;
+            }
+
+            $data['examples'][$key] = array(
+                'label'  => $preset['bom_no'] . ' — ' . $preset['df_ref'],
+                'cfg'    => $preset['cfg'],
+                'lines'  => count($result['lines']),
+                'qty'    => array_sum(array_map(function ($l) {
+                    return (int) $l->qty;
+                }, $result['lines'])),
+                'family' => $family_name,
+                'why'    => isset($result['family']['explanation'])
+                    ? $result['family']['explanation'] : '',
+            );
+        }
+
+        $this->load->view('abom/guide', $data);
+    }
+
+
+    /**
      * Print stylesheet applied, application chrome suppressed. Same
      * document, same partials — the print CSS does the work.
      *

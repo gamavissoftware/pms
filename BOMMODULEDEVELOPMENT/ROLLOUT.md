@@ -6,7 +6,7 @@ has a check. Nothing here is reversible-by-accident.
 **Rule 12: never sync this working tree to the server.** It is an
 incomplete copy of production — `application/controllers/BOM.php`,
 `application/views/BOM/` and possibly more exist there and not here. A
-wholesale `rsync` would delete them. Copy the 27 files listed in step 4
+wholesale `rsync` would delete them. Copy the 28 files listed in step 4
 **by name**, and nothing else.
 
 ---
@@ -308,7 +308,7 @@ SELECT id, moduleid, submodule, status FROM submodule
 
 ## Step 4 — copy the module files
 
-**27 files. By name. Nothing else.** Checksums are in
+**28 files. By name. Nothing else.** Checksums are in
 `BOMMODULEDEVELOPMENT/tests/manifest.json`; verify after copying with
 `php BOMMODULEDEVELOPMENT/tests/integrity.php` run from a checkout.
 
@@ -332,6 +332,7 @@ application/views/abom/_table.php
 application/views/abom/_workflow.php
 application/views/abom/export_unavailable.php
 application/views/abom/generate.php
+application/views/abom/guide.php
 application/views/abom/list.php
 application/views/abom/not_configured.php
 application/views/abom/not_installed.php
@@ -344,7 +345,7 @@ assets/abom/abom.js
 
 Two new directories: `application/views/abom/` and `assets/abom/`.
 
-**Do not hand-copy 27 paths.** That is 27 chances to mistype one. Build a
+**Do not hand-copy 28 paths.** That is 28 chances to mistype one. Build a
 tarball from a checkout and unpack it on the server — the file list then
 cannot drift from what was tested:
 
@@ -352,7 +353,7 @@ cannot drift from what was tested:
 # on the machine holding the module, from the project root
 tar czf abom-module.tar.gz   application/config/abom.php   application/controllers/Abom.php   application/helpers/abom_helper.php   application/libraries/Abom_engine.php   application/libraries/Abom_exporter.php   application/libraries/Abom_permission_guard.php   application/models/Abom_approval_model.php   application/models/Abom_item_model.php   application/models/Abom_master_model.php   application/models/Abom_model.php   application/views/abom   assets/abom
 
-tar tzf abom-module.tar.gz | wc -l     # expect 27 files + 2 directory entries
+tar tzf abom-module.tar.gz | wc -l     # expect 28 files + 2 directory entries
 ```
 
 Upload `abom-module.tar.gz`, then on the server, **from the project
@@ -374,7 +375,7 @@ existing module's and must not be touched.
 
 ### Collision check — run this BEFORE copying anything
 
-All 27 are **new** files. If any of those names already exists on the
+All 28 are **new** files. If any of those names already exists on the
 server, copying would overwrite something. This checks the server as it
 is right now, and changes nothing:
 
@@ -476,6 +477,7 @@ change nothing above it.
 | -------------------------------------------------------------------------
 */
 $route['abom']                  = 'abom/index';
+$route['abom/guide']            = 'abom/guide';
 $route['abom/generate']         = 'abom/generate';
 $route['abom/generate_ajax']    = 'abom/generate_ajax';      // POST, AJAX
 $route['abom/reference/(:any)'] = 'abom/reference/$1';

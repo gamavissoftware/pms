@@ -22,6 +22,9 @@ class Abom_master_model extends CI_Model
     private $feature_table = 'abom_feature';
     private $rule_table    = 'abom_plc_rule';
 
+    /** Read only by the user-guide feeds below, for usage counts. */
+    private $item_table    = 'abom_item';
+
     /** Simple per-request caches — generate() is called on every keystroke. */
     private $family_cache  = null;
     private $rule_cache    = null;
@@ -271,6 +274,124 @@ class Abom_master_model extends CI_Model
             ->result();
 
         return $this->rule_cache;
+    }
+
+    // -----------------------------------------------------------------
+    // USER GUIDE FEEDS
+    //
+    // The guide renders from these rather than from prose, so editing
+    // abom_plc_rule or abom_formula updates the training material too.
+    // -----------------------------------------------------------------
+
+    /**
+     * Every formula with how many master items actually use it.
+     *
+     * @return array
+     */
+    public function formulas_with_usage()
+    {
+        $counts = array();
+        $rows = $this->db->select('formula_code, COUNT(*) AS n')
+            ->from($this->item_table)
+            ->group_by('formula_code')
+            ->get()
+            ->result();
+        foreach ($rows as $r) {
+            $counts[$r->formula_code] = (int) $r->n;
+        }
+
+        $out = array();
+        foreach ($this->get_formulas() as $code => $f) {
+            $f->item_count = isset($counts[$code]) ? $counts[$code] : 0;
+            $out[$code] = $f;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Active PLC rules with the family they select and their condition
+     * rendered as a sentence.
+     *
+     * @return array
+     */
+    public function plc_rules_readable()
+    {
+        $families = array();
+        foreach ($this->get_families() as $fam) {
+            $families[(int) $fam->id] = $fam;
+        }
+
+        $out = array();
+        foreach ($this->get_active_rules() as $rule) {
+            $bits = array();
+
+            if ($rule->min_axes !== null && $rule->max_axes !== null) {
+                $bits[] = 'axes between ' . (int) $rule->min_axes . ' and ' . (int) $rule->max_axes;
+            } elseif ($rule->min_axes !== null) {
+                $bits[] = 'axes is ' . (int) $rule->min_axes . ' or more';
+            } elseif ($rule->max_axes !== null) {
+                $bits[] = 'axes is ' . (int) $rule->max_axes . ' or fewer';
+            }
+
+            if ($rule->min_speed !== null && $rule->max_speed !== null) {
+                $bits[] = 'speed between ' . (int) $rule->min_speed . ' and ' . (int) $rule->max_speed . ' PPM';
+            } elseif ($rule->min_speed !== null) {
+                $bits[] = 'speed is ' . (int) $rule->min_speed . ' PPM or more';
+            } elseif ($rule->max_speed !== null) {
+                $bits[] = 'speed is ' . (int) $rule->max_speed . ' PPM or less';
+            }
+
+            if (!empty($rule->motion_type) && strtoupper($rule->motion_type) !== 'ANY') {
+                $bits[] = 'motion type is ' . $rule->motion_type;
+            }
+
+            $fid = (int) $rule->result_family_id;
+
+            $out[] = array(
+                'priority'    => (int) $rule->priority,
+                'condition'   => empty($bits) ? '' : implode(' AND ', $bits),
+                'is_catch_all'=> empty($bits),
+                'family'      => isset($families[$fid]) ? $families[$fid]->name : ('family ' . $fid),
+                'family_code' => isset($families[$fid]) ? $families[$fid]->code : '',
+                'explanation' => (string) $rule->explanation,
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * Feature switches with how many master items each one gates.
+     *
+     * @return array
+     */
+    public function features_with_usage()
+    {
+        $counts = array();
+        $rows = $this->db->select('feature_code, COUNT(*) AS n')
+            ->from($this->item_table)
+            ->where('feature_code IS NOT NULL', null, false)
+            ->group_by('feature_code')
+            ->get()
+            ->result();
+        foreach ($rows as $r) {
+            $counts[$r->feature_code] = (int) $r->n;
+        }
+
+        $out = array();
+        foreach ($this->get_features() as $f) {
+            $f->item_count = isset($counts[$f->code]) ? $counts[$f->code] : 0;
+            $out[] = $f;
+        }
+
+        return $out;
+    }
+
+    /** @return array plain list of families, for the guide */
+    public function families()
+    {
+        return $this->get_families();
     }
 
     public function count_rules()

@@ -42,6 +42,15 @@
   .abom-wrap .qty-lock-note,
   .abom-wrap .abom-workflow { display: none !important; }
 
+  /* The guide is printable as a training handout. The table of contents
+     is navigation, so it goes; headings must not be orphaned from the
+     table that follows them. */
+  .abom-wrap .abom-toc { display: none !important; }
+  .abom-wrap .abom-h2 { page-break-after: avoid; }
+  .abom-wrap .abom-guide-table,
+  .abom-wrap .abom-keypoint { page-break-inside: avoid; }
+  .abom-wrap .abom-guide-doc { max-width: none; }
+
   .abom-wrap .layout { display: block; }
   .abom-wrap .main { overflow: visible; }
   .abom-wrap .abom-area { padding: 0; overflow: visible; }

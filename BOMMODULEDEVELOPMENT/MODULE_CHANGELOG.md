@@ -954,6 +954,67 @@ is itself a standalone sheet with no application navigation.
 
 ---
 
+## 0.17 User guide (`/abom/guide`) — generated, not written
+
+Built for operator training. The requirement was that it explain
+"how the formula works and everything", which is exactly the kind of
+document that is accurate on the day it is written and wrong six months
+later.
+
+**So it is not written — it is generated.** Everything factual on the page
+is read from the same tables the engine uses, or computed by the engine as
+the page renders:
+
+| Section | Source |
+|---|---|
+| PLC selection rules, in priority order | `abom_plc_rule`, via `plc_rules_readable()` |
+| The formula list and what each reads | `abom_formula`, via `formulas_with_usage()` |
+| How many master items use each formula | live `COUNT(*)` on `abom_item` |
+| Feature switches, defaults, item counts | `abom_feature`, via `features_with_usage()` |
+| The four workflow stages | `Abom_approval_model::stage_ladder()` — the same `$transitions` array the model enforces |
+| Both worked examples | `Abom_engine::generate()`, run as the page loads |
+
+Edit `abom_plc_rule` and the training material changes with it. The guide
+cannot describe a workflow the code does not run, or a rule the engine does
+not apply, because it has no independent copy of either.
+
+The prose that *is* hand-written is the part that cannot be derived —
+what a formula means in practice, what to do about a red row, why MR-J4
+units and battery quantity are separate fields. Formula explanations are
+keyed by formula CODE with a fallback to `abom_formula.description`, so a
+new code added to the table still appears in the table rather than
+silently going missing.
+
+**Worked examples are the teaching tool.** Section 12 prints the two
+reference configurations and what they must produce — measured live at
+29 items / qty 74 (FX5, DF-1827) and 42 items / qty 129 (iQ-R, DF-1826),
+each with the rule that selected the family. A trainee types the
+configuration in and compares. If the numbers ever stop matching, the page
+says so by itself.
+
+**Gating** is `require_tables()` + `require_any_perm()`, the same read gate
+as `view`, `list`, `reference` and `export` — measured: full grants 200,
+`APPROVALS`-only 200, no grants redirected.
+
+Reachable from the Guide button on the generator, the saved-BOM list and
+every BOM document, and printable as a handout (the contents list is
+dropped in print, and headings are kept with the table that follows).
+
+**Two defects found by rendering it rather than trusting it:**
+
+- `generate()` returns `family` as the ARRAY from `detect_plc_family()`
+  (`family_id` / `code` / `rule_id` / `priority` / `explanation`), not a
+  family row. `$result['family']->name` rendered an empty string and the
+  reason line vanished entirely. Both silently — the page looked finished.
+- `Abom_master_model` had no `$item_table`, so the usage counts needed one
+  added.
+
+`route_surface.php` failed on the first run, as designed: `guide` was a
+public method not in the matrix. Entry surface is now 17 routes, 18 public
+methods, 18 matrix rows, agreeing in both directions.
+
+---
+
 ## 1. Schema deltas — `abom_schema.sql` → `Database/abom_001.sql`
 
 ### 1.1 Three new columns on `abom_bom_line` — approved

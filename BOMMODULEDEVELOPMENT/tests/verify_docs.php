@@ -60,7 +60,16 @@ $listed = 0;
 if (preg_match('/```\n(application\/config\/abom\.php\n.*?)```/s', $R, $lm)) {
     $listed = count(array_filter(array_map('trim', explode("\n", $lm[1]))));
 }
-c('ROLLOUT', 'the copy list contains 27 entries', 27, $listed);
+c('ROLLOUT', 'the copy list contains 28 entries', 28, $listed);
+// The prose file-count must agree with the copy list. This drifted when
+// guide.php was added -- the list was updated and four sentences were not.
+$prose = array();
+preg_match_all('/Copy the (\\d+) files listed/', $R, $pm);      $prose = array_merge($prose, $pm[1]);
+preg_match_all('/\\*\\*(\\d+) files\\. By name/', $R, $pm); $prose = array_merge($prose, $pm[1]);
+preg_match_all('/hand-copy (\\d+) paths/', $R, $pm);            $prose = array_merge($prose, $pm[1]);
+preg_match_all('/All (\\d+) are \\*\\*new\\*\\*/', $R, $pm); $prose = array_merge($prose, $pm[1]);
+c('ROLLOUT', 'prose file-counts all agree with the list', array('28'),
+    array_values(array_unique($prose)));
 
 // every listed file must exist
 $missing = array();
@@ -111,9 +120,9 @@ c('ROLLOUT', 'rollback list == live abom_ tables', $live, array_values($dropped)
 
 // the 16 route lines
 preg_match_all("/^\\\$route\\['abom[^\\]]*'\\]/m", $R, $rm);
-c('ROLLOUT', 'routes block lists 16 abom routes', 16, count(array_unique($rm[0])));
+c('ROLLOUT', 'routes block lists 17 abom routes', 17, count(array_unique($rm[0])));
 $actual_routes = (int) trim(shell_exec("grep -cE \"^.route\\['abom\" " . escapeshellarg($ROOT . '/application/config/routes.php')));
-c('ROLLOUT', 'routes.php actually has 16', 16, $actual_routes);
+c('ROLLOUT', 'routes.php actually has 17', 17, $actual_routes);
 
 // nav insertion point
 c('ROLLOUT', 'nav anchored on text not just line no', true,
@@ -252,7 +261,7 @@ $ctl = file_get_contents($ROOT . '/application/controllers/Abom.php');
 // 4 read paths + 1 floor at the top of workflow_action, minus the
 // declaration itself. This assertion caught the fifth call site being
 // added, which is exactly what it is for.
-c('CHANGELOG', 'require_any_perm: 4 read paths + 1 workflow floor', 5,
+c('CHANGELOG', 'require_any_perm: 5 read paths + 1 workflow floor', 6,
     preg_match_all('/require_any_perm\\(\\)/', $ctl) - 1);
 c('CHANGELOG', 'workflow_action carries the floor', true, (bool) preg_match(
     '/private function workflow_action.*?require_any_perm\\(\\)/s', $ctl));
@@ -269,7 +278,7 @@ c('ROLLOUT',   'warns about concurrent deployments', true,
 c('ROLLOUT',   'names both shared files', true,
     strpos($R, 'application/views/common/nav-menu.php') !== false
     && strpos($R, 'application/config/routes.php') !== false);
-c('CHANGELOG', '17 public entry points as documented', 17,
+c('CHANGELOG', '18 public entry points as documented', 18,
     preg_match_all('/^\\s*public function (\\w+)/m', $ctl));
 c('CHANGELOG', 'section 0.13 marked superseded', true, strpos($C, 'Superseded by §0.14') !== false);
 c('WORKSHEET', 'says MASTER ITEMS grants nothing today', true,

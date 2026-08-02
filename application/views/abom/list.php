@@ -83,6 +83,7 @@
         </form>
         <div class="abom-actions">
           <a class="btn-sm btn-generate" href="<?php echo page_url; ?>abom/generate">&#43; New BOM</a>
+          <a class="btn-sm btn-copy" href="<?php echo page_url; ?>abom/guide">&#10068; Guide</a>
         </div>
       </div>
 

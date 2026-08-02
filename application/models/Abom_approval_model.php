@@ -39,6 +39,31 @@ class Abom_approval_model extends CI_Model
     // -----------------------------------------------------------------
 
     /**
+     * The workflow ladder, for the user guide.
+     *
+     * Derived from $transitions -- the same array this model enforces --
+     * so the guide cannot describe a workflow the code does not run.
+     *
+     * @return array
+     */
+    public function stage_ladder()
+    {
+        $out = array();
+
+        foreach ($this->transitions as $from => $t) {
+            $out[] = array(
+                'from'       => $from,
+                'to'         => $t[0],
+                'stage'      => $t[1],
+                'permission' => $t[2],
+                'label'      => $t[3],
+            );
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  string $status
      * @return array|null
      */

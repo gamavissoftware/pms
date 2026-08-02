@@ -67,6 +67,7 @@ $route['update-record'] = 'BarcodeController/update_record';
 | Df_dispatch_plan) and the Store/FMS BOM screens are untouched.
 */
 $route['abom']                  = 'abom/index';
+$route['abom/guide']            = 'abom/guide';
 $route['abom/generate']         = 'abom/generate';
 $route['abom/generate_ajax']    = 'abom/generate_ajax';      // POST, AJAX
 $route['abom/reference/(:any)'] = 'abom/reference/$1';
