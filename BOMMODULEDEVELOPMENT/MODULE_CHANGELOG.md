@@ -16,7 +16,7 @@ Source documents, unchanged:
 | `SPM1200L_Automation_BOM_DF1826_DF1827_Review.html` | `bf9c0500f1939e4cbb11110addb766d2` |
 | `Automation_BOM_Module_CI3_Spec.md` | — read-only |
 | `abom_schema.sql` | — superseded by `Database/abom_001.sql` |
-| `abom_seed.sql` | — copied verbatim into `Database/abom_002_seed.sql` |
+| `abom_seed.sql` | — copied verbatim into `Database/abom_002_seed.sql`, since superseded by `Database/abom_006_seed.sql` (§0.18) |
 
 ---
 
@@ -1015,6 +1015,820 @@ methods, 18 matrix rows, agreeing in both directions.
 
 ---
 
+## 0.18 Nine reference BOMs — build variants, and the track-driven
+## temperature card rule
+
+### The request
+
+Engineering supplied eight further SPM1200L / SPM1250P workbooks and
+asked for the previous master data to be replaced with them, plus one
+explicit rule: ERP **2020122** (FX5-4LC, 4 CH. temperature card) is to be
+quantified as
+
+```
+(((Number of Track + 1) * 2) + 2) / 4
+```
+
+### Why the module could not just be re-seeded
+
+The module scoped every master item to a **PLC family** and generated
+"every active item of the detected family". That is correct only while
+one family means one build. It is not true of the new data:
+
+| Axes | Amplifiers | Motors |
+|---|---|---|
+| 5–7 (DF-1723/1778/1808/1858/1864) | MR-JE-300B / MR-JE-200B | HG-SN |
+| 8 (DF-1827) | MR-J4-350B / MR-J4-200B | HG-JR |
+
+Both are FX5. Flattened into one family catalogue, a 6-axis machine
+generates **both** amplifier ranges and procurement orders twice the
+drives. The iQ-R family splits three ways for the same reason
+(panel-mounted 10-axis, standalone 15-axis high speed, and the SPM1250P
+flow-meter build with its remote head and per-track cut-off drives).
+
+### What was added
+
+`Database/abom_005_variants.sql` — purely additive:
+
+| Object | Purpose |
+|---|---|
+| `abom_variant` | one buildable configuration of a family |
+| `abom_variant_rule` | selection rules, priority ASC, first match wins |
+| `abom_item.variant_id` | nullable; a NULL is **never generated** |
+| `abom_bom.variant_id` / `.variant_locked` | which build a saved BOM came from, and whether it was overridden |
+| `abom_bom_line.variant_code` | frozen onto the line like every other descriptive field |
+
+`Abom_engine::detect_variant()` runs after `detect_plc_family()` and uses
+the same contract. `Abom_item_model::get_by_variant()` — not
+`get_by_family()` — is what `generate()` now reads from.
+
+**No variant means no lines**, and the generator says so in the sidebar.
+Falling back to the whole family is the one wrong answer available here.
+Every variant rule therefore names a machine model, including the two
+that would otherwise be catch-alls: a model the reference data does not
+describe must not silently inherit an SPM1200L build.
+
+### The five variants
+
+| Code | Family | Items | From |
+|---|---|---|---|
+| `FX5-JE` | FX5 | 31 | DF-1723, DF-1778, DF-1808, DF-1858, DF-1864 |
+| `FX5-J4` | FX5 | 29 | DF-1827 |
+| `IQR-STD` | iQ-R | 34 | DF-1770 |
+| `IQR-HS` | iQ-R | 42 | DF-1826 |
+| `IQR-FLM` | iQ-R | 42 | DF-1855 |
+
+DF-1827 still generates **29** lines and DF-1826 still generates **42** —
+the two Appendix B regression numbers are unchanged by the re-seed.
+
+### `TRACK_TEMP`
+
+Rounded **up**; half a card cannot be bought. Checked against every
+source BOM carrying a 4-channel temperature or RTD card:
+
+| Tracks | Rule | Sheets |
+|---|---|---|
+| 6 | 4 | DF-1858 = 4 |
+| 8 | 5 | DF-1778 = 5 |
+| 9 | 6 | DF-1855 = 6 (5.5 rounded up) |
+| 12 | 7 | DF-1723, DF-1808, DF-1827, DF-1770 = 7; DF-1864, DF-1826 = **8** |
+
+Eight of ten agree exactly. The two that do not are flagged for review on
+the row rather than averaged away.
+
+The rule is applied to all three 4-channel temperature cards — 2020122
+(FX5-4LC), 2240039 (AUTONICS TM4-N2SB) and 4010225 (R60TCRT4) — because
+it is the same physical rule, one card per four channels, and the table
+above confirms it on the iQ-R cards too. To confine it to 2020122, set
+the other two rows back to `MANUAL`; nothing else changes.
+
+`TRACKS` was added alongside it for the SPM1250P cut-off drives, which
+are genuinely one per track.
+
+### `find_erp_conflicts()` was rewritten
+
+It counted **rows** per ERP code. With items scoped to variants the same
+part legitimately appears once per variant that fits it — VFD 2040140 is
+on all five — so counting rows reported every one of those as a conflict
+and buried the real defects. It now counts `DISTINCT part_no`, which is
+the actual defect, and reports exactly four:
+
+| ERP | Part A | Part B |
+|---|---|---|
+| `4060431` | encoder cable MR-J3JCBL03M-A2-L | power cable MR-PWS2CBL03M-A2-L |
+| `2110163` | MR-BKCNS1 (DF-1826) | SC-BKC1CBL1M-L (DF-1855) |
+| `2030449` | 10 MTR MR-J3ENCBL10M-A2-L (5 sheets) | 5 MTR MR-J3ENCBL5M-A2-L (DF-1827 only) |
+| `2030505` | MR-J3BUS3M (DF-1826) | MR-J3BUS3M-A (DF-1855) |
+
+### Deliberately out of scope
+
+Sheet 2 of the DF-1864 workbook also carries a full **electrical panel**
+BOM — energy meter, SMPS, MCBs, MPCBs, contactors, SSRs, sensors,
+heaters, tower light. That is panel hardware, not automation, and none of
+the module's five sections describes it. It is not seeded. The DF-1723
+automation portion of that same sheet **is**, inside `FX5-JE`.
+
+---
+
+## 0.19 A clone you cannot re-specify is a photocopy — `save_config`
+
+`duplicate()` shipped in §0.14's build and produced a fresh draft of an
+existing document. It was not enough. Every field on the Machine
+Configuration panel was rendered `readonly` on `abom/view`, so the copy
+was permanently stuck describing the original machine: copying an
+11-axis BOM to quote a 15-axis one meant retyping it from the generator.
+
+### The two flags
+
+`_config_panel.php` keyed everything off one variable, `$editable`,
+which meant "this is the generator". That conflated two questions that
+are not the same:
+
+| flag | means | Save button |
+|---|---|---|
+| `$editable` | the GENERATOR screen | `Save BOM` — creates a NEW document |
+| `$config_editable` | a SAVED BOM still open to change | `Apply configuration` — rewrites THIS document |
+
+They are kept apart deliberately. Showing the generator's `Save BOM` on
+a saved BOM would silently fork it into a second document, which is the
+opposite of what someone editing a clone wants.
+
+### Regenerating is not optional
+
+Axes, tracks, speed, motion type, model, family and variant are the
+inputs to variant selection and to every computed formula. A header
+reading 15 axes above lines computed for 11 is a document that will be
+built wrong, so changing the specification re-derives the line set.
+
+`Abom_model::replace_lines()` does it in one transaction, and is
+deliberately NOT `save_lines()`: that method edits the lines of a fixed
+configuration, this one changes the machine.
+
+### What survives, and what is reported
+
+`Abom::carry_line_edits()` re-attaches hand work by **master item**, not
+by line number — line 7 before and line 7 after a build change are
+unrelated parts.
+
+- hand-added rows (`item_id IS NULL`) — kept in full, re-appended
+- typed remarks — re-attached to the same item
+- quantity overrides — re-applied to the same item, with `computed_qty`
+  left as the NEW engine answer so the sheet still shows both numbers
+- anything whose item is not in the new build — **reported**, not
+  dropped in silence
+
+### The seeded-remark trap, caught by the harness
+
+§0.18's REMARKS work made `Abom_engine` seed every line's `user_remark`
+from the master item's `usage_remark`. The first cut of
+`carry_line_edits()` therefore treated all 20 seeded defaults as hand
+typed, and told the user "20 remarks carried" when they had written two.
+
+The rule is now: **a remark is hand-set only when it DIFFERS from the
+seeded default.** Clearing a seeded remark to blank counts as a hand
+edit and is carried as one, so a regeneration cannot quietly restore
+text somebody deliberately deleted.
+
+This was found by `tests/reconfigure_probe.php`, not in a browser.
+
+### One consequence, recorded rather than hidden
+
+`replace_lines()` deletes the line set and writes a new one. Nothing in
+the schema holds a foreign key onto `abom_bom_line.id`, so that is
+structurally safe — but `Abom_model::get_audit()` finds per-line audit
+rows by *current* line id, so quantity-override history recorded against
+the old ids drops out of that BOM's displayed trail. The audit rows
+themselves are not deleted, and the reconfiguration is logged against
+`abom_bom` with the full before/after configuration, which is the entry
+that explains where the earlier line history stops.
+
+Keeping the per-line trail across a build change would mean carrying ids
+for parts that are no longer on the document. Not worth it.
+
+### Gate
+
+`abom_config_editable()` — **draft and rejected only**, the same set
+`delete` uses. Narrower than `abom_qty_editable()` on purpose: editing a
+quantity marks up a document, editing the axis count changes what
+machine the document is for. A sheet under review or already approved is
+duplicated or revised, never re-specified underneath its reviewer. The
+server re-checks the rule on POST; the hidden button is not the gate.
+
+### Verification
+
+`tests/reconfigure_probe.php` — 37 assertions against the real
+controller (via reflection, no CI bootstrap) and the real engine:
+tracks 12→6 re-derives the temperature cards while all hand work
+survives; a 6-axis FX5 → 15-axis iQ-R jump changes the build and reports
+what could not be carried; a clean BOM invents nothing; the confirmation
+message names the changed fields and the carried counts.
+
+`tests/render_view.php je config` renders the unlocked panel and asserts
+`Save BOM` and the preset picker are absent from it.
+
+---
+
+## 0.20 Export filenames
+
+Downloads were named `ABOM-14.pdf`. They are now named for the machine:
+
+```
+DF-1808 - SPM1200L, 6A, 12T, 100PPM - INTERMITTENT - MITSUBISHI.pdf
+DF-1826 REV.02 - SPM1200L, 15A, 12T, 180PPM - CONTINUOUS - MITSUBISHI.pdf
+DF-1808 - SPM1200L, 6A, 12T, 100PPM, LHS - INTERMITTENT - MITSUBISHI.pdf
+```
+
+- leads with `df_ref`, falling back to `bom_no` when there is no DF
+- revision appended only when it is not `00`
+- side appended only when it is not `N/A`
+- brand derived from the lines, not hard-coded — `title()` no longer
+  says MITSUBISHI regardless of what is on the sheet
+- `safe_filename()` strips `\ / : * ? " < > | ;` and newlines
+
+One defect worth recording: the sanitiser first used a `/`-delimited
+regex whose character class began `[\\/`. PCRE reads that escaped
+backslash followed by a literal slash as the **closing delimiter**, so
+`preg_replace` returned `NULL` and every download arrived as `.pdf` with
+no name at all. Fixed by delimiting with `~`.
+
+---
+
+## 0.21 Manufacturer on the saved-BOM register
+
+The register showed model, configuration, family and build but not who
+makes the parts, and could not be filtered by it.
+
+### Derived, not stored
+
+There is no manufacturer column on `abom_bom` and there should not be
+one. Manufacturer is a property of the LINES, and the master data
+already carries three:
+
+| brand | items |
+|---|---|
+| MITSUBISHI | 368 |
+| RECKON | 9 |
+| AUTONICS | 3 |
+
+Nearly every BOM is one brand of automation **plus a bought-in part or
+two** — the RECKON braking resistor, the AUTONICS temperature card. A
+single-value header column would have had to pick one and be wrong about
+the rest.
+
+So both the column and the filter options are read from
+`abom_bom_line`. A new manufacturer becomes visible and filterable the
+moment a BOM containing it is saved, with nothing to maintain — which
+matters, because more are expected.
+
+### Ordering matches the export filename
+
+`Abom_model::attach_manufacturers()` orders brands by how many lines each
+supplies, so the first is the machine's actual brand. That is the same
+rule `Abom_exporter::brand()` uses to name the download, so the register
+and the file cannot disagree about who made the machine.
+
+The column shows the primary brand and a `+2` count with the full list on
+hover. Three brand names per row would bury the one that matters on a
+screen whose job is scanning down one column.
+
+### Two query choices worth recording
+
+- **`EXISTS`, not a join, for the filter.** A join would multiply the
+  header row once per matching line and the `N SAVED` count in the banner
+  would start lying.
+- **A second query, not `GROUP_CONCAT`.** The join would have to be a raw
+  derived table to survive CI's identifier escaping. Getting that subtly
+  wrong on the screen everyone starts from is a poor trade for saving one
+  round trip.
+
+### The filter hides itself
+
+While only one brand is on record the dropdown does not render at all — a
+select with a single option is furniture, not a control. It appears on
+its own once a second brand reaches a saved BOM.
+
+### Verification
+
+`tests/render_list.php` — 16 assertions. The register had **no test
+coverage at all** before this: it renders straight from a model call, so
+nothing in `run_tests.php` ever touched it, and a column added to
+`<thead>` but not `<tbody>` would shear the table silently. The harness
+now counts header cells against every row's cells, pins the column
+between BUILD and LINES, and covers three brands, two, one, and none.
+
+Run `php BOMMODULEDEVELOPMENT/tests/render_list.php single` for the
+one-brand case, which asserts the filter is absent.
+
+**Not verified locally:** the three SQL statements themselves. This tree
+has no `system/` directory and no reachable database, so CI's query
+builder cannot be executed here. The SQL is hand-checked against
+`ONLY_FULL_GROUP_BY` and CI3's escaping rules, and `POST_DEPLOY_CHECK.md`
+step 18 confirms it on the server.
+
+---
+
+## 0.22 DF reference uniqueness — checked as it is typed
+
+Two BOMs could carry the same DF reference. A DF reference is an
+engineering drawing number, so that means two live documents both
+claiming to be the parts list for one drawing, and the person who finds
+out is whoever orders from the wrong one.
+
+### The rule is (df_ref, revision), not df_ref
+
+Written as "df_ref must be unique" this would have broken two things the
+module already does on purpose:
+
+| case | must be | why |
+|---|---|---|
+| `create_revision()` raises REV.01 of DF-1808 | **allowed** | same drawing, next revision — the whole revision workflow |
+| a soft-deleted BOM holds DF-1899 | **allowed** | a deleted document is not competing for the number; refusing would make delete a trap |
+| editing a BOM without changing its reference | **allowed** | it must not clash with itself |
+| a new BOM typed as DF-1805A when ABOM-10 has it | **refused** | the reported case |
+
+Both of the first two would have been broken by the obvious
+implementation, and neither would have surfaced until a user hit it.
+`tests/dfref_probe.php` pins all four.
+
+### duplicate() no longer copies the DF reference
+
+This is a behaviour change worth stating plainly. A copy is a new
+document for the next machine and will have its own drawing number;
+inheriting the source's is exactly what puts two BOMs on one drawing.
+Carrying it forward would also have landed every clone in breach of the
+new rule the moment it was created, blocking the first edit for a reason
+the operator did not cause.
+
+Nothing is lost — the copy's note still records what it came from, and
+`Abom_exporter::filename()` already falls back to the BOM number until a
+reference is typed.
+
+### Checked while the field has focus
+
+`Abom::check_df_ref()` answers on blur and on a 500 ms pause in typing —
+not per keystroke, since "DF-1" and "DF-18" are not questions anybody
+meant to ask. The answer names **which** BOM holds the reference, its
+status, and links to it, because "this already exists" is never the
+question anyone's next thought is.
+
+The endpoint decides nothing. `save()` and `save_config()` re-run the
+same model check before writing, so a stale answer on screen, JavaScript
+off, or a hand-made POST cannot get a duplicate through. It is gated on
+any of the three permissions rather than on `save`: it is a read, and a
+checker typing in a field should not be told the module is unavailable.
+
+### Verification
+
+`tests/dfref_probe.php` — 19 assertions against the real
+`Abom_model::df_ref_conflict()` over a fake register, covering the
+revision case, the soft-delete case, self-exclusion, case-insensitivity
+(the column collation is), whitespace, and a blank revision reading as
+`00`.
+
+---
+
+## 0.23 The topbar chip row is gone
+
+The bar carried one chip per configuration value — BOM number, model,
+axes, tracks, speed, motion, every enabled feature gate, PLC family,
+build variant, panel location, status. On a wide machine with four
+feature gates on, that is twelve badges: it wrapped onto a second line
+and crowded the action buttons. Twelve badges in a row read as
+decoration rather than as information.
+
+### Nothing was lost
+
+Every value it showed is stated somewhere it belongs:
+
+| was a chip | now read from |
+|---|---|
+| BOM no, revision, DF ref, model, motion, axes, tracks, speed, side | the document title strip |
+| PLC family, build variant, panel location | the configuration sidebar |
+| enabled feature gates | the configuration sidebar (**added**) |
+| workflow status | the sign-off block |
+
+The feature gates were the one real gap. The sidebar renders its feature
+CHECKBOXES only while the panel is editable, so on a released document
+the chip row was the only place they appeared — and they decide whether
+whole groups of parts are on the sheet (the braking resistor, the I-mark
+sensor, the perforation axis). A **read-only feature list** was added to
+the sidebar's locked branch so that removing the chips could not quietly
+drop them from an approved BOM.
+
+It stays silent when no gates are enabled rather than printing "None":
+an empty heading on a document is a question, not an answer.
+
+### Removed, not orphaned
+
+`Abom::header_chips()` (75 lines), the `chips` key in both
+`generate_ajax()` and `render_document()`, and `applyChips()` in
+`abom-generate.js` all went with it. `.config-chip` STAYS in the
+stylesheet — the reference-BOM register, the config screens and the
+guide still use it.
+
+### Verification
+
+`tests/render_view.php` in all three modes asserts zero `config-chip`
+inside `#configBar`, and that the locked mode carries the four enabled
+features as `.fr-item` badges while the generator carries its six
+checkboxes and no readout.
+
+---
+
+## 0.24 Generate BOM straight from a build — `abom_012`
+
+The Reference BOMs register listed the builds but the only way to
+generate one was the generator's reference picker, which asks *"which DF
+was this like?"*. Someone standing at the register has already answered
+that. It gets worse as the list grows: searching a picker of forty
+reference configurations to reach a build you are looking at is work the
+screen should not create.
+
+Each active row now carries **+ Generate BOM**, landing on
+`/abom/generate?build=<id>` already configured for that build.
+
+### Why this needed a schema change
+
+The reference machine for a build genuinely was not stored anywhere:
+
+- `abom_variant_rule` carries min/max **axes** and **speed**, because
+  those select the build — but nothing about **tracks**, which select
+  nothing and only drive quantities. A rule saying "6 axes at 90 PPM or
+  above" tells you nothing about whether that machine runs 6 or 12
+  tracks.
+- `abom_variant.name` spells the machine out for **five** of the eleven
+  builds (`SPM1200L 5 axis / 12 track / 100 PPM`) and not for the other
+  six (`iQ-R high speed continuous`). Parsing a label that is only
+  sometimes formatted that way is not a foundation.
+
+So `abom_012_variant_reference.sql` adds `ref_axes`, `ref_tracks`,
+`ref_speed_ppm`, `ref_motion_type`, `ref_machine_side` and backfills all
+eleven from the reference configuration already verified against each
+released DF. A build added next year gets these filled in with it and
+the button is correct for it with no code change — which is the point.
+
+### NULL is allowed, and says so
+
+A build with no recorded machine still generates. It falls back to its
+own selection rule (`min_axes`, else `max_axes`; `min_speed`, else
+`max_speed`), and **tracks fall back to the module default because no
+rule carries them**. The screen then states which values are defaults
+rather than the build's own, so a starting point is never mistaken for a
+fact.
+
+### Only the build id travels
+
+Not the whole configuration. A URL carrying eleven parameters is one
+typo away from generating a different machine, and the machine is
+derived server-side so a link cannot be edited into something that
+reaches a different build.
+
+Auto-detection is deliberately left **on** rather than pinning a variant
+override. An override would stamp "Manual override" on an ordinary new
+BOM, and — worse — would hide the case where the recorded machine and
+the selection rules disagree. Instead the controller checks that the
+generated sheet reached the build that was asked for, and says plainly
+when it did not:
+
+> ⚠️ This configuration does not select the FX5-1808 build. The machine
+> recorded against it reaches FX5-1864 instead …
+
+Retired builds get no button. Engineering took them out of service; the
+sheet stays readable.
+
+### Verification
+
+`tests/build_prefill_probe.php` — 18 assertions driving the REAL
+`Abom_master_model` (over a seed-backed fake `$db`, not the stub, since
+the stub would only be testing a reimplementation) and the REAL engine.
+Every one of the eleven builds is round-tripped: recorded machine →
+engine → back to its own build, with a non-empty sheet. The five builds
+that state their machine in their own name are cross-checked against the
+migration, since name and `ref_*` were written at different times from
+the same DF. The no-recorded-machine fallback is covered too.
+
+```
+FX5-1808   SPM1200L  6A / 12T / 100 PPM Inte    FX5-1808    29 lines  full
+IQR-HS     SPM1200L  15A / 12T / 180 PPM Cont   IQR-HS      42 lines  full
+…all 11 round-trip
+```
+
+`tests/seed_parser.php` also gained support for the
+`ALTER TABLE … ADD COLUMN` + `UPDATE` pattern this migration uses — it
+previously dropped assignments to columns no `INSERT` mentioned, which
+would have made the migration look like it had done nothing.
+
+---
+
+## 0.25 Search and filters on the build register
+
+`/abom/master_bom` listed every build with no way to narrow it. Six
+controls now do, in the same server-side GET form `/abom/list` and
+`/abom/master` already use — a third idiom on a third register would be
+one more thing to learn for no gain, and a GET form means a narrowed
+view is a URL somebody can bookmark or send on.
+
+| control | source |
+|---|---|
+| free text | code, name, description, model, source DFs, panel location, recorded machine |
+| family | `abom_plc_family` |
+| machine model | **derived** from the builds present |
+| panel location | **derived** from the builds present |
+| flags | has conflicts / no ERP / to review / nothing to resolve |
+| active | active / retired / both |
+
+Only family comes from a table; model and panel location are read off
+the builds that exist, so a value introduced by a future build is
+filterable the day it lands with nothing to maintain. Both hide
+themselves while only one value exists.
+
+### The phrase trap
+
+The first cut matched "every word appears somewhere". That is wrong here
+in a way that is easy to miss, and the harness caught it:
+
+> Build names read `SPM1200L 6 axis / 12 track / 100 PPM`. A search for
+> **6 track** found the word "6" in *6 axis* and the word "track" in
+> *12 track*, and returned a **12-track machine to somebody who asked
+> for a 6-track one**.
+
+The right rows were in the result, buried among wrong ones — the worst
+kind of search failure, because it looks like it worked.
+
+`search_variants()` is therefore **phrase-first**: if the typed string
+appears verbatim in any build, only those are returned. Nothing else can
+be what was meant. Only when no build contains the phrase does it fall
+back to all-words-in-any-order, which is what keeps half-remembered
+queries working — `1808 fx5` and `fx5 1808` both find FX5-1808 and
+neither is a phrase in anything.
+
+### Two results that look wrong and are not
+
+Searching `1858` returns **FX5-1858 and FX5-JE**. FX5-JE is the retired
+combined build and its `source_df` names every DF it absorbed, DF-1858
+among them. Somebody chasing an old drawing number wants to know which
+build took it over, retired or not. Setting **Active only** narrows it
+to the live build.
+
+Both of these were assertions I had written wrong, not defects — worth
+recording, because the next person to read the test will have the same
+first reaction.
+
+### Filtered in PHP, not SQL
+
+`get_variants()` is cached and shared with the generator's override
+picker and with the engine. Pushing a `WHERE` into it would quietly
+narrow those too: a filter on one screen must never change what another
+screen can select. The register is also bounded by how many machine
+types the business builds, not by how much work it has done — a very
+successful decade is tens of rows.
+
+### Verification
+
+`tests/build_filter_probe.php` — 50 assertions over the real
+`Abom::filter_variants()` and the real seeded register, plus the real
+view. Covers each filter alone, filters combined (they must AND, never
+OR), the phrase trap in both directions, that active + retired partitions
+the register exactly, that the form round-trips its own state, and that
+no matches renders an empty state rather than stranded table headers.
+
+`abom_sel()` moved from a bare declaration inside `master_list.php` into
+`abom_helper.php` on the way — two unguarded declarations of one name is
+a fatal error waiting for the day somebody loads both views in one
+request.
+
+---
+
+## 0.26 Version history — the snapshots were being kept and never read
+
+`abom_bom_revision` has stored a full JSON snapshot of header and lines
+since the module shipped: once when a BOM reaches procurement approval,
+and again when it is superseded by a new revision. **Nothing had ever
+read those rows.** The history was being kept and could not be looked
+at.
+
+Two screens now read it:
+
+| route | what it is |
+|---|---|
+| `/abom/history/<bom_id>` | every revision of the document, newest first, with what changed between each |
+| `/abom/version/<rev_id>` | one archived snapshot, rendered as the document it was |
+
+Reached from a **History** button on any saved BOM. Both are READS,
+gated on any of the three permissions like view and export — a checker
+who can see a BOM can see how it got that way, and hiding the history
+from the people asked to approve it would be the wrong way round.
+
+### How a version chain is identified
+
+`create_revision()` does not edit in place: it writes a NEW `abom_bom`
+row carrying the same `bom_no` with the revision incremented, and marks
+the old row superseded. So one document is several rows, and `bom_no`
+ties them together. No `parent_id` column was invented — `bom_no` is
+already unique per document by construction.
+
+Opening the history from ANY revision shows the whole chain, because
+"what changed" is a question about the document, not about the row
+somebody happens to have open.
+
+### The newest revision has no snapshot of itself
+
+It is still being prepared, so nothing has photographed it. Without
+handling that it would be the one version nobody could compare — the
+version people ask about most. `live_snapshot()` builds the same shape
+from the current rows.
+
+### Lines are compared by MASTER ITEM, never by position
+
+This is the whole risk of the feature. Inserting one row near the top of
+a sheet would, compared by position, report every row below it as both
+removed and added — burying a real removal in forty false ones.
+
+A removal is the change that must never be missed: a part that has left
+the sheet is the one most likely to stop a machine being built and the
+least likely to be spotted by reading the new document on its own. So
+removals are reported first and in red.
+
+Hand-added rows have no `item_id`, so they are keyed on part number and
+description together — either alone collides too readily on a parts
+list.
+
+### What the changelog reports
+
+Grouped by kind, ordered by consequence: **removed → added →
+configuration → quantities → part details → remarks.** Somebody who
+reads only the top of the block has still read the part that could stop
+a build.
+
+"Part details" is the non-obvious one. A frozen line duplicates
+description, part number and ERP code on purpose. If one moved between
+revisions, the **master item was corrected and this revision picked the
+correction up** — a change to what will be ordered, which must not be
+left for a reviewer to spot by eye.
+
+Family ids, variant ids and the features JSON are rendered as words. How
+a row is stored is not what changed as far as anyone reviewing the
+document is concerned.
+
+### An archived version is a record, not a document
+
+`/abom/version/<id>` withholds every control that would act on a live
+BOM — no quantity inputs, no row buttons, no remarks, no workflow, no
+Save. **Export and Print are withheld too, and that is the important
+one:** a PDF printed from here would be indistinguishable from a current
+BOM once it left the screen, and somebody would order from it. The
+header reads `ARCHIVED · NOT FOR ISSUE`.
+
+A snapshot that will not decode is reported as unreadable rather than
+skipped — a version silently missing from a history is worse than one
+marked broken — and never rendered as an empty BOM, since an empty parts
+list reads as "nothing was required".
+
+### Within-revision edits
+
+The snapshots answer "what did REV.01 contain". `abom_audit_log`
+answers "who changed what while REV.01 was being prepared", and each
+version card carries that trail too. Either alone leaves an obvious
+question open.
+
+`abom_audit_log` stores old/new as JSON; `abom_audit_detail()` states
+the fields that actually moved and stops at three, so one noisy row
+cannot push the rest of the history off the screen.
+
+### Verification
+
+`tests/version_probe.php` — 45 assertions against the real
+`Abom_revision_model::diff()`. The position-independence trap is pinned
+in both directions (a row inserted at the top is **one** addition, not
+five; reordering alone reports nothing), along with removals keeping
+their old quantity, master-data corrections not being mistaken for new
+parts, hand-added rows staying distinct when they share a part number,
+and ids/JSON rendering as words.
+
+`tests/render_view.php je archived` proves the archived screen carries
+**zero** export links, print buttons, quantity inputs, row buttons,
+remark fields, workflow blocks and save bars, against 3/1/29/58/29/1/1
+on the live screen.
+
+Two fixture bugs of my own were caught on the way — both cases where the
+test helper derived `part_no` from the ERP code, so changing one changed
+two fields and the assertion was measuring its own fixture.
+
+---
+
+## 0.27 Reference-BOM import
+
+Every reference build so far reached the database as a hand-written SQL
+seed. `/abom/import` lets the team add one from the released DF
+spreadsheet itself.
+
+### Why this is the most dangerous write path in the module
+
+A saved BOM is one document, and a mistake in it affects one machine.
+Master data is the catalogue **every future BOM is generated from**, so
+a mistake here is silently wrong on every machine of that type from now
+on — and nobody finds out until something is built short.
+
+That shapes the whole design: **three steps, and the middle one writes
+nothing.**
+
+| step | what it does |
+|---|---|
+| `import()` | the form: the file, and the machine the DF was drawn for |
+| `import_preview()` | parse, validate, infer, **show**. Writes nothing. |
+| `import_commit()` | re-reads the staged file and writes, once, in a transaction |
+
+The commit **re-parses from the same bytes** rather than trusting what
+the browser posts back. The preview is a picture of the file; the import
+must come from the file, or a stale or tampered form could write rows
+nobody reviewed. Only three things can be changed at preview — the
+quantity rule, the optional flag, the feature gate. Descriptions, part
+numbers, ERP codes and quantities come from the sheet and nowhere else,
+or the imported catalogue would no longer match the document it claims
+to be from.
+
+### The hard part is not parsing, it is the quantity formulas
+
+A spreadsheet cell holds **7**. The module needs to know whether that is
+a fixed seven, one per axis on a seven-axis machine, or the twelve-track
+temperature-card rule that happens to come to seven. Import it as FIXED
+and the build is right for the machine it came from and **silently
+wrong for every other size** — a nine-track machine gets seven cards
+instead of six, and nobody knows until the panel is wired.
+
+Two signals, in this order:
+
+1. **What the part is.** A temperature card is track-driven whatever
+   number sits beside it. This is the stronger signal and it decides.
+2. **What the number matches.** Which formulas would have produced
+   exactly this quantity for the stated reference machine.
+
+Where the number fits several rules and the description says nothing,
+the row comes back **not confident**, with every candidate listed and
+`FIXED` selected — the only choice that cannot be wrong on a different
+machine size. The screen asks; the model never guesses.
+
+A part that is unmistakably track-driven but whose number disagrees with
+the declared machine is also refused confidence, naming both numbers:
+either the machine above is wrong or the quantity is, and neither can be
+assumed.
+
+### The machine matters as much as the file
+
+Every rule is inferred against the machine typed on the form, so a
+correct spreadsheet with the wrong track count above it produces a wrong
+catalogue. The form says so, in a bordered block, next to those fields.
+
+### A build with no selection rule is never used
+
+That failure is silent — the register would list the build, the items
+would be there, and every generated BOM would quietly pick a different
+one. So the rule is written **in the same transaction**, never as a
+follow-up step someone might skip. It is added **last in priority
+order**, so it cannot take machines away from a build that already
+claims them.
+
+### Verification: the round trip
+
+`tests/import_probe.php` — 60 assertions. The strongest is a round trip
+against the module's own data: take builds the seed already has, work
+out what their released sheet would have shown for each item, and check
+the importer independently arrives at the **same formula the seed was
+hand-authored with**.
+
+```
+BUILD       ITEMS   AGREED     ASKED DISAGREED  MACHINE
+FX5-1808       14       12         2         0  6A/12T
+FX5-1858       10        8         2         0  5A/6T
+IQR-HS         24       13        11         0  15A/12T
+IQR-TCF        20       12         8         0  11A/6T
+FX5-1778       14       12         2         0  7A/8T
+IQR-FLM        23       13        10         0  15A/9T
+
+105 rows, 70 agreed, 35 asked, 0 silently disagreed
+```
+
+**Zero silent disagreements** is the property that matters. A third of
+rows are put in front of a person, which is the correct trade: a
+question costs a moment, a wrong guess costs a machine.
+
+Also covered: a title block above the headings, section heading rows,
+blank spacers, alternative column spellings, and every file that must be
+refused — no heading row, missing QTY, headings with no data. Fractional
+and zero quantities are **refused, never rounded**.
+
+### One thing found while testing
+
+PHPExcel's `createReaderForFile()` probes every reader, which loads
+`Reader/Excel5.php` — and that file uses curly-brace string offsets,
+removed in PHP 8. On a PHP 8 host that is a fatal error while merely
+*looking at* an `.xlsx`. The reader is now chosen by extension, so
+`.xlsx` and `.csv` work regardless of PHP version, and the one genuinely
+unsupported case (`.xls` on PHP 8) says so and tells the operator to
+re-save. Production is 7.4, where all three work.
+
+---
+
 ## 1. Schema deltas — `abom_schema.sql` → `Database/abom_001.sql`
 
 ### 1.1 Three new columns on `abom_bom_line` — approved
@@ -1106,18 +1920,18 @@ No engine field is dropped.
 Modifier classes on `data-row`, coloured only from the design's existing
 palette variables. First match wins; severity outranks category.
 
-| Class | Variable | Rows (of 71) |
+| Class | Variable | Rows (of 178) |
 |---|---|---|
-| `is-conflict` | `--red` | 2 |
-| `is-noerp` | `--orange` | 5 |
-| `is-optional` | `--lgreen` | 7 |
-| `is-manual` | `--lblue` | 24 |
-| *(no modifier)* | — | 33 |
+| `is-conflict` | `--red` | 8 |
+| `is-noerp` | `--orange` | 9 |
+| `is-optional` | `--lgreen` | 15 |
+| `is-manual` | `--lblue` | 68 |
+| *(no modifier)* | — | 78 |
 
-`review` severity produces **no row tint**. It applies to 29 of 71
+`review` severity produces **no row tint**. It applies to 82 of 178
 master items; tinting them would put a large fraction of a
 customer-signed document into a warning colour and would collapse
-`is-manual` to the 3 rows carrying no severity. Review surfaces as a
+`is-manual` to the handful of rows carrying no severity. Review surfaces as a
 STATUS badge instead — nothing is lost, because STATUS carries every
 applicable badge regardless of which class wins the row.
 
@@ -1148,8 +1962,15 @@ no database. Parses `abom_seed.sql` directly and drives the real
 `application/libraries/Abom_engine.php`.
 
 ```bash
-php BOMMODULEDEVELOPMENT/tests/run_tests.php      # spec §5.1 suite
-php BOMMODULEDEVELOPMENT/tests/dump_reference.php # Appendix B line lists
+php BOMMODULEDEVELOPMENT/tests/run_tests.php         # spec §5.1 suite
+php BOMMODULEDEVELOPMENT/tests/dump_reference.php    # Appendix B line lists
+php BOMMODULEDEVELOPMENT/tests/reconfigure_probe.php # save_config carry-over
+php BOMMODULEDEVELOPMENT/tests/render_list.php       # saved-BOM register
+php BOMMODULEDEVELOPMENT/tests/dfref_probe.php       # DF reference uniqueness
+php BOMMODULEDEVELOPMENT/tests/build_prefill_probe.php  # Generate-from-build
+php BOMMODULEDEVELOPMENT/tests/build_filter_probe.php   # build register filters
+php BOMMODULEDEVELOPMENT/tests/version_probe.php     # version diff / changelog
+php BOMMODULEDEVELOPMENT/tests/import_probe.php      # reference-BOM import
 ```
 
 Covers all 13 spec §5.1 cases plus seed integrity (Appendix A) and the
@@ -1166,17 +1987,24 @@ total quantities 74 and 129.
 Each of these is a deliberate decision to defer, with the trigger that
 should bring it back.
 
-1. **Wire `AUTOMATION BOM MASTER ITEMS` before any master-item screen
-   ships.** The permission exists and is grantable today, but no screen
-   consumes it (§0.14.2) — item, section, formula and PLC-rule editing is
-   done in SQL. **If** master-item maintenance screens are ever built,
-   every one of them must call `require_perm('master_edit')` before the
-   first of them is deployed. Shipping such a screen without that call
-   would repeat §0.13 exactly: a declared permission that gates nothing,
-   on the module's most sensitive data — the seed every BOM is generated
-   from. `PERMISSIONS_WORKSHEET.md` says plainly that the grant confers
-   nothing today, so nobody grants it expecting protection that is not
-   there.
+1. ~~**Wire `AUTOMATION BOM MASTER ITEMS` before any master-item screen
+   ships.**~~ **DONE, 2026-08-11.** The master-item screens shipped at
+   `/abom/master`, and all four entry points — `master`, `master_form`,
+   `master_save`, `master_toggle` — call `require_perm('master_edit')`.
+   Verified by `tests/guard_matrix.php`, which reports the permission
+   against each of them. The grant now confers what its name says.
+
+   The six CONFIGURATION tables — build variants, variant selection
+   rules, PLC family rules, sections, feature gates and quantity formulas
+   — followed at `/abom/config`, driven from one descriptor in
+   `Abom_config_model` so all six share one validated write path. Adding
+   a new build is no longer a migration.
+
+   `abom_formula` is metadata-only by design: a formula CODE is
+   dispatched on in `Abom_engine::calc_qty()`, and a code the engine has
+   no case for falls through to `default` and silently behaves as FIXED.
+   Offering an Add button there would offer a quantity rule that quietly
+   does nothing, so rows cannot be added or removed — only reworded.
 
 2. **Six views carry a host-pinned definer.** `SQL SECURITY INVOKER` is
    the right fix (§0.11) and `abom_004_views_invoker.sql` is written and

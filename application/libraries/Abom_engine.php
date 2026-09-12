@@ -20,6 +20,8 @@ class Abom_engine
     protected $CI;
     protected $rules = null;
 
+    protected $variant_rules = null;
+
     public function __construct()
     {
         $this->CI =& get_instance();
@@ -36,7 +38,8 @@ class Abom_engine
      * first match wins (spec 2.1). Deliberately NOT a hard-coded if
      * chain — engineering retunes thresholds by editing rows.
      *
-     * @param  array $cfg ['axes'=>int, 'speed_ppm'=>int, 'motion_type'=>string]
+     * @param  array $cfg ['axes'=>int, 'speed_ppm'=>int, 'motion_type'=>string,
+     *                      'machine_model'=>string]
      * @return array ['family_id'=>int, 'code'=>string, 'rule_id'=>int,
      *                'priority'=>int, 'explanation'=>string]
      */
@@ -49,8 +52,21 @@ class Abom_engine
         $axes   = isset($cfg['axes']) ? (int) $cfg['axes'] : 0;
         $speed  = isset($cfg['speed_ppm']) ? (int) $cfg['speed_ppm'] : 0;
         $motion = isset($cfg['motion_type']) ? $cfg['motion_type'] : 'ANY';
+        $model  = isset($cfg['machine_model']) ? $cfg['machine_model'] : '';
 
         foreach ($this->rules as $r) {
+            // machine_model arrived with abom_008. A rule that predates
+            // it has NULL here and still applies to every model, so
+            // detection is unchanged for all four original rules.
+            //
+            // It exists because DF-1883 runs 11 axes on FX5 by fitting a
+            // second simple-motion card — the 8-axis limit is a property
+            // of one card, not of the family — and that exception has to
+            // be scoped to the machine it describes rather than widening
+            // the rule for everything.
+            if (isset($r->machine_model) && $r->machine_model !== null
+                && $r->machine_model !== '' && $r->machine_model !== $model) continue;
+
             if ($r->min_axes  !== null && $axes  <  (int) $r->min_axes)  continue;
             if ($r->max_axes  !== null && $axes  >  (int) $r->max_axes)  continue;
             if ($r->min_speed !== null && $speed <  (int) $r->min_speed) continue;
@@ -71,6 +87,73 @@ class Abom_engine
     }
 
     // -----------------------------------------------------------------
+    // BUILD VARIANT DETECTION
+    //
+    // A family is a CPU platform; a VARIANT is a buildable machine. The
+    // nine reference BOMs put two incompatible servo ranges inside the
+    // FX5 family alone (MR-JE/HG-SN below 8 axes, MR-J4/HG-JR at 8), so
+    // "every item of the detected family" would generate both amplifier
+    // ranges and procurement would order twice the drives.
+    //
+    // Same contract as detect_plc_family(): data-driven over
+    // abom_variant_rule, priority ascending, first match wins, NULL bound
+    // = unbounded. Evaluated AFTER the family is known, so a rule row
+    // with plc_family_id filters within that family rather than
+    // re-detecting it.
+    // -----------------------------------------------------------------
+
+    /**
+     * @param  array $cfg        axes, tracks, speed_ppm, motion_type,
+     *                           machine_model
+     * @param  int   $family_id  the already-detected (or overridden) family
+     * @return array|null  ['variant_id'=>int, 'code'=>string,
+     *                      'name'=>string, 'rule_id'=>int,
+     *                      'priority'=>int, 'explanation'=>string]
+     *                     NULL when no rule matches — see generate()
+     */
+    public function detect_variant(array $cfg, $family_id)
+    {
+        if ($this->variant_rules === null) {
+            $this->variant_rules = $this->CI->Abom_master_model->get_active_variant_rules();
+        }
+
+        $family_id = (int) $family_id;
+        $axes      = isset($cfg['axes']) ? (int) $cfg['axes'] : 0;
+        $speed     = isset($cfg['speed_ppm']) ? (int) $cfg['speed_ppm'] : 0;
+        $motion    = isset($cfg['motion_type']) ? $cfg['motion_type'] : 'ANY';
+        $model     = isset($cfg['machine_model']) ? $cfg['machine_model'] : '';
+
+        foreach ($this->variant_rules as $r) {
+            if ($r->plc_family_id !== null && (int) $r->plc_family_id !== $family_id) continue;
+            if ($r->machine_model !== null && $r->machine_model !== '' && $r->machine_model !== $model) continue;
+            if ($r->min_axes  !== null && $axes  <  (int) $r->min_axes)  continue;
+            if ($r->max_axes  !== null && $axes  >  (int) $r->max_axes)  continue;
+            if ($r->min_speed !== null && $speed <  (int) $r->min_speed) continue;
+            if ($r->max_speed !== null && $speed >  (int) $r->max_speed) continue;
+            if ($r->motion_type !== 'ANY' && $r->motion_type !== $motion) continue;
+
+            $variant = $this->CI->Abom_master_model->get_variant((int) $r->result_variant_id);
+            if (!$variant || empty($variant->is_active)) {
+                // A rule pointing at a deactivated variant must not
+                // silently fall through to the next one — that would
+                // generate a different machine's BOM without saying so.
+                continue;
+            }
+
+            return array(
+                'variant_id'  => (int) $variant->id,
+                'code'        => (string) $variant->code,
+                'name'        => (string) $variant->name,
+                'rule_id'     => (int) $r->id,
+                'priority'    => (int) $r->priority,
+                'explanation' => (string) $r->explanation,
+            );
+        }
+
+        return null;
+    }
+
+    // -----------------------------------------------------------------
     // QUANTITY CALCULATION
     // -----------------------------------------------------------------
 
@@ -85,7 +168,8 @@ class Abom_engine
      * battery sets (spec 2.2).
      *
      * @param  object $item  row from abom_item
-     * @param  array  $cfg   ['axes'=>int, 'j4_units'=>int, 'battery_qty'=>int]
+     * @param  array  $cfg   ['axes'=>int, 'tracks'=>int, 'j4_units'=>int,
+     *                        'battery_qty'=>int]
      * @return int
      */
     public function calc_qty($item, array $cfg)
@@ -100,6 +184,29 @@ class Abom_engine
                 // Floor of 1: an 8-axis machine daisy-chains 7 links, a
                 // 1-axis machine still needs 1 — never 0.
                 return max(1, (isset($cfg['axes']) ? (int) $cfg['axes'] : 0) - 1);
+
+            case 'TRACKS':
+                // One unit per track — the SPM1250P cut-off drives.
+                return max(0, isset($cfg['tracks']) ? (int) $cfg['tracks'] : 0);
+
+            case 'TRACK_TEMP':
+                // 4-channel temperature / RTD card count, per engineering:
+                //
+                //     (((tracks + 1) * 2) + 2) / 4
+                //
+                // Written out in the form engineering specified rather
+                // than the algebraically identical (tracks + 2) / 2, so
+                // this line can be read straight against their note.
+                //
+                // Rounded UP: 9 tracks gives 5.5 and half a card cannot
+                // be bought. Verified against every source BOM carrying a
+                // 4-channel card — 6T=4, 8T=5, 9T=6, 12T=7.
+                $tracks = isset($cfg['tracks']) ? (int) $cfg['tracks'] : 0;
+                if ($tracks <= 0) {
+                    return 0;
+                }
+
+                return (int) ceil(((($tracks + 1) * 2) + 2) / 4);
 
             case 'J4_STO':
                 return max(0, isset($cfg['j4_units']) ? (int) $cfg['j4_units'] : 0);
@@ -140,8 +247,11 @@ class Abom_engine
      * @param  array $cfg  axes, tracks, speed_ppm, motion_type,
      *                     machine_model, machine_side, j4_units,
      *                     battery_qty, features[],
-     *                     plc_family_id (optional manual override)
+     *                     plc_family_id (optional manual override),
+     *                     variant_id    (optional manual override)
      * @return array ['family'=>..., 'family_id'=>int, 'overridden'=>bool,
+     *                'variant'=>..., 'variant_id'=>int|null,
+     *                'variant_overridden'=>bool, 'variant_missing'=>bool,
      *                'sections'=>[...], 'lines'=>[...], 'stats'=>[...]]
      */
     public function generate(array $cfg)
@@ -155,7 +265,54 @@ class Abom_engine
         // approved (spec 2.1) — the caller must render this.
         $overridden = ($family_id !== $detected['family_id']);
 
-        $items    = $this->CI->Abom_item_model->get_by_family($family_id);
+        // --- build variant ------------------------------------------
+        $detected_variant = $this->detect_variant($cfg, $family_id);
+
+        $variant_id = !empty($cfg['variant_id'])
+            ? (int) $cfg['variant_id']
+            : ($detected_variant ? (int) $detected_variant['variant_id'] : null);
+
+        $variant_overridden = ($variant_id !== null && $detected_variant !== null
+            && $variant_id !== (int) $detected_variant['variant_id']);
+
+        // An overridden variant must still describe itself in the panel,
+        // so resolve whatever id we ended up with rather than reporting
+        // the detected one.
+        $variant = ($variant_id !== null)
+            ? $this->CI->Abom_master_model->get_variant($variant_id)
+            : null;
+
+        if ($variant === null) {
+            $variant_id = null;
+        }
+
+        // THE FAMILY FOLLOWS THE VARIANT.
+        //
+        // A variant belongs to exactly one PLC family, and it is the
+        // variant that decides which items are on the sheet. So if an
+        // engineer overrides the build to one from another family, the
+        // family label has to move with it — otherwise the document
+        // says "FX5 Series" in the header while every line on it is an
+        // iQ-R part, which is precisely what happened on ABOM-5
+        // (2026-08-11): a 6-axis SPM1200L detected FX5, was overridden
+        // to IQR-STD, and printed the two side by side.
+        //
+        // The family override flag is raised as well, because this IS a
+        // family override — the operator just expressed it by choosing a
+        // build rather than by choosing a family.
+        if ($variant !== null && (int) $variant->plc_family_id !== $family_id) {
+            $family_id  = (int) $variant->plc_family_id;
+            $overridden = true;
+        }
+
+        // No variant means no items. That is the SAFE failure and it is
+        // deliberate: generating the whole family catalogue instead would
+        // put two incompatible servo ranges on one purchasable document.
+        // The caller renders variant_missing as a blocking message.
+        $items = ($variant_id === null)
+            ? array()
+            : $this->CI->Abom_item_model->get_by_variant($variant_id);
+
         $features = isset($cfg['features']) ? $cfg['features'] : array();
 
         $lines   = array();
@@ -186,8 +343,29 @@ class Abom_engine
                 'is_overridden'  => 0,
                 'uom'            => $item->uom,
                 'formula_code'   => $item->formula_code,
+                'variant_code'   => $variant ? $variant->code : null,
                 'usage_remark'   => $item->usage_remark,
                 'remarks'        => $item->data_issue,
+                // SEEDED FROM THE MASTER ITEM'S USAGE NOTE.
+                //
+                // This started out empty, with usage_remark shown only
+                // as the input's grey placeholder — the reasoning being
+                // that a remark on a signed document should only ever be
+                // there because a person typed it.
+                //
+                // Engineering overruled that on 2026-08-11, and they are
+                // right about their own document: "HORZ. + VERT." tells
+                // the reader which axis the part is for, it is the same
+                // text the released DFs carry in that column, and making
+                // someone retype it on every line to get it onto the
+                // print is not a safeguard, it is friction.
+                //
+                // So it is a real, editable VALUE now: it shows, it
+                // prints, it exports, and the engineer can change or
+                // clear it per BOM. Clearing it is still a deliberate
+                // act, and it only ever affects the one document —
+                // abom_item is not written from any BOM screen.
+                'user_remark'    => (string) $item->usage_remark,
                 'issue_severity' => $item->issue_severity,
                 'is_optional'    => (int) $item->is_optional,
                 'feature_code'   => $item->feature_code,
@@ -199,12 +377,17 @@ class Abom_engine
         }
 
         return array(
-            'family'     => $detected,
-            'family_id'  => $family_id,
-            'overridden' => $overridden,
-            'sections'   => $this->sections_present($lines),
-            'lines'      => $lines,
-            'stats'      => $this->stats($lines),
+            'family'             => $detected,
+            'family_id'          => $family_id,
+            'overridden'         => $overridden,
+            'variant'            => $variant,
+            'variant_detected'   => $detected_variant,
+            'variant_id'         => $variant_id,
+            'variant_overridden' => $variant_overridden,
+            'variant_missing'    => ($variant_id === null),
+            'sections'           => $this->sections_present($lines),
+            'lines'              => $lines,
+            'stats'              => $this->stats($lines),
         );
     }
 

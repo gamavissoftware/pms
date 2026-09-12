@@ -15,6 +15,7 @@
  *
  * @var array $formulas  code => row, with ->item_count
  * @var array $rules     readable PLC selection rules, priority order
+ * @var array $variants  build variants with their selection rules
  * @var array $features  feature switches, with ->item_count
  * @var array $families  PLC families
  * @var array $stages    the workflow ladder from Abom_approval_model
@@ -35,8 +36,8 @@
     <link href="<?php echo assets_url; ?>css/pages.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom-print.css" rel="stylesheet" media="all">
+    <link href="<?php echo abom_asset('abom/abom.css'); ?>" rel="stylesheet">
+    <link href="<?php echo abom_asset('abom/abom-print.css'); ?>" rel="stylesheet" media="all">
 </head>
 <body>
 
@@ -82,6 +83,7 @@
               <li><a href="#g1">The one idea to understand first</a></li>
               <li><a href="#g2">Making a BOM, step by step</a></li>
               <li><a href="#g3">How the PLC family is chosen</a></li>
+              <li><a href="#g3b">Which build variant is used</a></li>
               <li><a href="#g4">The quantity formulas</a></li>
               <li><a href="#g5">Machine feature switches</a></li>
               <li><a href="#g6">Reading the sheet — colours and badges</a></li>
@@ -90,7 +92,7 @@
               <li><a href="#g9">The approval workflow</a></li>
               <li><a href="#g10">Printing and exporting</a></li>
               <li><a href="#g11">Who can do what</a></li>
-              <li><a href="#g12">Check yourself — two worked examples</a></li>
+              <li><a href="#g12">Check yourself — the reference machines</a></li>
               <li><a href="#g13">Common questions</a></li>
             </ol>
           </nav>
@@ -219,6 +221,82 @@
             the answer is always one row of that table, and the module prints
             it on the sheet. You never have to guess.
           </div>
+
+          <!-- =========================== 3b =========================== -->
+          <h2 class="abom-h2" id="g3b">3b. Which build variant is used</h2>
+
+          <p class="abom-p">
+            The family above says which <b>CPU</b> the machine runs. It does
+            not say which machine it is. Two FX5 machines in the reference
+            set are built from completely different servo ranges &mdash;
+            MR-JE amplifiers with HG-SN motors below 8 axes, MR-J4 with
+            HG-JR at 8 &mdash; and three iQ-R machines differ again by panel
+            layout, HMI and, on the SPM1250P, a cut-off drive on every track.
+          </p>
+
+          <p class="abom-p">
+            So the module picks a <b>build variant</b> after it picks the
+            family, by exactly the same method: a list of rules in priority
+            order, first match wins. The variant is what decides which parts
+            appear. There are
+            <b><?php echo count($variants); ?></b> in the system today:
+          </p>
+
+          <table class="abom-guide-table">
+            <thead>
+              <tr>
+                <th style="width:110px;">Variant</th>
+                <th style="width:80px;">Family</th>
+                <th>Chosen when&hellip;</th>
+                <th style="width:80px;">Items</th>
+                <th style="width:150px;">Built from</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($variants as $v): ?>
+                <tr>
+                  <td>
+                    <b><?php echo abom_e($v['code']); ?></b>
+                    <div class="abom-muted"><?php echo abom_e($v['name']); ?></div>
+                  </td>
+                  <td><?php echo abom_e($v['family_code']); ?></td>
+                  <td>
+                    <?php if (empty($v['rules'])): ?>
+                      <i class="abom-muted">no active rule selects this variant &mdash; it can only be chosen by manual override</i>
+                    <?php else: ?>
+                      <?php foreach ($v['rules'] as $r): ?>
+                        <div>
+                          <?php if ($r['is_catch_all']): ?>
+                            <i>nothing above matched</i>
+                          <?php else: ?>
+                            <?php echo abom_e($r['condition']); ?>
+                          <?php endif; ?>
+                          <div class="abom-muted"><?php echo abom_e($r['explanation']); ?></div>
+                        </div>
+                      <?php endforeach; ?>
+                    <?php endif; ?>
+                  </td>
+                  <td><b><?php echo (int) $v['item_count']; ?></b></td>
+                  <td class="abom-muted"><?php echo abom_e($v['source_df']); ?></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+
+          <div class="abom-keypoint">
+            <b>Teaching point.</b> If a BOM comes out with the wrong
+            amplifiers on it, the variant is the first thing to check &mdash;
+            not the item list. The variant is printed in the header chips and
+            named in the sidebar, and you can override it there, which flags
+            the document as a manual override.
+          </div>
+
+          <p class="abom-p abom-muted">
+            If no variant matches, the module generates <b>nothing</b> and
+            says so. That is deliberate. Falling back to &ldquo;everything in
+            the family&rdquo; would put two incompatible servo ranges on one
+            purchasable document, and procurement would order both.
+          </p>
 
           <!-- ============================ 4 =========================== -->
           <h2 class="abom-h2" id="g4">4. The quantity formulas</h2>
@@ -576,13 +654,23 @@
           </p>
 
           <!-- ============================ 12 ========================== -->
-          <h2 class="abom-h2" id="g12">12. Check yourself — two worked examples</h2>
+          <h2 class="abom-h2" id="g12">12. Check yourself — the reference machines</h2>
 
           <p class="abom-p">
-            These two were produced by the engine as this page loaded. Set the
-            same configuration in the generator and you must get the same
-            numbers — it is the quickest way to prove to a trainee that the
-            module is behaving, and the quickest way to spot that it is not.
+            One per source BOM, all produced by the engine as this page
+            loaded. Set the same configuration in the generator and you must
+            get the same numbers — it is the quickest way to prove to a
+            trainee that the module is behaving, and the quickest way to spot
+            that it is not.
+          </p>
+
+          <p class="abom-p">
+            Watch the <b>temperature cards</b> row in particular. Those are
+            the only quantities driven purely by the track count
+            &mdash; <code>(((tracks + 1) &times; 2) + 2) &divide; 4</code>,
+            rounded up &mdash; so they are what tells you the track rule is
+            still right: 6 tracks &rarr; 4, 8 &rarr; 5, 9 &rarr; 6,
+            12 &rarr; 7.
           </p>
 
           <?php foreach ($examples as $key => $ex): ?>
@@ -619,7 +707,15 @@
                   <td>
                     <b><?php echo (int) $ex['lines']; ?> line items</b>,
                     total quantity <b><?php echo (int) $ex['qty']; ?></b>,
-                    PLC family <b><?php echo abom_e($ex['family']); ?></b>
+                    PLC family <b><?php echo abom_e($ex['family']); ?></b>,
+                    build <b><?php echo abom_e($ex['variant']); ?></b>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Temperature cards</td>
+                  <td>
+                    <b><?php echo (int) $ex['temp_cards']; ?></b>
+                    at <?php echo (int) $cfg['tracks']; ?> tracks
                   </td>
                 </tr>
                 <?php if (!empty($ex['why'])): ?>
@@ -628,14 +724,25 @@
                     <td class="abom-muted"><?php echo abom_e($ex['why']); ?></td>
                   </tr>
                 <?php endif; ?>
+                <?php if (!empty($ex['why_var'])): ?>
+                  <tr>
+                    <td>Build chosen because</td>
+                    <td class="abom-muted"><?php echo abom_e($ex['why_var']); ?></td>
+                  </tr>
+                <?php endif; ?>
               </tbody>
             </table>
           <?php endforeach; ?>
 
           <p class="abom-p abom-muted">
-            You can open either of these fully built:
-            <a href="<?php echo page_url; ?>abom/reference/fx5">FX5 reference</a> &middot;
-            <a href="<?php echo page_url; ?>abom/reference/iqr">iQ-R reference</a>.
+            You can open any of these fully built:
+            <?php $ref_links = array(); ?>
+            <?php foreach ($examples as $ref_key => $ref_ex): ?>
+              <?php $ref_links[] = '<a href="' . page_url . 'abom/reference/'
+                    . abom_e($ref_key) . '">' . abom_e($ref_ex['cfg']['machine_model'])
+                    . ' ' . abom_e(strtoupper(substr($ref_key, 2))) . '</a>'; ?>
+            <?php endforeach; ?>
+            <?php echo implode(' &middot; ', $ref_links); ?>.
           </p>
 
           <!-- ============================ 13 ========================== -->

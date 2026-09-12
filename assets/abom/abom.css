@@ -111,7 +111,71 @@
 }
 .abom-wrap .sidebar-body { padding: 16px; flex: 1; overflow-y: visible; }
 
-/* Preset DF cards */
+/* ---------------------------------------------------------------------
+   Reference-configuration picker — searchable combobox.
+
+   Replaces the stack of cards. Nine references already pushed the
+   machine configuration below the fold and the set only grows; this is
+   two rows tall whatever the count, and the list is scroll-capped so it
+   can never do that again.
+
+   .preset-fallback is the real <select>. It is shown only when
+   JavaScript has not upgraded the widget (abom-generate.js adds
+   .js-combo to the wrapper), so the control still works with scripting
+   off instead of leaving a dead text box.
+   --------------------------------------------------------------------- */
+.abom-wrap .preset-combo { display: none; position: relative; }
+.abom-wrap .js-combo .preset-combo { display: block; }
+.abom-wrap .js-combo .preset-fallback { display: none; }
+
+.abom-wrap .preset-search {
+  width: 100%; padding: 8px 26px 8px 10px;
+  border: 1.5px solid var(--border); border-radius: 7px;
+  font-family: Arial, sans-serif; font-size: 12px; background: #FAFCFF;
+}
+.abom-wrap .preset-search:focus { border-color: var(--blue); outline: none; }
+
+.abom-wrap .preset-clear {
+  position: absolute; top: 6px; right: 6px;
+  border: 0; background: transparent; cursor: pointer;
+  font-size: 16px; line-height: 1; color: #999; padding: 2px 4px;
+  display: none;
+}
+.abom-wrap .preset-combo.has-text .preset-clear { display: block; }
+.abom-wrap .preset-clear:hover { color: var(--red); }
+
+.abom-wrap .preset-list {
+  list-style: none; margin: 4px 0 0; padding: 4px;
+  border: 1.5px solid var(--border); border-radius: 7px; background: #fff;
+  max-height: 268px; overflow-y: auto;
+  position: absolute; left: 0; right: 0; z-index: 40;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
+}
+.abom-wrap .preset-list[hidden] { display: none; }
+
+.abom-wrap .preset-option {
+  cursor: pointer; padding: 7px 9px; border-radius: 5px;
+  border: 1.5px solid transparent;
+}
+.abom-wrap .preset-option:hover,
+.abom-wrap .preset-option.is-active { background: var(--lblue); border-color: var(--navy); }
+.abom-wrap .preset-option[hidden] { display: none; }
+.abom-wrap .preset-option .po-df { display: block; font-size: 12.5px; font-weight: 700; color: var(--navy); }
+.abom-wrap .preset-option .po-line { display: block; font-size: 10.5px; color: var(--dgray); line-height: 1.5; }
+.abom-wrap .preset-option .po-muted { color: #8A94A6; }
+.abom-wrap .preset-option .po-tags { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
+.abom-wrap .preset-empty {
+  padding: 10px 9px; font-size: 11px; color: #8A94A6; font-style: italic;
+}
+.abom-wrap .preset-empty[hidden] { display: none; }
+
+.abom-wrap .preset-chosen {
+  margin-top: 6px; font-size: 10.5px; color: var(--dgray);
+}
+.abom-wrap .preset-chosen b { color: var(--navy); }
+
+/* Preset DF cards — retained for the read-only document view, which
+   still renders them, and as the no-JS fallback's visual language. */
 .abom-wrap .preset-card {
   width: 100%; text-align: left; cursor: pointer;
   background: #FAFCFF; border: 1.5px solid var(--border); border-radius: 7px;
@@ -216,6 +280,12 @@
 .abom-wrap .btn-print  { background: var(--blue); color: #fff; }
 .abom-wrap .btn-copy   { background: var(--dgray); color: #fff; }
 .abom-wrap .btn-generate { background: var(--navy); color: #fff; }
+
+/* Delete is the only destructive control in the module, so it is the
+   only one in --red. It is not shown at all outside the statuses
+   $config['abom_deletable_status'] allows — see list.php. */
+.abom-wrap .abom-delete { background: var(--red); color: #fff; }
+.abom-wrap .btn-sm[disabled] { opacity: .55; cursor: progress; }
 
 .abom-wrap .abom-area { flex: 1; overflow: visible; padding: 16px 20px; }
 
@@ -402,6 +472,19 @@
   padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700;
   letter-spacing: .4px; text-transform: uppercase;
 }
+
+/* Build variant — "no build matched" notice.
+   The engine generates NOTHING when no variant rule fits, so this has to
+   read as a blocker rather than as a hint; it is tinted from the
+   design's own --red rather than introducing a palette entry. */
+.abom-wrap .abom-variant-missing {
+  border: 1px solid var(--red); border-left-width: 3px;
+  border-radius: 4px; padding: 8px 10px; background: rgba(200, 32, 42, .05);
+}
+.abom-wrap .abom-variant-missing .override-row { margin-top: 0; }
+.abom-wrap .abom-variant-missing .plc-explain { margin-top: 6px; }
+.abom-wrap .is-hidden { display: none !important; }
+
 .abom-wrap .field-error { color: var(--red); font-size: 10px; margin-top: 3px; display: block; }
 .abom-wrap .is-invalid { border-color: var(--red) !important; }
 .abom-wrap .abom-busy { opacity: .55; pointer-events: none; }
@@ -580,4 +663,515 @@
 
 @media (max-width: 700px) {
   .abom-wrap .abom-toc ol { columns: 1; }
+}
+
+
+/* ---------------------------------------------------------------------
+   Editable rows — REMARKS, insert and remove.
+
+   All of this is scoped to ONE BOM. Nothing here can reach abom_item:
+   the generator holds it as form state until Save, and a saved BOM
+   writes it to abom_bom_line, which is already a per-BOM snapshot.
+   --------------------------------------------------------------------- */
+.abom-wrap .remark-input {
+  width: 100%; padding: 4px 6px; font-size: 11px;
+  font-family: Arial, sans-serif; color: var(--ink);
+  border: 1px solid transparent; border-radius: 4px; background: transparent;
+}
+.abom-wrap .remark-input:hover  { border-color: var(--border); background: #fff; }
+.abom-wrap .remark-input:focus  { border-color: var(--blue); background: #fff; outline: none; }
+.abom-wrap .remark-input::placeholder { color: #A8B0BD; font-style: italic; }
+.abom-wrap .remark-input.is-filled { font-weight: 600; }
+
+.abom-wrap .manual-input {
+  width: 100%; padding: 4px 6px; font-size: 11px;
+  font-family: Arial, sans-serif; color: var(--ink);
+  border: 1px solid var(--border); border-radius: 4px; background: #FFFDF5;
+}
+.abom-wrap .manual-input:focus { border-color: var(--blue); outline: none; }
+.abom-wrap .manual-part, .abom-wrap .manual-erp_code { font-family: "Courier New", monospace; }
+
+.abom-wrap .col-actions { text-align: center; white-space: nowrap; }
+.abom-wrap .row-act {
+  border: 1px solid var(--border); background: #fff; cursor: pointer;
+  width: 22px; height: 22px; line-height: 1; border-radius: 4px;
+  font-size: 14px; font-weight: 700; color: var(--dgray); padding: 0;
+}
+.abom-wrap .row-act + .row-act { margin-left: 3px; }
+.abom-wrap .row-add:hover { border-color: var(--blue); color: var(--blue); }
+.abom-wrap .row-del:hover { border-color: var(--red);  color: var(--red); }
+.abom-wrap .row-act:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+/* A hand-added row is tinted so it is obvious at a glance which lines
+   have no master item behind them. Uses the design's own --lyellow
+   rather than introducing a colour. */
+.abom-wrap tr.data-row.is-manual-row > td { background: #FFFDF0; }
+
+.abom-wrap .row-restore-bar {
+  margin: 8px 0 0; padding: 8px 12px; font-size: 11px;
+  border: 1px solid var(--border); border-left: 3px solid var(--warn);
+  border-radius: 5px; background: #FFFDF0; color: var(--dgray);
+}
+.abom-wrap .row-restore-bar[hidden] { display: none; }
+.abom-wrap .row-restore-bar button {
+  border: 0; background: transparent; color: var(--blue);
+  cursor: pointer; font-size: 11px; font-weight: 700; padding: 0 0 0 6px;
+  text-decoration: underline;
+}
+
+.abom-wrap .abom-rowedit-note {
+  margin: 8px 0 0; font-size: 10.5px; color: var(--dgray); line-height: 1.6;
+}
+.abom-wrap .abom-rowedit-note b { color: var(--navy); }
+
+/* Save bar for row edits on a SAVED BOM. The generator's "Save BOM"
+   creates a new document; this one writes to the BOM already open. */
+.abom-wrap .lines-save-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 10px 0 0; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 6px; background: #F7FAFF;
+}
+.abom-wrap .lines-save-bar .lsb-state { font-size: 11px; color: var(--dgray); flex: 1; }
+.abom-wrap .lines-save-bar .lsb-state.is-dirty { color: var(--warn); font-weight: 700; }
+
+/* ---------------------------------------------------------------------
+   Master-item screens. The banner colours say what the screens are:
+   --lyellow for "this is master data", because every warning here is
+   about scope — what an edit does and does not reach.
+   --------------------------------------------------------------------- */
+.abom-wrap .abom-master-note {
+  margin: 0 0 12px; padding: 10px 14px; font-size: 11.5px; line-height: 1.7;
+  border: 1px solid var(--border); border-left: 3px solid var(--warn);
+  border-radius: 5px; background: var(--lyellow); color: #5C4600;
+}
+.abom-wrap .abom-master-note b { color: #3D2F00; }
+.abom-wrap .abom-master-ok {
+  margin: 0 0 12px; padding: 10px 14px; font-size: 12px;
+  border: 1px solid #B7DFC4; border-left: 3px solid var(--success);
+  border-radius: 5px; background: #EAF6EE; color: #14532D; font-weight: 700;
+}
+.abom-wrap .abom-master-err {
+  margin: 0 0 12px; padding: 10px 14px; font-size: 12px;
+  border: 1px solid #E7B9B9; border-left: 3px solid var(--red);
+  border-radius: 5px; background: #FDF1F1; color: #7C1D1D;
+}
+.abom-wrap .abom-empty {
+  padding: 34px; text-align: center; color: #8A94A6; font-size: 13px;
+  background: #fff; border: 1px solid var(--border); border-radius: 6px;
+}
+
+/* A retired item is still listed — it is on old BOMs and people look for
+   it — but it must not read as something that will be generated. */
+.abom-wrap tr.data-row.is-retired > td { opacity: .5; }
+.abom-wrap tr.data-row.is-retired .desc-cell { text-decoration: line-through; }
+
+.abom-wrap .abom-master-form { background: #fff; border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 18px 18px; max-width: 1000px; }
+.abom-wrap .abom-fs-title {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--navy); margin: 18px 0 8px;
+  padding-bottom: 5px; border-bottom: 2px solid var(--lblue);
+}
+.abom-wrap .abom-fs { display: block; }
+.abom-wrap .abom-fs-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.abom-wrap .abom-fs-row > * { flex: 1 1 260px; }
+.abom-wrap .abom-master-form .form-group { margin-bottom: 12px; }
+.abom-wrap .abom-master-form label { font-size: 11px; font-weight: 700;
+  color: var(--navy); display: block; margin-bottom: 4px; }
+.abom-wrap .abom-master-form input[type=text],
+.abom-wrap .abom-master-form input[type=number],
+.abom-wrap .abom-master-form select {
+  width: 100%; padding: 7px 9px; font-size: 12px;
+  border: 1.5px solid var(--border); border-radius: 5px; background: #FAFCFF;
+}
+.abom-wrap .abom-master-form input:focus,
+.abom-wrap .abom-master-form select:focus { border-color: var(--blue); outline: none; }
+.abom-wrap .abom-master-form .req { color: var(--red); }
+.abom-wrap .abom-formula-help { margin-top: 4px; }
+.abom-wrap .abom-formula-help .afh {
+  font-size: 11px; line-height: 1.7; color: var(--dgray);
+  background: var(--lblue); border-radius: 5px; padding: 9px 12px;
+}
+.abom-wrap .abom-formula-help .afh i { color: var(--warn); font-style: normal; font-weight: 700; }
+.abom-wrap .abom-form-actions {
+  margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border);
+  display: flex; gap: 10px; align-items: center;
+}
+.abom-wrap .abom-filter-form select,
+.abom-wrap .abom-filter-form input[type=text] {
+  padding: 5px 8px; font-size: 11px; border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* Build-configuration hub */
+.abom-wrap .abom-hub { display: flex; flex-wrap: wrap; gap: 14px; }
+.abom-wrap .hub-card {
+  flex: 1 1 300px; max-width: 420px; display: block; text-decoration: none;
+  background: #fff; border: 1.5px solid var(--border); border-radius: 7px;
+  padding: 14px 16px; transition: border .15s, box-shadow .15s;
+}
+.abom-wrap .hub-card:hover { border-color: var(--blue); box-shadow: 0 4px 14px rgba(0,0,0,.07); text-decoration: none; }
+.abom-wrap .hub-card .hc-title { display: block; font-size: 14px; font-weight: 700; color: var(--navy); }
+.abom-wrap .hub-card .hc-count { display: block; font-size: 22px; font-weight: 700; color: var(--blue); margin: 4px 0 6px; }
+.abom-wrap .hub-card .hc-count em { font-size: 11px; font-weight: 400; color: var(--dgray); font-style: normal; }
+.abom-wrap .hub-card .hc-blurb { display: block; font-size: 11px; line-height: 1.6; color: var(--dgray); }
+.abom-wrap .abom-null { color: #A8B0BD; font-style: italic; }
+.abom-wrap .abom-master-form textarea {
+  width: 100%; padding: 7px 9px; font-size: 12px; font-family: Arial, sans-serif;
+  border: 1.5px solid var(--border); border-radius: 5px; background: #FAFCFF; resize: vertical;
+}
+.abom-wrap .abom-master-form textarea:focus { border-color: var(--blue); outline: none; }
+
+/* ---------------------------------------------------------------------
+   Build master sheet — one uploaded BOM's items, editable in place.
+   Denser than the document table: this is a working screen, not a
+   printed one.
+   --------------------------------------------------------------------- */
+.abom-wrap .abom-build-sheet td { padding: 3px 4px; }
+.abom-wrap .abom-build-sheet .mi {
+  width: 100%; padding: 4px 6px; font-size: 11px;
+  font-family: Arial, sans-serif; color: var(--ink);
+  border: 1px solid transparent; border-radius: 4px; background: transparent;
+}
+.abom-wrap .abom-build-sheet .mi:hover { border-color: var(--border); background: #fff; }
+.abom-wrap .abom-build-sheet .mi:focus { border-color: var(--blue); background: #fff; outline: none; }
+.abom-wrap .abom-build-sheet select.mi { background: #fff; border-color: var(--border); }
+.abom-wrap .abom-build-sheet .mi.is-invalid { border-color: var(--red) !important; background: #FDF1F1; }
+.abom-wrap .abom-build-sheet .mi::placeholder { color: #A8B0BD; font-style: italic; }
+
+/* A new row is tinted until it is saved, so it is obvious which lines
+   have never been through validation. */
+.abom-wrap tr.data-row.is-new-row > td { background: #FFFDF0; }
+.abom-wrap tr.data-row.has-row-error > td { background: #FDF1F1; }
+.abom-wrap tr.row-error-row > td { background: #FDF1F1; padding: 2px 10px 8px; }
+.abom-wrap tr.row-error-row .field-error { display: inline-block; margin-right: 14px; }
+
+.abom-wrap .abom-build-sheet a.row-act {
+  display: inline-block; text-align: center; text-decoration: none;
+  line-height: 20px;
+}
+.abom-wrap .lines-save-bar select {
+  padding: 5px 8px; font-size: 11px; border: 1px solid var(--border);
+  border-radius: 4px; max-width: 260px;
+}
+.abom-wrap .abom-build-sheet .mi-src {
+  font-size: 10px; color: var(--dgray);
+}
+
+/* Source-BOM chips in the reference register */
+.abom-wrap .mb-dfs { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.abom-wrap .mb-df {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .3px;
+  background: var(--lblue); color: var(--navy);
+  padding: 2px 6px; border-radius: 8px; white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------
+   APPLY-CONFIGURATION note (saved draft / clone)
+
+   Sits under the feature checkboxes, next to the fields whose
+   change it describes. Warm rather than red: regenerating is the
+   intended action here, not an error state.
+   --------------------------------------------------------------- */
+.cfg-apply-note {
+  margin-top: 12px;
+  padding: 9px 10px;
+  border: 1px solid #f0d9a8;
+  border-left: 3px solid #d99b1c;
+  border-radius: 3px;
+  background: #fffaf0;
+  color: #6b5330;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.cfg-apply-note b { color: #7a4f08; }
+.cfg-apply-keep { display: block; margin: 4px 0; color: #2f6b3d; }
+
+/* ---------------------------------------------------------------
+   MANUFACTURER column on the saved-BOM register.
+
+   Most BOMs are one brand of automation plus a bought-in part or
+   two. The primary brand reads as normal text; the remainder is a
+   quiet count with the full list on hover, so scanning the column
+   still works.
+   --------------------------------------------------------------- */
+.mfr-more {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: #e6ebf1;
+  color: #5a6b7d;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: help;
+}
+
+/* ---------------------------------------------------------------
+   DF REFERENCE availability, answered as the field is typed.
+
+   Three states, and they must not look alike at a glance: a clash
+   is the one that stops work, so it is the only one that is red
+   and the only one that carries a link to the offending BOM.
+   --------------------------------------------------------------- */
+.dfref-note {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.dfref-checking { color: #8a94a0; font-style: italic; }
+.dfref-free     { color: #2f6b3d; }
+.dfref-taken {
+  padding: 6px 8px;
+  border: 1px solid #f0c2c2;
+  border-left: 3px solid #c0392b;
+  border-radius: 3px;
+  background: #fdf3f2;
+  color: #8c2f26;
+}
+.dfref-taken a { color: #8c2f26; font-weight: 700; text-decoration: underline; }
+input.is-taken { border-color: #c0392b !important; background: #fdf3f2; }
+
+/* ---------------------------------------------------------------
+   Enabled feature gates on a LOCKED document.
+
+   The checkboxes are only rendered while the panel is editable, so
+   a released BOM needs this to say which gates were switched on —
+   they decide whether whole groups of parts are on the sheet.
+   Reads as a list of facts, not as controls.
+   --------------------------------------------------------------- */
+.feature-readout { display: flex; flex-wrap: wrap; gap: 4px; }
+.feature-readout .fr-item {
+  padding: 3px 8px;
+  border: 1px solid #cfe0cf;
+  border-radius: 3px;
+  background: #f2f8f2;
+  color: #2f6b3d;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------
+   "Configured for the FX5-1808 build" — shown once, at the top of
+   a generator reached from the Reference BOMs register.
+
+   Informational blue, not a warning: arriving here preconfigured
+   is the intended path. A caveat inside it (a build with no
+   recorded track count) is carried in bold text rather than by
+   recolouring the whole box, so the two do not compete.
+   --------------------------------------------------------------- */
+.abom-wrap .abom-prefill-notice {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border: 1px solid #bcd4ea;
+  border-left: 3px solid #2f6fa8;
+  border-radius: 3px;
+  background: #f2f8fd;
+  color: #274b6d;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.abom-wrap .abom-prefill-notice b { color: #17324c; }
+
+/* "Clear filters" next to the count on the build register. A link
+   rather than a button: it undoes a view, it does not act on data. */
+.abom-wrap .mb-clear {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2f6fa8;
+  text-decoration: underline;
+}
+.abom-wrap .mb-clear:hover { color: #1c4a72; }
+
+/* ===============================================================
+   VERSION HISTORY  (/abom/history/<id>)
+
+   One card per revision, newest first. The card is the unit of
+   reading: revision, who, what changed, and the trail behind it.
+   =============================================================== */
+.abom-wrap .ver-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--blue);
+  border-radius: 4px;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+}
+.abom-wrap .ver-card.is-superseded { border-left-color: #B9C2CE; opacity: .92; }
+
+.abom-wrap .ver-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.abom-wrap .ver-no { font-size: 15px; font-weight: 800; color: var(--navy); }
+.abom-wrap .ver-status {
+  padding: 2px 9px; border-radius: 3px;
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  background: #E8EDF3; color: #4A5B70;
+}
+.abom-wrap .ver-meta { font-size: 11px; color: #7A8BA6; }
+.abom-wrap .ver-actions { margin-left: auto; display: flex; gap: 6px; }
+
+.abom-wrap .ver-people { margin-top: 8px; font-size: 11px; color: #5A6B7D; line-height: 1.7; }
+.abom-wrap .ver-people b { color: var(--navy); }
+
+.abom-wrap .ver-first,
+.abom-wrap .ver-broken {
+  margin-top: 10px; padding: 8px 10px; border-radius: 3px;
+  font-size: 11.5px; line-height: 1.6;
+}
+.abom-wrap .ver-first  { background: #F4F7FA; color: #5A6B7D; }
+.abom-wrap .ver-broken { background: #FDF3F2; border: 1px solid #F0C2C2; color: #8C2F26; }
+
+.abom-wrap .ver-snaps { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.abom-wrap .ver-snap {
+  font-size: 10px; color: #5A6B7D;
+  background: #F4F7FA; border: 1px solid var(--border);
+  border-radius: 3px; padding: 2px 7px;
+}
+
+.abom-wrap .ver-audit { margin-top: 10px; }
+.abom-wrap .ver-audit > summary {
+  cursor: pointer; font-size: 11px; font-weight: 700; color: #2F6FA8;
+  padding: 4px 0;
+}
+.abom-wrap .ver-audit-table { width: 100%; margin-top: 6px; font-size: 10.5px; }
+.abom-wrap .ver-audit-table th {
+  background: #F4F7FA; color: #5A6B7D; font-size: 9.5px;
+  padding: 5px 8px; border-bottom: 1px solid var(--border);
+}
+.abom-wrap .ver-audit-table td { padding: 5px 8px; border-bottom: 1px solid #EEF2F6; }
+
+/* --- the changelog itself ------------------------------------- */
+.abom-wrap .ver-diff { margin-top: 10px; }
+
+.abom-wrap .vd-summary { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.abom-wrap .vd-chip {
+  padding: 3px 9px; border-radius: 10px;
+  font-size: 10px; font-weight: 800; color: #fff;
+}
+.abom-wrap .vd-chip.vd-out { background: var(--red); }
+.abom-wrap .vd-chip.vd-in  { background: var(--success); }
+.abom-wrap .vd-chip.vd-cfg { background: var(--blue); }
+.abom-wrap .vd-chip.vd-qty { background: var(--warn); }
+.abom-wrap .vd-chip.vd-det { background: #7A5AA6; }
+.abom-wrap .vd-chip.vd-rem { background: #7A8BA6; }
+
+.abom-wrap .vd-group { margin-bottom: 9px; padding-left: 10px; border-left: 3px solid var(--border); }
+.abom-wrap .vd-group.vd-g-out { border-left-color: var(--red); }
+.abom-wrap .vd-group.vd-g-in  { border-left-color: var(--success); }
+.abom-wrap .vd-group.vd-g-cfg { border-left-color: var(--blue); }
+.abom-wrap .vd-group.vd-g-qty { border-left-color: var(--warn); }
+.abom-wrap .vd-group.vd-g-det { border-left-color: #7A5AA6; }
+.abom-wrap .vd-group.vd-g-rem { border-left-color: #7A8BA6; }
+
+.abom-wrap .vd-title {
+  font-size: 11px; font-weight: 800; color: var(--navy);
+  text-transform: uppercase; letter-spacing: .3px; margin-bottom: 3px;
+}
+.abom-wrap .vd-group ul { margin: 0; padding-left: 16px; }
+.abom-wrap .vd-group li { font-size: 11.5px; line-height: 1.75; color: #3E4C5E; }
+
+.abom-wrap .vd-was {
+  color: #8C2F26; background: #FDF3F2; padding: 0 5px;
+  border-radius: 2px; font-weight: 700;
+}
+.abom-wrap .vd-now {
+  color: #1F6B3A; background: #F1F9F3; padding: 0 5px;
+  border-radius: 2px; font-weight: 700;
+}
+.abom-wrap .vd-qtyval { color: #7A8BA6; font-size: 10.5px; }
+
+@media print {
+  .abom-wrap .ver-actions,
+  .abom-wrap .abom-topbar { display: none !important; }
+  .abom-wrap .ver-audit[open] > summary { list-style: none; }
+  .abom-wrap .ver-card { break-inside: avoid; page-break-inside: avoid; }
+}
+
+/* ===============================================================
+   REFERENCE-BOM IMPORT
+   =============================================================== */
+.abom-wrap .imp-form { max-width: 880px; }
+.abom-wrap .imp-section {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 4px; padding: 14px 18px; margin-bottom: 14px;
+}
+.abom-wrap .imp-legend {
+  font-size: 12px; font-weight: 800; color: var(--navy);
+  text-transform: uppercase; letter-spacing: .4px;
+  padding-bottom: 8px; margin-bottom: 12px;
+  border-bottom: 2px solid var(--border);
+}
+.abom-wrap .imp-help { font-size: 10.5px; color: #7A8BA6; line-height: 1.6; margin-top: 4px; }
+.abom-wrap .imp-help-block { margin-bottom: 12px; }
+.abom-wrap .cfg-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+/* The machine block is where a wrong number does the damage, so it
+   is visually separated from the fields that are merely labels. */
+.abom-wrap .imp-machine { border-left: 4px solid var(--warn); }
+.abom-wrap .imp-warn {
+  background: #FFFAF0; border: 1px solid #F0D9A8; border-left: 3px solid #D99B1C;
+  border-radius: 3px; padding: 10px 12px; margin-bottom: 14px;
+  font-size: 11.5px; line-height: 1.65; color: #6B5330;
+}
+.abom-wrap .imp-warn b { color: #7A4F08; }
+
+.abom-wrap .imp-error {
+  background: #FDF3F2; border: 1px solid #F0C2C2; border-left: 3px solid #C0392B;
+  border-radius: 3px; padding: 10px 12px; margin-bottom: 14px;
+  font-size: 11.5px; line-height: 1.65; color: #8C2F26;
+}
+.abom-wrap .imp-warnbox {
+  background: #FFFAF0; border: 1px solid #F0D9A8; border-radius: 3px;
+  padding: 10px 12px; margin-bottom: 14px;
+  font-size: 11.5px; line-height: 1.65; color: #6B5330;
+}
+
+.abom-wrap .imp-actions {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0;
+}
+.abom-wrap .imp-note { font-size: 11px; color: #7A8BA6; }
+
+.abom-wrap .imp-stats { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+
+.abom-wrap .imp-table td { vertical-align: top; }
+.abom-wrap .imp-formula { width: 100%; font-size: 10.5px; padding: 3px 5px; }
+.abom-wrap .imp-reason {
+  font-size: 10px; color: #7A8BA6; line-height: 1.5; margin-top: 3px;
+}
+.abom-wrap .imp-opt { font-size: 10px; color: #7A8BA6; display: block; margin-top: 3px; }
+.abom-wrap .imp-rowerr {
+  font-size: 10px; color: #8C2F26; line-height: 1.5; margin-top: 3px; font-weight: 700;
+}
+.abom-wrap .imp-rowwarn { font-size: 10px; color: #8A6D2B; line-height: 1.5; margin-top: 3px; }
+
+.abom-wrap .imp-confirm {
+  background: var(--white); border: 1px solid var(--border);
+  border-top: 3px solid var(--success);
+  border-radius: 4px; padding: 14px 18px; margin-top: 14px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.abom-wrap .imp-confirm-text { flex: 1; min-width: 320px; font-size: 11.5px; line-height: 1.65; color: #3E4C5E; }
+
+/* Delete control on the reference-BOM register. Red, because it is the
+   one irreversible action on that screen — everything else there is
+   editable or reversible. Only rendered where the build is unused. */
+.abom-wrap .abom-del-build {
+  background: var(--white);
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-weight: 700;
+}
+.abom-wrap .abom-del-build:hover:not(:disabled) { background: var(--red); color: #fff; }
+.abom-wrap .abom-del-build:disabled { opacity: .55; cursor: default; }
+
+/* Shown instead of the button when BOMs exist. Deliberately not a
+   disabled button: it states the count, which is the useful part. */
+.abom-wrap .abom-del-locked {
+  display: inline-block; padding: 3px 8px;
+  font-size: 10.5px; color: var(--dgray);
+  border: 1px dashed var(--border); border-radius: 3px;
+  white-space: nowrap;
 }

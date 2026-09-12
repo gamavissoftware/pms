@@ -40,7 +40,9 @@
   .abom-wrap .app-header .abom-home,
   .abom-wrap .abom-guard,
   .abom-wrap .qty-lock-note,
-  .abom-wrap .abom-workflow { display: none !important; }
+  .abom-wrap .abom-workflow,
+  .abom-wrap .abom-del-build,
+  .abom-wrap .abom-del-locked { display: none !important; }
 
   /* The guide is printable as a training handout. The table of contents
      is navigation, so it goes; headings must not be orphaned from the
@@ -84,6 +86,28 @@
     border: none; background: transparent !important;
     -webkit-appearance: none; appearance: none;
   }
+
+  /* Editable REMARKS and hand-added rows print as plain text, not as
+     form controls. The input keeps its VALUE, so a typed remark prints;
+     the placeholder does not, so an untouched remark prints as an empty
+     cell. That is the intended behaviour — the master item's usage note
+     is reference material shown on screen to help the engineer, and is
+     not a remark anyone approved. */
+  .abom-wrap .remark-input,
+  .abom-wrap .manual-input {
+    border: none !important; background: transparent !important;
+    padding: 0 !important; font-size: inherit;
+    -webkit-appearance: none; appearance: none;
+  }
+  .abom-wrap .remark-input::placeholder,
+  .abom-wrap .manual-input::placeholder { color: transparent !important; }
+
+  /* The insert/remove column is an editing affordance and has no place
+     on a document going to procurement or a customer. */
+  .abom-wrap .col-actions,
+  .abom-wrap .row-restore-bar,
+  .abom-wrap .abom-rowedit-note,
+  .abom-wrap .lines-save-bar { display: none !important; }
 
   .abom-wrap .approval-block {
     page-break-inside: avoid; break-inside: avoid;

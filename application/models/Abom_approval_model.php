@@ -491,8 +491,11 @@ class Abom_approval_model extends CI_Model
         $header['updated_at']       = date('Y-m-d H:i:s');
         $header['notes']            = $note;
 
-        // family_code / family_name may be present from a joined read.
-        unset($header['family_code'], $header['family_name']);
+        // family_code / family_name / variant_code / variant_name may be
+        // present from a joined read (Abom_model::get_all). They are not
+        // columns on abom_bom, so an insert carrying them would fail.
+        unset($header['family_code'], $header['family_name'],
+              $header['variant_code'], $header['variant_name']);
 
         $this->db->insert($this->bom_table, $header);
         $new_id = (int) $this->db->insert_id();

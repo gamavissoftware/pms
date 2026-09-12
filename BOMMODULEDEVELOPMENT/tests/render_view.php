@@ -13,6 +13,7 @@
  *
  *   php BOMMODULEDEVELOPMENT/tests/render_view.php iqr > out.html
  *   php BOMMODULEDEVELOPMENT/tests/render_view.php fx5 > out.html
+ *   php BOMMODULEDEVELOPMENT/tests/render_view.php je  > out.html
  *
  * PHP 7.4 compatible.
  */
@@ -28,7 +29,7 @@ defined('sitetitle')  OR define('sitetitle', 'SHUBHAM PACKAGING PMS');
 defined('assets_url') OR define('assets_url', '/assets/');
 defined('page_url')   OR define('page_url', '/index.php/');
 
-$seed = new Abom_seed_parser($root . '/BOMMODULEDEVELOPMENT/abom_seed.sql');
+$seed = new Abom_seed_parser($root . '/Database/abom_006_seed.sql');
 $GLOBALS['ABOM_STUB_CI'] = new Abom_stub_ci($seed);
 
 require $root . '/application/libraries/Abom_engine.php';
@@ -75,6 +76,24 @@ $master = $GLOBALS['ABOM_STUB_CI']->Abom_master_model;
 $which    = isset($argv[1]) ? strtolower($argv[1]) : 'iqr';
 $editable = isset($argv[2]) && $argv[2] === 'generate';
 
+// 'saved' renders the SAVED-BOM screen: configuration panel locked, but
+// quantities and rows editable, which is what a draft BOM looks like.
+$saved = isset($argv[2]) && ($argv[2] === 'saved' || $argv[2] === 'config');
+
+// 'config' renders a SAVED, still-editable BOM — a draft, or a clone.
+// Same screen as 'saved', but with the machine-configuration panel
+// unlocked and the "Apply configuration" button in the topbar. This is
+// the mode that has to prove the fields are genuinely typeable without
+// the generator's Save BOM (which would fork the document) appearing.
+$config_edit = isset($argv[2]) && $argv[2] === 'config';
+
+// 'archived' renders a stored snapshot — a photograph of a document
+// that no longer exists in this form. Every control that would act on a
+// live BOM must be gone, EXPORT above all: a PDF printed from here
+// would be indistinguishable from a current BOM once it left the
+// screen, and somebody would order from it.
+$archived = isset($argv[2]) && $argv[2] === 'archived';
+
 $presets = array(
     'fx5' => array(
         'bom_no' => 'ABOM-REF-FX5', 'df_ref' => 'DF-1827', 'revision' => '',
@@ -85,7 +104,21 @@ $presets = array(
             'axes' => 8, 'tracks' => 12, 'speed_ppm' => 140,
             'motion_type' => 'Intermittent', 'machine_model' => 'SPM1200L',
             'machine_side' => 'LHS', 'j4_units' => 7, 'battery_qty' => 7,
-            'plc_family_id' => null, 'features' => $master->default_features(),
+            'plc_family_id' => null, 'variant_id' => null,
+            'features' => $master->default_features(),
+        ),
+    ),
+    'je' => array(
+        'bom_no' => 'ABOM-REF-JE', 'df_ref' => 'DF-1808', 'revision' => '',
+        'title' => 'DF-1808', 'summary' => 'SPM1200L · 6 Axis · 12 Track · 100 PPM',
+        'panel' => 'FX5-JE · temperature cards = 7',
+        'tags' => array(array('fx5','FX5'), array('int','Intermittent')),
+        'cfg' => array(
+            'axes' => 6, 'tracks' => 12, 'speed_ppm' => 100,
+            'motion_type' => 'Intermittent', 'machine_model' => 'SPM1200L',
+            'machine_side' => 'N/A', 'j4_units' => 0, 'battery_qty' => 6,
+            'plc_family_id' => null, 'variant_id' => null,
+            'features' => $master->default_features(),
         ),
     ),
     'iqr' => array(
@@ -97,7 +130,8 @@ $presets = array(
             'axes' => 15, 'tracks' => 12, 'speed_ppm' => 180,
             'motion_type' => 'Continuous', 'machine_model' => 'SPM1200L',
             'machine_side' => 'N/A', 'j4_units' => 11, 'battery_qty' => 12,
-            'plc_family_id' => null, 'features' => $master->default_features(),
+            'plc_family_id' => null, 'variant_id' => null,
+            'features' => $master->default_features(),
         ),
     ),
 );
@@ -107,7 +141,7 @@ $cfg    = $preset['cfg'];
 $result = $engine->generate($cfg);
 
 $bom = new stdClass();
-$bom->id                = 0;
+$bom->id                = $saved ? 1 : 0;
 $bom->bom_no            = $preset['bom_no'];
 $bom->revision          = $preset['revision'];
 $bom->df_ref            = $preset['df_ref'];
@@ -130,7 +164,10 @@ foreach (array('prepared_by','prepared_at','checked_by','checked_at',
     $bom->$k = null;
 }
 
-$defaults = $master->family_defaults($result['family_id']);
+$defaults = $master->variant_defaults($result['variant_id'], $result['family_id']);
+
+$bom->variant_id     = $result['variant_id'];
+$bom->variant_locked = 0;
 
 // Same "Points to verify" derivation the controller uses.
 $notes = array();
@@ -155,21 +192,9 @@ foreach ($conflict as $erp => $where) {
     }
 }
 
-$chips = array();
-$chips[] = array('class' => '', 'label' => $bom->bom_no . ($bom->revision !== '' ? ' · REV.' . $bom->revision : ''));
-$chips[] = array('class' => 'lite', 'label' => $bom->machine_model);
-$chips[] = array('class' => 'lite', 'label' => $bom->axes . ' Axis');
-$chips[] = array('class' => 'lite', 'label' => $bom->tracks . ' Track');
-$chips[] = array('class' => 'lite', 'label' => $bom->speed_ppm . ' PPM');
-if ($bom->machine_side !== '' && $bom->machine_side !== 'N/A') { $chips[] = array('class' => 'lite', 'label' => $bom->machine_side); }
-$chips[] = array('class' => 'cont', 'label' => $bom->motion_type);
-foreach ($master->get_features() as $code => $feature) {
-    if (!empty($cfg['features'][$code])) { $chips[] = array('class' => 'cont', 'label' => $feature->label); }
-}
-$chips[] = array('class' => ($result['family']['code'] === 'FX5' ? 'fx5' : 'iqr'),
-                 'label' => ($result['family']['code'] === 'FX5' ? 'FX5 Series' : 'iQ-R Series'));
-if ($defaults['panel_location'] !== '') { $chips[] = array('class' => 'lite', 'label' => $defaults['panel_location']); }
-$chips[] = array('class' => 'lite', 'label' => 'Draft');
+// The topbar chip row was removed — every value it carried is
+// stated in the document title strip, the sidebar or the sign-off
+// block instead. Nothing here builds chips any more.
 
 foreach ($presets as $k => $pv) {
     $presets[$k]['cfg'] = $pv['cfg'];
@@ -184,19 +209,49 @@ $loader->view('abom/_document', array(
     'sections'           => $result['sections'],
     'stats'              => $result['stats'],
     'editable'           => $editable,
+    'config_editable'    => $config_edit,
+    'archived'           => $archived,
+    'notice'             => $archived
+        ? '<b>Archived version.</b> This is a record, not the current document.'
+        : '',
     'family_code'        => $result['family']['code'],
     'family_explanation' => $result['family']['explanation'],
     'overridden'         => !empty($result['overridden']),
+    'variant'            => $result['variant'],
+    'variant_explanation'=> !empty($result['variant_detected'])
+                                ? $result['variant_detected']['explanation'] : '',
+    'variant_overridden' => !empty($result['variant_overridden']),
+    'variant_missing'    => !empty($result['variant_missing']),
+    'variant_message'    => '',
+    'variants'           => $master->get_active_variants(),
     'panel_location'     => $defaults['panel_location'],
     'families'           => $master->get_families(),
     'features'           => $master->get_features(),
     'active_features'    => $cfg['features'],
     'errors'             => array(),
+    // The sign-off block, which carries the ONLY export buttons on the
+    // page now that the topbar's CSV-only one is gone. It was absent
+    // from this harness, so the whole workflow partial silently
+    // early-returned and nothing here rendered the exports at all.
+    'workflow'           => array(
+        'enabled'      => $saved && !$archived,
+        'configured'   => true,
+        'problems'     => array(),
+        'next'         => array('to' => 'submitted', 'label' => 'Submit for checking',
+                                'permission' => 'save'),
+        'may'          => true,
+        'blockers'     => array(),
+        'trail'        => array(),
+        'can_reject'   => false,
+        'can_reopen'   => false,
+        'can_revise'   => false,
+        'status_label' => 'Draft',
+    ),
     'notes'              => $notes,
-    'qty_editable'       => $editable,
+    'qty_editable'       => ($editable || $saved) && !$archived,
+    'rows_editable'      => ($editable || $saved) && !$archived,
     'qty_locked_reason'  => $editable ? '' : 'Quantity editing is disabled until the save path is in place, so that no markup can be lost on refresh.',
     'presets'            => $presets,
-    'chips'              => $chips,
     'signoff_mode'       => 'customer',
     'signoff_names'      => array(),
     'models'             => array('SPM1200L', 'SPM1250P'),

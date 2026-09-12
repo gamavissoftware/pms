@@ -57,6 +57,11 @@ echo "  (CI default routing exposes /abom/<method> whether routed or not)\n";
 $matrix = array(
     '__construct', 'index', 'generate', 'generate_ajax', 'save', 'save_line_qty',
     'submit', 'approve', 'reject', 'reopen', 'create_revision', 'acknowledge_line',
+    'delete_bom', 'duplicate', 'save_lines', 'save_config', 'check_df_ref', 'history', 'version',
+    'import', 'import_preview', 'import_commit', 'import_template',
+    'master', 'master_form', 'master_save', 'master_toggle',
+    'config', 'config_list', 'config_form', 'config_save', 'config_delete',
+    'master_bom', 'master_bom_save', 'master_bom_delete',
     'export', 'bom_list', 'view', 'reference', 'printable', 'guide',
 );
 

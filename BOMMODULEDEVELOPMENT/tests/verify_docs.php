@@ -60,7 +60,7 @@ $listed = 0;
 if (preg_match('/```\n(application\/config\/abom\.php\n.*?)```/s', $R, $lm)) {
     $listed = count(array_filter(array_map('trim', explode("\n", $lm[1]))));
 }
-c('ROLLOUT', 'the copy list contains 28 entries', 28, $listed);
+c('ROLLOUT', 'the copy list contains 48 entries', 48, $listed);
 // The prose file-count must agree with the copy list. This drifted when
 // guide.php was added -- the list was updated and four sentences were not.
 $prose = array();
@@ -68,7 +68,7 @@ preg_match_all('/Copy the (\\d+) files listed/', $R, $pm);      $prose = array_m
 preg_match_all('/\\*\\*(\\d+) files\\. By name/', $R, $pm); $prose = array_merge($prose, $pm[1]);
 preg_match_all('/hand-copy (\\d+) paths/', $R, $pm);            $prose = array_merge($prose, $pm[1]);
 preg_match_all('/All (\\d+) are \\*\\*new\\*\\*/', $R, $pm); $prose = array_merge($prose, $pm[1]);
-c('ROLLOUT', 'prose file-counts all agree with the list', array('28'),
+c('ROLLOUT', 'prose file-counts all agree with the list', array('48'),
     array_values(array_unique($prose)));
 
 // every listed file must exist
@@ -92,27 +92,63 @@ if (isset($tm[1])) {
 $tar_missing = array();
 foreach ($tar_paths as $t) { if (!file_exists($ROOT . '/' . $t)) { $tar_missing[] = $t; } }
 c('ROLLOUT', 'every tar path exists', array(), $tar_missing);
-c('ROLLOUT', 'tar command lists 12 paths', 12, count($tar_paths));
+c('ROLLOUT', 'tar command lists 13 paths', 13, count($tar_paths));
 
 // collision-check list must cover the same ground
 c('ROLLOUT', 'collision check covers views/abom + assets/abom', true,
     strpos($R, 'application/views/abom \\') !== false && strpos($R, 'assets/abom ;') !== false);
 
 // seed verification numbers
-c('ROLLOUT', 'seed: 71 items',    '71', q("SELECT COUNT(*) FROM abom_item"));
-c('ROLLOUT', 'seed: 29 FX5',      '29', q("SELECT COUNT(*) FROM abom_item WHERE plc_family_id=1"));
-c('ROLLOUT', 'seed: 42 iQ-R',     '42', q("SELECT COUNT(*) FROM abom_item WHERE plc_family_id=2"));
-c('ROLLOUT', 'seed: 8 sections',  '8',  q("SELECT COUNT(*) FROM abom_section"));
-c('ROLLOUT', 'seed: 4 rules',     '4',  q("SELECT COUNT(*) FROM abom_plc_rule WHERE is_active=1"));
-c('ROLLOUT', 'seed: 4 features',  '4',  q("SELECT COUNT(*) FROM abom_feature"));
-c('ROLLOUT', 'seed: 6 formulas',  '6',  q("SELECT COUNT(*) FROM abom_formula"));
-c('ROLLOUT', 'doc states 71 . 29 . 42 . 8 . 4 . 4 . 6', true,
-    strpos($R, '71 · 29 · 42 · 8 · 4 · 4 · 6') !== false);
+c('ROLLOUT', 'seed: 178 items',   '178', q("SELECT COUNT(*) FROM abom_item"));
+c('ROLLOUT', 'seed: 60 FX5',       '60', q("SELECT COUNT(*) FROM abom_item WHERE plc_family_id=1"));
+c('ROLLOUT', 'seed: 118 iQ-R',    '118', q("SELECT COUNT(*) FROM abom_item WHERE plc_family_id=2"));
+c('ROLLOUT', 'seed: 10 sections',  '10', q("SELECT COUNT(*) FROM abom_section"));
+c('ROLLOUT', 'seed: 4 rules',       '4', q("SELECT COUNT(*) FROM abom_plc_rule WHERE is_active=1"));
+c('ROLLOUT', 'seed: 6 features',    '6', q("SELECT COUNT(*) FROM abom_feature"));
+c('ROLLOUT', 'seed: 8 formulas',    '8', q("SELECT COUNT(*) FROM abom_formula"));
+c('ROLLOUT', 'seed: 5 variants',    '5', q("SELECT COUNT(*) FROM abom_variant WHERE is_active=1"));
+c('ROLLOUT', 'seed: 7 variant rules','7', q("SELECT COUNT(*) FROM abom_variant_rule WHERE is_active=1"));
+c('ROLLOUT', 'doc states 178 . 60 . 118 . 10 . 4 . 6 . 8 . 5 . 7', true,
+    strpos($R, '178 · 60 · 118 · 10 · 4 · 6 · 8 · 5 · 7') !== false);
 
-// rollback: eleven tables, all named, and all eleven exist
+// no master item may be left unassigned to a build — an item with a NULL
+// variant_id is never generated onto any BOM
+c('ROLLOUT', 'doc checks for NULL variant_id', true,
+    strpos($R, 'WHERE variant_id IS NULL') !== false);
+
+// the track-driven temperature card rule, stated as a table
+c('ROLLOUT', 'doc states the 6/8/9/12 track card counts', true,
+    strpos($R, '| Cards  | 4 | 5 | 6 |  7 |') !== false);
+
+// and 002 must be called out as superseded, or a re-run silently reverts
+// the module to the two-DF master data
+// Both superseded seeds must be named under a heading that says so.
+// Checked by the SECTION plus each filename, rather than by one exact
+// sentence — the wording moved once already and the rule being
+// guarded is "the doc tells you not to run these", not its phrasing.
+c('ROLLOUT', 'doc has a section for files that must not be run', true,
+    strpos($R, 'Two files that must NOT be run') !== false);
+c('ROLLOUT', 'doc warns off abom_002_seed.sql', true,
+    strpos($R, '**`Database/abom_002_seed.sql`** — the original two-DF') !== false);
+c('ROLLOUT', 'doc warns off abom_010_source_df.sql', true,
+    strpos($R, '**`Database/abom_010_source_df.sql`** — superseded by') !== false);
+// Every migration that must be run is named, in order.
+$order = array('abom_001.sql', 'abom_005_variants.sql', 'abom_006_seed.sql',
+               'abom_007_line_edits.sql', 'abom_008_plc_rule_model.sql',
+               'abom_009_seed_1250p.sql', 'abom_011_split_fx5je.sql',
+               'abom_012_variant_reference.sql');
+$at = -1; $ooo = array();
+foreach ($order as $f) {
+    $pos = strpos($R, 'mysql -u USER -p DBNAME < Database/' . $f);
+    if ($pos === false || $pos < $at) { $ooo[] = $f; }
+    if ($pos !== false) { $at = $pos; }
+}
+c('ROLLOUT', 'every migration is listed, in run order', array(), $ooo);
+
+// rollback: thirteen tables, all named, and all thirteen exist
 preg_match_all('/DROP TABLE IF EXISTS `(abom_\w+)`/', $R, $dm);
 $dropped = array_unique($dm[1]);
-c('ROLLOUT', 'rollback names 11 tables', 11, count($dropped));
+c('ROLLOUT', 'rollback names 13 tables', 13, count($dropped));
 $live = explode("\n", q("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name LIKE 'abom\\_%' ORDER BY table_name"));
 $live = array_values(array_filter(array_map('trim', $live)));
 sort($dropped);
@@ -120,9 +156,9 @@ c('ROLLOUT', 'rollback list == live abom_ tables', $live, array_values($dropped)
 
 // the 16 route lines
 preg_match_all("/^\\\$route\\['abom[^\\]]*'\\]/m", $R, $rm);
-c('ROLLOUT', 'routes block lists 17 abom routes', 17, count(array_unique($rm[0])));
+c('ROLLOUT', 'routes block lists 33 abom routes', 33, count(array_unique($rm[0])));
 $actual_routes = (int) trim(shell_exec("grep -cE \"^.route\\['abom\" " . escapeshellarg($ROOT . '/application/config/routes.php')));
-c('ROLLOUT', 'routes.php actually has 17', 17, $actual_routes);
+c('ROLLOUT', 'routes.php actually has 33', 33, $actual_routes);
 
 // nav insertion point
 c('ROLLOUT', 'nav anchored on text not just line no', true,
@@ -184,11 +220,11 @@ c('CHANGELOG', 'design doc md5 as stated', 'bf9c0500f1939e4cbb11110addb766d2',
 c('CHANGELOG', 'md5 appears in the doc', true, strpos($C, 'bf9c0500f1939e4cbb11110addb766d2') !== false);
 
 // row-class distribution
-$dist = array('is-conflict' => 2, 'is-noerp' => 5, 'is-optional' => 7, 'is-manual' => 24);
-c('CHANGELOG', 'conflict items = 2', '2', q("SELECT COUNT(*) FROM abom_item WHERE issue_severity='conflict'"));
-c('CHANGELOG', 'no_erp items = 5', '5', q("SELECT COUNT(*) FROM abom_item WHERE issue_severity='no_erp'"));
-c('CHANGELOG', 'optional items = 7', '7', q("SELECT COUNT(*) FROM abom_item WHERE is_optional=1"));
-c('CHANGELOG', 'review items = 29', '29', q("SELECT COUNT(*) FROM abom_item WHERE issue_severity='review'"));
+$dist = array('is-conflict' => 8, 'is-noerp' => 9, 'is-optional' => 15, 'is-manual' => 68);
+c('CHANGELOG', 'conflict items = 8', '8', q("SELECT COUNT(*) FROM abom_item WHERE issue_severity='conflict'"));
+c('CHANGELOG', 'no_erp items = 9', '9', q("SELECT COUNT(*) FROM abom_item WHERE issue_severity='no_erp'"));
+c('CHANGELOG', 'optional items = 15', '15', q("SELECT COUNT(*) FROM abom_item WHERE is_optional=1"));
+c('CHANGELOG', 'review items = 82', '82', q("SELECT COUNT(*) FROM abom_item WHERE issue_severity='review'"));
 foreach ($dist as $cls => $n) {
     c('CHANGELOG', 'doc states ' . $cls . ' = ' . $n, true,
         preg_match('/`' . preg_quote($cls, '/') . '`[^|]*\|[^|]*\|\s*' . $n . '\s*\|/', $C) === 1);
@@ -241,8 +277,14 @@ c('CHANGELOG', 'MariaDB 11.4 in use', true,
 // master_edit is declared but nothing consumes it
 $mc = (int) trim(shell_exec("cd " . escapeshellarg($ROOT) . " && grep -c \"master_edit\" application/controllers/Abom.php"));
 c('CHANGELOG', 'master_edit referenced in controller (via require_any_perm)', true, $mc > 0);
+// They DID not exist; they do now (§4 item 1, done 2026-08-11). The
+// assertion was inverted rather than deleted, so it keeps guarding the
+// pairing between the changelog's claim and the tree: if the screens
+// were ever removed without the changelog being corrected, this fails.
 $screens = glob($ROOT . '/application/views/abom/master*');
-c('CHANGELOG', 'master-item admin screens do NOT exist', array(), $screens);
+c('CHANGELOG', 'master-item admin screens exist, as §4 records', 4, count($screens));
+c('CHANGELOG', 'and §4 no longer says they are outstanding', true,
+    strpos($C, '**DONE, 2026-08-11.** The master-item screens shipped') !== false);
 
 // --- claims added by the guard audit (section 0.14) ---
 c('CHANGELOG', 'csrf_protection is FALSE application-wide', true,
@@ -258,10 +300,12 @@ c('CHANGELOG', 'reject requires check', true, (bool) preg_match(
 c('CHANGELOG', 'require_any_perm exists', true, (bool) strpos(
     file_get_contents($ROOT . '/application/controllers/Abom.php'), 'private function require_any_perm'));
 $ctl = file_get_contents($ROOT . '/application/controllers/Abom.php');
-// 4 read paths + 1 floor at the top of workflow_action, minus the
-// declaration itself. This assertion caught the fifth call site being
-// added, which is exactly what it is for.
-c('CHANGELOG', 'require_any_perm: 5 read paths + 1 workflow floor', 6,
+// 6 read paths + 1 floor at the top of workflow_action, minus the
+// declaration itself. This assertion has now caught two call sites
+// being added (the fifth, and check_df_ref), which is exactly what it
+// is for: every new one must be a deliberate decision that this entry
+// point is a READ and not a write.
+c('CHANGELOG', 'require_any_perm: 8 read paths + 1 workflow floor', 9,
     preg_match_all('/require_any_perm\\(\\)/', $ctl) - 1);
 c('CHANGELOG', 'workflow_action carries the floor', true, (bool) preg_match(
     '/private function workflow_action.*?require_any_perm\\(\\)/s', $ctl));
@@ -278,7 +322,9 @@ c('ROLLOUT',   'warns about concurrent deployments', true,
 c('ROLLOUT',   'names both shared files', true,
     strpos($R, 'application/views/common/nav-menu.php') !== false
     && strpos($R, 'application/config/routes.php') !== false);
-c('CHANGELOG', '18 public entry points as documented', 18,
+// Grows with the module. Bumped deliberately each time rather than
+// derived, so a method appearing without anyone noticing still fails.
+c('CHANGELOG', '40 public entry points as documented', 40,
     preg_match_all('/^\\s*public function (\\w+)/m', $ctl));
 c('CHANGELOG', 'section 0.13 marked superseded', true, strpos($C, 'Superseded by §0.14') !== false);
 c('WORKSHEET', 'says MASTER ITEMS grants nothing today', true,

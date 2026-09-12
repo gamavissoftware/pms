@@ -80,19 +80,41 @@
   // -------------------------------------------------------------------
   ABOM.recalcStats = function () {
     var total = 0;
+    var lines = 0;
+    var noerp = 0;
 
     $wrap.find('#abomBody tr.data-row').each(function () {
       var $row   = $(this);
       var $input = $row.find('.qty-input');
+
+      lines++;
 
       if ($input.length) {
         total += parseInt($input.val(), 10) || 0;
       } else {
         total += parseInt($row.find('.qty-static').text(), 10) || 0;
       }
+
+      // A hand-added row with no ERP code counts against the same
+      // tally as a master item with none. It is the identical problem:
+      // a line on a purchasable document that procurement cannot order.
+      if ($row.attr('data-manual') === '1') {
+        if (!$.trim($row.find('.manual-erp_code').val() || '')) { noerp++; }
+      } else if ($row.find('.tag-pending').length) {
+        noerp++;
+      }
     });
 
-    $wrap.find('#statsRow .stat-card').eq(1).find('.val').text(total);
+    // LINE ITEMS and ERP PENDING move when rows are inserted or removed;
+    // leaving them showing the generated count would have the header
+    // disagree with the table directly beneath it.
+    var $cards = $wrap.find('#statsRow .stat-card');
+    $cards.eq(0).find('.val').text(lines);
+    $cards.eq(1).find('.val').text(total);
+    $cards.eq(3).find('.val').text(noerp);
+
+    var $all = $wrap.find('.filter-pills .pill[data-filter="ALL"]');
+    if ($all.length) { $all.text('All (' + lines + ')'); }
   };
 
   // -------------------------------------------------------------------

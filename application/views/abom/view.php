@@ -13,8 +13,8 @@
     <link href="<?php echo assets_url; ?>css/pages.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom-print.css" rel="stylesheet" media="all">
+    <link href="<?php echo abom_asset('abom/abom.css'); ?>" rel="stylesheet">
+    <link href="<?php echo abom_asset('abom/abom-print.css'); ?>" rel="stylesheet" media="all">
 </head>
 <body>
 
@@ -60,6 +60,23 @@ window.ABOM_WF_REJECT_URL   = "<?php echo page_url; ?>abom/reject";
 window.ABOM_WF_REOPEN_URL   = "<?php echo page_url; ?>abom/reopen";
 window.ABOM_WF_REVISION_URL = "<?php echo page_url; ?>abom/create_revision";
 </script>
-<script src="<?php echo assets_url; ?>abom/abom.js"></script>
+<script>
+  window.ABOM_SAVE_LINES_URL  = "<?php echo page_url; ?>abom/save_lines";
+  window.ABOM_SAVE_CONFIG_URL = "<?php echo page_url; ?>abom/save_config";
+</script>
+<script src="<?php echo abom_asset('abom/abom.js'); ?>"></script>
+<script src="<?php echo abom_asset('abom/abom-lines.js'); ?>"></script>
+<?php
+// Loaded after abom-lines.js, which it asks about unsaved row edits.
+// Only on a BOM whose configuration the server actually unlocked.
+?>
+<?php if (!empty($config_editable)): ?>
+  <script>
+    window.ABOM_CHECK_DFREF_URL = "<?php echo page_url; ?>abom/check_df_ref";
+  </script>
+  <?php // BEFORE abom-config.js, which asks it whether the reference clashes. ?>
+  <script src="<?php echo abom_asset('abom/abom-dfref.js'); ?>"></script>
+  <script src="<?php echo abom_asset('abom/abom-config.js'); ?>"></script>
+<?php endif; ?>
 </body>
 </html>

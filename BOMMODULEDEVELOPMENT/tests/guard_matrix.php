@@ -31,7 +31,12 @@ $SIGNS = array(
     'any_perm'  => '/require_any_perm\(\)/',
     'has_perm'  => '/has_perm\(\s*.?([a-z_$\[\]\'\w]*)/',
     'ajax'      => '/json_only\(\)/',
-    'wf_state'  => '/abom_qty_editable\(/',
+    // THREE workflow gates now, all reading the BOM's status and
+    // refusing on it: quantity editability, the delete status rule, and
+    // configuration editability (draft/rejected — what makes a clone
+    // re-specifiable without letting anyone re-spec a sheet under
+    // review).
+    'wf_state'  => '/abom_qty_editable\(|abom_config_editable\(|abom_deletable_status/',
     'wf_block'  => '/->blockers\(/',
     'wf_trans'  => '/next_transition\(/',
     'not_found' => '/show_404\(\)/',

@@ -1,4 +1,13 @@
 <?php defined('BASEPATH') OR exit('No direct script access allowed'); ?>
+<?php
+// A caller that forgets the rule gets the safe answer: Delete is offered
+// on drafts only.
+$deletable_status = isset($deletable_status) && is_array($deletable_status) && !empty($deletable_status)
+    ? $deletable_status
+    : array('draft', 'rejected');
+
+$manufacturers = isset($manufacturers) && is_array($manufacturers) ? $manufacturers : array();
+?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -13,8 +22,8 @@
     <link href="<?php echo assets_url; ?>css/pages.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom-print.css" rel="stylesheet" media="all">
+    <link href="<?php echo abom_asset('abom/abom.css'); ?>" rel="stylesheet">
+    <link href="<?php echo abom_asset('abom/abom-print.css'); ?>" rel="stylesheet" media="all">
 </head>
 <body>
 
@@ -77,6 +86,27 @@
               </option>
             <?php endforeach; ?>
           </select>
+          <?php
+          /**
+           * MANUFACTURER filter. Hidden entirely while only one brand is
+           * on record — a dropdown with a single option is furniture,
+           * not a control. It appears on its own as soon as a second
+           * brand reaches a saved BOM.
+           *
+           * The options are read from the saved BOMs, so this needs no
+           * maintenance as more manufacturers arrive.
+           */
+          ?>
+          <?php if (count($manufacturers) > 1): ?>
+            <select name="mfr">
+              <option value="">All manufacturers</option>
+              <?php foreach ($manufacturers as $mfr): ?>
+                <option value="<?php echo abom_e($mfr); ?>"<?php echo $filters['manufacturer'] === $mfr ? ' selected' : ''; ?>>
+                  <?php echo abom_e($mfr); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          <?php endif; ?>
           <input type="text" name="search" placeholder="BOM no / DF ref"
                  value="<?php echo abom_e($filters['search']); ?>">
           <button type="submit" class="btn-sm btn-print">Filter</button>
@@ -84,6 +114,8 @@
         <div class="abom-actions">
           <a class="btn-sm btn-generate" href="<?php echo page_url; ?>abom/generate">&#43; New BOM</a>
           <a class="btn-sm btn-copy" href="<?php echo page_url; ?>abom/guide">&#10068; Guide</a>
+          <a class="btn-sm btn-copy" href="<?php echo page_url; ?>abom/master">&#128295; Master items</a>
+          <a class="btn-sm btn-copy" href="<?php echo page_url; ?>abom/master_bom">&#128193; Reference BOMs</a>
         </div>
       </div>
 
@@ -105,6 +137,8 @@
                   <th class="left" style="width:110px;">MODEL</th>
                   <th style="width:190px;">CONFIGURATION</th>
                   <th style="width:100px;">PLC FAMILY</th>
+                  <th style="width:110px;">BUILD</th>
+                  <th class="left" style="width:130px;">MANUFACTURER</th>
                   <th style="width:70px;">LINES</th>
                   <th style="width:70px;">TOTAL QTY</th>
                   <th style="width:80px;">ISSUES</th>
@@ -113,7 +147,7 @@
                   <th style="width:120px;">&nbsp;</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="abomBomRows">
                 <?php foreach ($boms as $bom): ?>
                   <tr class="data-row<?php echo (int) $bom->open_issues > 0 ? ' is-noerp' : ''; ?>">
                     <td style="text-align:center;"><span class="erp-cell"><?php echo abom_e($bom->bom_no); ?></span></td>
@@ -134,6 +168,52 @@
                         <br><span class="formula-tag tag-pending">OVERRIDDEN</span>
                       <?php endif; ?>
                     </td>
+                    <?php
+                    // The family alone does not identify the machine: two
+                    // FX5 builds carry different servo ranges. Anyone
+                    // comparing two rows here needs the build to tell
+                    // them apart.
+                    ?>
+                    <td style="text-align:center;">
+                      <?php if (!empty($bom->variant_code)): ?>
+                        <span class="formula-tag <?php echo $bom->family_code === 'FX5' ? 'tag-manual' : 'tag-review'; ?>">
+                          <?php echo abom_e($bom->variant_code); ?>
+                        </span>
+                        <?php if (!empty($bom->variant_locked)): ?>
+                          <br><span class="formula-tag tag-pending">OVERRIDDEN</span>
+                        <?php endif; ?>
+                      <?php else: ?>
+                        &mdash;
+                      <?php endif; ?>
+                    </td>
+                    <?php
+                    /**
+                     * MANUFACTURER is derived from the LINES, because
+                     * that is where it lives — there is no brand column
+                     * on the header and there should not be one. Nearly
+                     * every BOM is one brand of automation plus a
+                     * bought-in part or two, so the brands are ordered by
+                     * how many lines each supplies and the machine's
+                     * actual brand comes first. Same rule the export
+                     * filename uses, so the list and the file agree.
+                     *
+                     * The rest are a count rather than a wrapped list:
+                     * on a register you scan down one column, and three
+                     * brand names per row would bury the one that
+                     * matters. The full list is on hover.
+                     */
+                    $mfrs = isset($bom->manufacturers) ? $bom->manufacturers : array();
+                    ?>
+                    <td>
+                      <?php if (empty($mfrs)): ?>
+                        &mdash;
+                      <?php else: ?>
+                        <?php echo abom_e($mfrs[0]); ?>
+                        <?php if (count($mfrs) > 1): ?>
+                          <span class="mfr-more" title="<?php echo abom_e(implode(', ', $mfrs)); ?>">+<?php echo count($mfrs) - 1; ?></span>
+                        <?php endif; ?>
+                      <?php endif; ?>
+                    </td>
                     <td style="text-align:center;font-weight:700;"><?php echo (int) $bom->total_lines; ?></td>
                     <td style="text-align:center;"><?php echo (int) $bom->total_qty; ?></td>
                     <td style="text-align:center;">
@@ -147,8 +227,35 @@
                     <td style="text-align:center;font-size:11px;">
                       <?php echo $bom->created_at ? abom_e(date('d-m-Y', strtotime($bom->created_at))) : '&mdash;'; ?>
                     </td>
-                    <td style="text-align:center;">
+                    <?php
+                    /**
+                     * Duplicate is offered on every BOM, including an
+                     * approved one — that is the commonest case, because
+                     * the next machine is usually nearly the last one.
+                     * The copy is always a fresh draft.
+                     *
+                     * Delete is offered only where the status rule in
+                     * $config['abom_deletable_status'] allows it. The
+                     * button is HIDDEN rather than shown-and-refused, so
+                     * nobody forms the habit of clicking it on documents
+                     * that carry signatures. The server enforces the same
+                     * rule regardless — see Abom::delete_bom().
+                     */
+                    $may_delete = in_array($bom->status, $deletable_status, true);
+                    ?>
+                    <td style="text-align:center;white-space:nowrap;">
                       <a class="btn-sm btn-print" href="<?php echo page_url; ?>abom/view/<?php echo (int) $bom->id; ?>">Open</a>
+                      <button type="button" class="btn-sm btn-copy abom-duplicate"
+                              data-bom="<?php echo (int) $bom->id; ?>"
+                              data-bomno="<?php echo abom_e($bom->bom_no); ?>"
+                              title="Create a new draft BOM copied from this one">&#128203; Duplicate</button>
+                      <?php if ($may_delete): ?>
+                        <button type="button" class="btn-sm abom-delete"
+                                data-bom="<?php echo (int) $bom->id; ?>"
+                                data-bomno="<?php echo abom_e($bom->bom_no); ?>"
+                                data-lines="<?php echo (int) $bom->total_lines; ?>"
+                                title="Remove this BOM from the register">&#128465; Delete</button>
+                      <?php endif; ?>
                     </td>
                   </tr>
                 <?php endforeach; ?>
@@ -168,5 +275,21 @@
 <script src="<?php echo assets_url; ?>js/bootstrap.min.js"></script>
 <script src="<?php echo assets_url; ?>js/jquery.core.js"></script>
 <script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
+<?php
+// AFTER jQuery. This page had no module script until now, and the
+// existing block sits below the footer include, so the new one has to
+// join the end of it rather than the end of the markup.
+?>
+<script>
+  // The METHOD names, not the pretty routes. CodeIgniter's default
+  // routing reaches these with no routes.php entry, so this feature
+  // works on an install whose routes.php has not been updated —
+  // that file is shared with the rest of the application and is not
+  // safe to overwrite wholesale. The explicit /abom/delete/ and
+  // /abom/duplicate/ aliases exist too, for fresh installs.
+  window.ABOM_DELETE_URL    = '<?php echo page_url; ?>abom/delete_bom/';
+  window.ABOM_DUPLICATE_URL = '<?php echo page_url; ?>abom/duplicate/';
+</script>
+<script src="<?php echo abom_asset('abom/abom-list.js'); ?>"></script>
 </body>
 </html>

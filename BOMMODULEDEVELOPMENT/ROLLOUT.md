@@ -6,7 +6,7 @@ has a check. Nothing here is reversible-by-accident.
 **Rule 12: never sync this working tree to the server.** It is an
 incomplete copy of production — `application/controllers/BOM.php`,
 `application/views/BOM/` and possibly more exist there and not here. A
-wholesale `rsync` would delete them. Copy the 28 files listed in step 4
+wholesale `rsync` would delete them. Copy the 48 files listed in step 4
 **by name**, and nothing else.
 
 ---
@@ -185,9 +185,43 @@ the table's state before and after.
 Run in this order. Both only ever create or populate `abom_*` tables.
 
 ```bash
-mysql -u USER -p DBNAME < Database/abom_001.sql
-mysql -u USER -p DBNAME < Database/abom_002_seed.sql
+mysql -u USER -p DBNAME < Database/abom_001.sql                    # core schema
+mysql -u USER -p DBNAME < Database/abom_005_variants.sql           # build variants
+mysql -u USER -p DBNAME < Database/abom_006_seed.sql               # 178 items, 5 builds
+mysql -u USER -p DBNAME < Database/abom_007_line_edits.sql         # user_remark, inserted_after
+mysql -u USER -p DBNAME < Database/abom_008_plc_rule_model.sql     # machine_model on plc rules
+mysql -u USER -p DBNAME < Database/abom_009_seed_1250p.sql         # SPM1250P builds
+mysql -u USER -p DBNAME < Database/abom_011_split_fx5je.sql        # splits FX5-JE into 5 builds
+mysql -u USER -p DBNAME < Database/abom_012_variant_reference.sql  # reference machine per build
 ```
+
+**The order matters.** Each one after 006 assumes the rows the previous
+put down. Running them out of order is not destructive but will fail on
+a missing column or a missing id.
+
+### Two files that must NOT be run
+
+**`Database/abom_002_seed.sql`** — the original two-DF seed.
+`abom_006_seed.sql` supersedes it in full. Running 002 after 006 deletes
+the nine-DF master data and puts the old 71 items back. It is kept in
+the repository only so an existing install can be traced to what it was
+seeded with.
+
+**`Database/abom_010_source_df.sql`** — superseded by
+`abom_011_split_fx5je.sql`, which does the same job correctly. The file
+carries its own banner saying so.
+
+On a site that already ran 001 + 002, run 005 then 006 — 006 clears the
+old rows itself, inside one transaction — then 007 onward.
+
+### Verifying the tail
+
+`abom_011` and `abom_012` both end in a SELECT. Expect:
+
+- **011** — 11 active builds, and items 1–31 marked inactive
+- **012** — 11 rows, every one with `ref_axes`, `ref_tracks` and
+  `ref_speed_ppm` filled in. A NULL is not fatal: that build's
+  **Generate BOM** button falls back to defaults and says so on screen.
 
 **Check:**
 
@@ -198,13 +232,41 @@ SELECT (SELECT COUNT(*) FROM abom_item) AS items,
        (SELECT COUNT(*) FROM abom_section) AS sections,
        (SELECT COUNT(*) FROM abom_plc_rule WHERE is_active=1) AS rules,
        (SELECT COUNT(*) FROM abom_feature) AS features,
-       (SELECT COUNT(*) FROM abom_formula) AS formulas;
+       (SELECT COUNT(*) FROM abom_formula) AS formulas,
+       (SELECT COUNT(*) FROM abom_variant WHERE is_active=1) AS variants,
+       (SELECT COUNT(*) FROM abom_variant_rule WHERE is_active=1) AS vrules;
 ```
 
-Must be exactly **`71 · 29 · 42 · 8 · 4 · 4 · 6`**. Anything else, stop.
+Must be exactly **`178 · 60 · 118 · 10 · 4 · 6 · 8 · 5 · 7`**. Anything
+else, stop.
 
-`abom_001.sql` uses plain `CREATE TABLE`, so a name collision fails
-loudly rather than overwriting. It is safe to run once and only once.
+Per build variant:
+
+```sql
+SELECT v.code, COUNT(i.id) AS items
+  FROM abom_variant v LEFT JOIN abom_item i ON i.variant_id = v.id
+ GROUP BY v.code ORDER BY v.sort_order;
+```
+
+Must be **FX5-JE 31 · FX5-J4 29 · IQR-STD 34 · IQR-HS 42 · IQR-FLM 42**,
+and **no item may have a NULL `variant_id`** — an unassigned item is
+never generated onto any BOM:
+
+```sql
+SELECT COUNT(*) FROM abom_item WHERE variant_id IS NULL;   -- must be 0
+```
+
+And the track-driven temperature card rule, which is the reason the
+module was re-seeded. On `/abom/generate`, set the tracks field and read
+the FX5-4LC (ERP 2020122) quantity:
+
+| Tracks | 6 | 8 | 9 | 12 |
+|--------|---|---|---|----|
+| Cards  | 4 | 5 | 6 |  7 |
+
+`abom_001.sql` and `abom_005_variants.sql` use plain `CREATE TABLE`, so a
+name collision fails loudly rather than overwriting. Each is safe to run
+once and only once.
 
 ---
 
@@ -308,9 +370,30 @@ SELECT id, moduleid, submodule, status FROM submodule
 
 ## Step 4 — copy the module files
 
-**28 files. By name. Nothing else.** Checksums are in
+**48 files. By name. Nothing else.** Checksums are in
 `BOMMODULEDEVELOPMENT/tests/manifest.json`; verify after copying with
 `php BOMMODULEDEVELOPMENT/tests/integrity.php` run from a checkout.
+
+> ### ⚠ ONE OF THESE FILES IS SITE-SPECIFIC
+>
+> `application/config/abom.php` carries `$config['abom_submodule_ids']`,
+> filled in per site from the ids the live `submodule` table assigned in
+> step 3. In the repository they are `null`.
+>
+> **On a FRESH install** that is correct — you set them in step 5.
+>
+> **On an install that already works**, copying this file over replaces
+> the real ids with nulls and every module screen drops to *"Automation
+> BOM permissions are not configured"*. Read the three ids first:
+>
+> ```sql
+> SELECT id, submodule FROM submodule
+>  WHERE submodule LIKE 'AUTOMATION BOM %' ORDER BY id;
+> ```
+>
+> upload, then put them back. This happened on 2026-08-11 during the
+> nine-DF re-seed deployment; it cost about ten minutes to spot and two
+> to fix, but only because the guard page names the exact config key.
 
 ```
 application/config/abom.php
@@ -320,24 +403,44 @@ application/libraries/Abom_engine.php
 application/libraries/Abom_exporter.php
 application/libraries/Abom_permission_guard.php
 application/models/Abom_approval_model.php
+application/models/Abom_config_model.php
+application/models/Abom_import_model.php
 application/models/Abom_item_model.php
 application/models/Abom_master_model.php
 application/models/Abom_model.php
+application/models/Abom_revision_model.php
 application/views/abom/_approval_block.php
 application/views/abom/_config_panel.php
 application/views/abom/_doc_header.php
 application/views/abom/_document.php
 application/views/abom/_legend.php
 application/views/abom/_table.php
+application/views/abom/_version_diff.php
 application/views/abom/_workflow.php
+application/views/abom/config_form.php
+application/views/abom/config_hub.php
+application/views/abom/config_list.php
 application/views/abom/export_unavailable.php
 application/views/abom/generate.php
 application/views/abom/guide.php
+application/views/abom/history.php
+application/views/abom/import_form.php
+application/views/abom/import_preview.php
 application/views/abom/list.php
+application/views/abom/master_bom.php
+application/views/abom/master_bom_list.php
+application/views/abom/master_form.php
+application/views/abom/master_list.php
 application/views/abom/not_configured.php
 application/views/abom/not_installed.php
 application/views/abom/view.php
+assets/abom/abom-config.js
+assets/abom/abom-dfref.js
 assets/abom/abom-generate.js
+assets/abom/abom-lines.js
+assets/abom/abom-list.js
+assets/abom/abom-master.js
+assets/abom/abom-masterbom.js
 assets/abom/abom-print.css
 assets/abom/abom.css
 assets/abom/abom.js
@@ -345,15 +448,15 @@ assets/abom/abom.js
 
 Two new directories: `application/views/abom/` and `assets/abom/`.
 
-**Do not hand-copy 28 paths.** That is 28 chances to mistype one. Build a
+**Do not hand-copy 48 paths.** That is 48 chances to mistype one. Build a
 tarball from a checkout and unpack it on the server — the file list then
 cannot drift from what was tested:
 
 ```bash
 # on the machine holding the module, from the project root
-tar czf abom-module.tar.gz   application/config/abom.php   application/controllers/Abom.php   application/helpers/abom_helper.php   application/libraries/Abom_engine.php   application/libraries/Abom_exporter.php   application/libraries/Abom_permission_guard.php   application/models/Abom_approval_model.php   application/models/Abom_item_model.php   application/models/Abom_master_model.php   application/models/Abom_model.php   application/views/abom   assets/abom
+tar czf abom-module.tar.gz   application/config/abom.php   application/controllers/Abom.php   application/helpers/abom_helper.php   application/libraries/Abom_engine.php   application/libraries/Abom_exporter.php   application/libraries/Abom_permission_guard.php   application/models/Abom_approval_model.php   application/models/Abom_config_model.php   application/models/Abom_item_model.php   application/models/Abom_master_model.php   application/models/Abom_model.php   application/views/abom   assets/abom
 
-tar tzf abom-module.tar.gz | wc -l     # expect 28 files + 2 directory entries
+tar tzf abom-module.tar.gz | wc -l     # expect 48 files + 2 directory entries
 ```
 
 Upload `abom-module.tar.gz`, then on the server, **from the project
@@ -375,7 +478,7 @@ existing module's and must not be touched.
 
 ### Collision check — run this BEFORE copying anything
 
-All 28 are **new** files. If any of those names already exists on the
+All 48 are **new** files. If any of those names already exists on the
 server, copying would overwrite something. This checks the server as it
 is right now, and changes nothing:
 
@@ -425,7 +528,7 @@ diff application/views/common/nav-menu.php.bak-$STAMP application/views/common/n
 ```
 
 Expected for `routes.php`: **16 added lines and nothing else** — the
-comment block plus 16 `$route['abom...']` entries, all appended at the
+comment block plus 33 `$route['abom...']` entries, all appended at the
 end. No deletions, no changes above them.
 
 Expected for `nav-menu.php`: **one added block** — the `<?php ... ?>`
@@ -478,7 +581,7 @@ change nothing above it.
 */
 $route['abom']                  = 'abom/index';
 $route['abom/guide']            = 'abom/guide';
-$route['abom/generate']         = 'abom/generate';
+$route['abom/generate']         = 'abom/generate';   // ?build=<id> prefills from a build
 $route['abom/generate_ajax']    = 'abom/generate_ajax';      // POST, AJAX
 $route['abom/reference/(:any)'] = 'abom/reference/$1';
 $route['abom/view/(:num)']      = 'abom/view/$1';
@@ -487,7 +590,13 @@ $route['abom/save']             = 'abom/save';                // POST, AJAX
 $route['abom/save_line_qty']    = 'abom/save_line_qty';        // POST, AJAX
 $route['abom/list']             = 'abom/bom_list';
 
-// Approval workflow — all POST, AJAX
+// Version history: every revision of one document, what each contained,
+// and what changed between them. Both READS — gated on any of the three
+// permissions, like view and export.
+$route['abom/history/(:num)']   = 'abom/history/$1';
+$route['abom/version/(:num)']   = 'abom/version/$1';   // one archived snapshot
+
+// Approval workflow (step 6) — all POST, AJAX
 $route['abom/submit/(:num)']          = 'abom/submit/$1';
 $route['abom/approve/(:num)']         = 'abom/approve/$1';
 $route['abom/reject/(:num)']          = 'abom/reject/$1';
@@ -495,7 +604,41 @@ $route['abom/reopen/(:num)']          = 'abom/reopen/$1';
 $route['abom/create_revision/(:num)'] = 'abom/create_revision/$1';
 $route['abom/acknowledge_line']       = 'abom/acknowledge_line';
 
-// Export — csv | xlsx | pdf
+// Register management. Both POST, both AJAX.
+//   delete    — SOFT delete; sets deleted_at, keeps the row and its trail
+//   duplicate — a NEW draft BOM with its own number; the source is left
+//               untouched and current (unlike create_revision, which
+//               supersedes it)
+$route['abom/save_lines']             = 'abom/save_lines';        // POST, AJAX
+
+// Re-specify a saved draft (or a clone) and re-derive its lines. What
+// makes duplicate() worth having: a copy that cannot be changed is only
+// a photocopy. Gated to draft/rejected in the controller.
+$route['abom/save_config']            = 'abom/save_config';       // POST, AJAX
+
+// "Is this DF reference free?", asked as the field is typed. Advisory
+// only — save and save_config re-run the same check on the write.
+$route['abom/check_df_ref']           = 'abom/check_df_ref';      // POST, AJAX
+
+// Master data (build order step 8). All four gated on 'master_edit' —
+// see the block comment above Abom::master().
+$route['abom/master']                 = 'abom/master';
+$route['abom/master/(:num)']          = 'abom/master_form/$1';
+$route['abom/master_form/(:num)']     = 'abom/master_form/$1';
+$route['abom/master_save']            = 'abom/master_save';       // POST
+
+// Reference-BOM import. Three steps: form, PREVIEW (writes nothing),
+// commit. All gated on 'master_edit' — this is the most consequential
+// write in the module.
+$route['abom/import']                 = 'abom/import';
+$route['abom/import_preview']         = 'abom/import_preview';    // POST, multipart
+$route['abom/import_commit']          = 'abom/import_commit';     // POST
+$route['abom/import_template']        = 'abom/import_template';
+$route['abom/master_toggle']          = 'abom/master_toggle';     // POST, AJAX
+$route['abom/delete/(:num)']          = 'abom/delete_bom/$1';
+$route['abom/duplicate/(:num)']       = 'abom/duplicate/$1';
+
+// Export (step 7) — csv | xlsx | pdf
 $route['abom/export/(:any)/(:num)']   = 'abom/export/$1/$2';
 ```
 
@@ -717,7 +860,7 @@ SELECT COUNT(*) AS should_be_unchanged FROM module_capablity
 
 ### R4 — drop the module's tables
 
-All eleven named explicitly. **No wildcard** — a `LIKE 'abom%'` loop is
+All thirteen named explicitly. **No wildcard** — a `LIKE 'abom%'` loop is
 how the wrong table gets dropped.
 
 ```sql
@@ -728,6 +871,8 @@ DROP TABLE IF EXISTS `abom_bom_revision`;
 DROP TABLE IF EXISTS `abom_bom_line`;
 DROP TABLE IF EXISTS `abom_bom`;
 DROP TABLE IF EXISTS `abom_item`;
+DROP TABLE IF EXISTS `abom_variant_rule`;
+DROP TABLE IF EXISTS `abom_variant`;
 DROP TABLE IF EXISTS `abom_plc_rule`;
 DROP TABLE IF EXISTS `abom_section`;
 DROP TABLE IF EXISTS `abom_feature`;

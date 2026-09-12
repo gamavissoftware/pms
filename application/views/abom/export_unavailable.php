@@ -13,7 +13,7 @@
     <link href="<?php echo assets_url; ?>css/pages.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom.css" rel="stylesheet">
+    <link href="<?php echo abom_asset('abom/abom.css'); ?>" rel="stylesheet">
 </head>
 <body>
 

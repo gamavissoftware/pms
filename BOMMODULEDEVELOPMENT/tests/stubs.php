@@ -29,11 +29,17 @@ class Abom_stub_master_model
     private $formulas = array();
     private $features = array();
     private $rules    = array();
+    private $variants = array();
+    private $vrules   = array();
 
     public function __construct(Abom_seed_parser $seed)
     {
         foreach ($seed->rows('abom_plc_family') as $row) {
             $this->families[(int) $row->id] = $row;
+        }
+
+        foreach ($seed->rows('abom_variant') as $row) {
+            $this->variants[(int) $row->id] = $row;
         }
         $this->sections = $seed->rows('abom_section');
         $this->formulas = $seed->rows('abom_formula');
@@ -53,11 +59,79 @@ class Abom_stub_master_model
             return (int) $a->priority - (int) $b->priority;
         });
         $this->rules = $rules;
+
+        $vrules = array();
+        foreach ($seed->rows('abom_variant_rule') as $row) {
+            if ((int) $row->is_active === 1) {
+                $vrules[] = $row;
+            }
+        }
+        usort($vrules, function ($a, $b) {
+            if ((int) $a->priority === (int) $b->priority) {
+                return (int) $a->id - (int) $b->id;
+            }
+            return (int) $a->priority - (int) $b->priority;
+        });
+        $this->vrules = $vrules;
     }
 
     public function get_active_rules()
     {
         return $this->rules;
+    }
+
+    // --- build variants ---------------------------------------------
+
+    public function get_active_variant_rules()
+    {
+        return $this->vrules;
+    }
+
+    public function get_variants()
+    {
+        return $this->variants;
+    }
+
+    public function get_active_variants()
+    {
+        $out = array();
+        foreach ($this->variants as $id => $variant) {
+            if ((int) $variant->is_active === 1) {
+                $out[$id] = $variant;
+            }
+        }
+        return $out;
+    }
+
+    public function get_variant($variant_id)
+    {
+        $variant_id = (int) $variant_id;
+        return isset($this->variants[$variant_id]) ? $this->variants[$variant_id] : null;
+    }
+
+    public function variant_code($variant_id)
+    {
+        $variant = $this->get_variant($variant_id);
+        return $variant ? (string) $variant->code : '';
+    }
+
+    public function variant_defaults($variant_id, $family_id = null)
+    {
+        $variant = $this->get_variant($variant_id);
+        if (!$variant) {
+            return $this->family_defaults($family_id);
+        }
+
+        return array(
+            'j4_units'       => (int) $variant->default_j4_units,
+            'battery_qty'    => (int) $variant->default_battery,
+            'panel_location' => (string) $variant->default_panel_location,
+        );
+    }
+
+    public function count_variants()
+    {
+        return count($this->get_active_variants());
     }
 
     public function get_families()
@@ -120,6 +194,14 @@ class Abom_stub_master_model
         return $out;
     }
 
+    /** Keyed by code, ordered as the real model returns them. */
+    public function get_formulas()
+    {
+        $out = array();
+        foreach ($this->formulas as $f) { $out[$f->code] = $f; }
+        return $out;
+    }
+
     public function count_sections()
     {
         return count($this->sections);
@@ -174,6 +256,32 @@ class Abom_stub_item_model
         $out = array();
         foreach ($this->items as $item) {
             if ((int) $item->plc_family_id === (int) $family_id && (int) $item->is_active === 1) {
+                $out[] = $item;
+            }
+        }
+
+        usort($out, function ($a, $b) {
+            if ((int) $a->section_sort === (int) $b->section_sort) {
+                return (int) $a->id - (int) $b->id;
+            }
+            return (int) $a->section_sort - (int) $b->section_sort;
+        });
+
+        return $out;
+    }
+
+    /**
+     * Active items for one VARIANT, in the same order — matching
+     * Abom_item_model::get_by_variant(). A NULL variant_id is never
+     * returned, exactly as the real query's equality test does.
+     */
+    public function get_by_variant($variant_id)
+    {
+        $out = array();
+        foreach ($this->items as $item) {
+            if ($item->variant_id !== null
+                && (int) $item->variant_id === (int) $variant_id
+                && (int) $item->is_active === 1) {
                 $out[] = $item;
             }
         }
@@ -249,6 +357,9 @@ class Abom_stub_ci
     public $config;
     public $Abom_master_model;
     public $Abom_item_model;
+
+    /** Set by the export harness; CI assigns loaded libraries this way. */
+    public $excel;
 
     public function __construct(Abom_seed_parser $seed, $root = null)
     {

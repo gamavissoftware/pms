@@ -28,9 +28,119 @@ class Abom_permission_guard
     /** @var array|null cached diagnostics */
     private $problems = null;
 
+    /** @var array|null resolved key => submodule id, for this request */
+    private $resolved = null;
+
+    /**
+     * The submodule NAMES Database/abom_003_permissions.sql creates.
+     * Constants of that script — it inserts exactly these three strings —
+     * so they are a reliable way back to the ids when the config has lost
+     * them.
+     */
+    private $names = array(
+        'generator'    => 'AUTOMATION BOM GENERATOR',
+        'approvals'    => 'AUTOMATION BOM APPROVALS',
+        'master_items' => 'AUTOMATION BOM MASTER ITEMS',
+    );
+
     public function __construct()
     {
         $this->CI =& get_instance();
+    }
+
+    // -----------------------------------------------------------------
+    // ID RESOLUTION
+    // -----------------------------------------------------------------
+
+    /**
+     * The submodule id for one permission group.
+     *
+     * Takes the configured id when there is one. Falls back to LOOKING
+     * THE ROW UP BY NAME when there is not.
+     *
+     * WHY THE FALLBACK EXISTS
+     * -----------------------
+     * application/config/abom.php carries these ids per site, and the
+     * repository ships them null. On 2026-08-11 a deployment copied that
+     * file over a working install and blanked all three: every screen in
+     * the module dropped to "permissions are not configured" and stayed
+     * there until someone read the ids back out of the database by hand.
+     *
+     * Resolving by name is NOT the guessing the config comment warns
+     * against. That warning is about inventing a NUMBER — a guessed id
+     * silently points at another module's submodule and every check
+     * returns a confident, wrong answer. This looks up an exact string
+     * that one script created, verifies the row is attached to this
+     * module and is active, and reports a problem if it is not. It
+     * cannot resolve to somebody else's row.
+     *
+     * The configured id still wins when present, so a site that has
+     * deliberately pointed a group somewhere else keeps that.
+     *
+     * @param  string $key  generator | approvals | master_items
+     * @return int  0 when it cannot be resolved
+     */
+    public function submodule_id($key)
+    {
+        if ($this->resolved === null) {
+            $this->resolved = array();
+        }
+
+        if (array_key_exists($key, $this->resolved)) {
+            return $this->resolved[$key];
+        }
+
+        $ids       = $this->CI->config->item('abom_submodule_ids', 'abom');
+        $module_id = (int) $this->CI->config->item('abom_module_id', 'abom');
+
+        $configured = (is_array($ids) && isset($ids[$key])) ? (int) $ids[$key] : 0;
+
+        if ($configured > 0) {
+            $this->resolved[$key] = $configured;
+            return $configured;
+        }
+
+        if (!isset($this->names[$key]) || !$this->CI->db->table_exists('submodule')) {
+            $this->resolved[$key] = 0;
+            return 0;
+        }
+
+        $row = $this->CI->db->select('id')
+            ->from('submodule')
+            ->where('submodule', $this->names[$key])
+            ->where('moduleid', $module_id)
+            ->where('status', 1)
+            ->limit(1)
+            ->get()
+            ->row();
+
+        $this->resolved[$key] = $row ? (int) $row->id : 0;
+
+        return $this->resolved[$key];
+    }
+
+    /**
+     * TRUE when a group's id came from the database rather than the
+     * config. Surfaced on the guard page so the operator still knows the
+     * config needs fixing — the module works, but it is running on a
+     * fallback and should not be left there.
+     *
+     * @return array  keys that were resolved by name
+     */
+    public function recovered_keys()
+    {
+        $ids = $this->CI->config->item('abom_submodule_ids', 'abom');
+        $out = array();
+
+        foreach ($this->names as $key => $name) {
+            $configured = (is_array($ids) && isset($ids[$key])) ? (int) $ids[$key] : 0;
+
+            if ($configured <= 0 && $this->submodule_id($key) > 0) {
+                $out[] = $key;
+            }
+        }
+
+        return $out;
     }
 
     // -----------------------------------------------------------------
@@ -74,13 +184,29 @@ class Abom_permission_guard
 
         foreach ($ids as $key => $id) {
             if ($id === null || $id === '' || (int) $id <= 0) {
-                $this->problems[] = sprintf(
-                    'Submodule id for "%s" is not set. Run Database/abom_003_permissions.sql, '
-                    . 'then set $config[\'abom_submodule_ids\'][\'%s\'] in application/config/abom.php '
-                    . 'to the id it created.',
-                    $key, $key
-                );
-                continue;
+                // Not set — try to recover it by name before declaring
+                // the module unusable. A recovered id is NOT a problem:
+                // the checks below still validate the row it found, so a
+                // wrong one is caught the same way a wrong configured one
+                // would be.
+                $recovered = $this->submodule_id($key);
+
+                if ($recovered > 0) {
+                    $id = $recovered;
+                } else {
+                    $this->problems[] = sprintf(
+                        'Submodule id for "%s" is not set, and no active submodule named "%s" '
+                        . 'exists under module %d to fall back to. Run '
+                        . 'Database/abom_003_permissions.sql, then set '
+                        . '$config[\'abom_submodule_ids\'][\'%s\'] in application/config/abom.php '
+                        . 'to the id it created.',
+                        $key,
+                        isset($this->names[$key]) ? $this->names[$key] : $key,
+                        $module_id,
+                        $key
+                    );
+                    continue;
+                }
             }
 
             $row = $this->CI->db->select('id, moduleid, submodule, status')
@@ -147,9 +273,11 @@ class Abom_permission_guard
             return false;
         }
 
-        $ids          = $this->CI->config->item('abom_submodule_ids', 'abom');
+        // Through submodule_id(), so a group whose config id is unset
+        // resolves by name rather than denying every user. is_configured()
+        // above has already validated whatever this returns.
         $group        = $perms[$action];
-        $submodule_id = isset($ids[$group]) ? (int) $ids[$group] : 0;
+        $submodule_id = $this->submodule_id($group);
         $module_id    = (int) $this->CI->config->item('abom_module_id', 'abom');
 
         if ($submodule_id <= 0) {

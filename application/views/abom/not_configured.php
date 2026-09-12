@@ -13,7 +13,7 @@
     <link href="<?php echo assets_url; ?>css/pages.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet">
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet">
-    <link href="<?php echo assets_url; ?>abom/abom.css" rel="stylesheet">
+    <link href="<?php echo abom_asset('abom/abom.css'); ?>" rel="stylesheet">
 </head>
 <body>
 
@@ -29,12 +29,31 @@
     <?php foreach ($problems as $problem): ?>
       <p style="margin-top:10px;">&bull; <?php echo abom_e($problem); ?></p>
     <?php endforeach; ?>
-    <p style="margin-top:12px;">Run <code>Database/abom_003_permissions.sql</code>, note the
-      submodule ids it creates, then set them in
-      <code>application/config/abom.php</code> under
+    <p style="margin-top:12px;">If the module has <strong>never</strong> been set up on this
+      site, run <code>Database/abom_003_permissions.sql</code>, note the submodule ids it
+      creates, then set them in <code>application/config/abom.php</code> under
       <code>$config['abom_submodule_ids']</code>.</p>
-    <p style="margin-top:10px;font-size:11px;">Generating and viewing BOMs is unaffected.
-      Only the approval controls are withheld.</p>
+    <p style="margin-top:10px;">If it <strong>was</strong> working until a deployment, the ids
+      were almost certainly overwritten — <code>application/config/abom.php</code> ships them
+      as <code>null</code> and is easy to copy over by mistake. Do <em>not</em> re-run the
+      permissions script; it will abort, because the submodule rows already exist. Read them
+      back instead:</p>
+    <p style="margin-top:6px;"><code>SELECT id, submodule FROM submodule WHERE submodule LIKE
+      'AUTOMATION BOM %' ORDER BY id;</code></p>
+    <?php
+    /**
+     * This paragraph used to read "Generating and viewing BOMs is
+     * unaffected. Only the approval controls are withheld." That was
+     * wrong, and misleading in the worst way: require_permissions_configured()
+     * is called from require_perm() and require_any_perm(), which gate
+     * EVERY screen in the module including generate(). Someone reading
+     * the old line would have gone looking for a second, non-existent
+     * fault. Corrected 2026-08-11, when it did exactly that.
+     */
+    ?>
+    <p style="margin-top:10px;font-size:11px;">Every screen in this module is unavailable until
+      this is set — generating, viewing and approving alike. No BOM data has been lost; this is
+      a configuration gate, not a data problem.</p>
   </div>
 </div>
 

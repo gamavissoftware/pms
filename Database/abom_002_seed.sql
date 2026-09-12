@@ -1,4 +1,23 @@
 -- =====================================================================
+--  ####################################################################
+--  ##  SUPERSEDED — DO NOT RUN. Use Database/abom_006_seed.sql.      ##
+--  ####################################################################
+--
+--  This is the ORIGINAL seed, built from two reference BOMs (DF-1826,
+--  DF-1827) and scoped to a PLC family. It has been replaced by
+--  Database/abom_006_seed.sql, which holds 178 items from NINE reference
+--  BOMs scoped to a BUILD VARIANT, and which carries the track-driven
+--  temperature card rule for ERP 2020122.
+--
+--  Running this file on a current install DELETES the nine-DF master
+--  data and puts the old 71 items back. It also leaves abom_item.variant_id
+--  NULL on every row, which means the generator produces NOTHING —
+--  Abom_item_model::get_by_variant() never returns an unassigned item.
+--
+--  It is kept in the repository only so an install seeded before the
+--  re-seed can be traced to what it was given. See MODULE_CHANGELOG.md
+--  §0.18 and ROLLOUT.md step 2.
+-- =====================================================================
 --  AUTOMATION BOM GENERATOR MODULE — SEED DATA (install 002)
 --
 --  Copied VERBATIM from BOMMODULEDEVELOPMENT/abom_seed.sql. The 71
