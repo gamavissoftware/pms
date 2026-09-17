@@ -695,7 +695,7 @@
       if (typeof window.ABOM_DFREF_TAKEN === 'function' && window.ABOM_DFREF_TAKEN()) {
         window.alert('That DF reference is already used by another BOM.\n\n' +
                      'Two BOMs cannot share one drawing number at the same revision. ' +
-                     'Change the DF Reference, or raise a revision on the existing BOM.');
+                     'Change the New DF No, or raise a revision on the existing BOM.');
         $('#cfgDfRef').focus();
         return;
       }

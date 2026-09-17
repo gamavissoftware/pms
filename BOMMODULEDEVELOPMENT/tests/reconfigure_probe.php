@@ -122,11 +122,21 @@ $old[4]->is_overridden  = 1;
 $old[4]->qty            = 99;
 $old[4]->override_reason= 'spare held at site';
 
-// A remark on an item that only the 6-axis JE build carries, so a jump
-// to a 15-axis iQ-R machine cannot keep it.
+// A remark on the LAST line of the JE build.
+//
+// This was originally described as "an item only the 6-axis JE build
+// carries", and the assertion below expected it to be DROPPED on the
+// jump to iQ-R. That was never true of the data: the last line is
+// MR-BAT6V1SET (ERP 2050390), the servo battery, and the iQ-R build
+// carries the very same part under a different abom_item row. The
+// fixture assumed a fact about the seed instead of checking it.
+//
+// It is kept as-is because it now exercises something better -- an edit
+// on a part that EXISTS IN BOTH builds, which is exactly what has to
+// survive a reconfigure.
 $last = $old[count($old) - 1];
-$last->user_remark = 'JE-only note.';
-$je_only_item = (int) $last->item_id;
+$last->user_remark = 'Battery note.';
+$shared_part_item = (int) $last->item_id;
 
 $manual = new stdClass();
 foreach (get_object_vars($old[0]) as $k => $v) { $manual->$k = $v; }
@@ -192,8 +202,22 @@ $c2  = $carry->invoke($ctl, $old, $big['lines']);
 ok('build did change', $big['variant']->code !== $before['variant']->code, true);
 ok('hand-added row still carried', $c2['manual'], 1);
 ok('something could not be carried', count($c2['dropped']) > 0, true);
-ok('the JE-only remark is the thing reported',
-   in_array('remark on item #' . $je_only_item, $c2['dropped'], true), true);
+// The battery remark must CARRY, because the part is in both builds.
+// Edits are matched by item_id first and then by the part itself (ERP
+// code, or part number where no code exists), so a build change no
+// longer throws away work on a part that is still on the sheet.
+ok('an edit on a part present in BOTH builds is carried',
+   in_array('remark on item #' . $shared_part_item, $c2['dropped'], true), false);
+
+// And what genuinely is not in the new build is still named, never
+// silently lost -- that is the half of this behaviour that must not
+// regress while the other half is being relaxed.
+$absent = array();
+foreach ($c2['dropped'] as $d) {
+    if (preg_match('/#(\d+)/', $d, $m2)) { $absent[] = (int) $m2[1]; }
+}
+ok('parts absent from the new build are still reported',
+   count($absent) > 0 && !in_array($shared_part_item, $absent, true), true);
 
 $byitem2 = array();
 foreach ($c2['lines'] as $l) { if (!empty($l->item_id)) { $byitem2[(int) $l->item_id] = $l; } }

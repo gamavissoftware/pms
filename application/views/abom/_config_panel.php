@@ -171,7 +171,18 @@ function abom_inv($errors, $field)
       </div>
 
       <div class="form-group">
-        <label for="cfgDfRef">DF Reference</label>
+        <?php
+        /*
+         * "New DF No" while the configuration can still be changed — on
+         * the generator this field is where the NEW drawing number goes,
+         * and "DF Reference" read as though it wanted the number of the
+         * reference sheet the build came from.
+         *
+         * On a saved, locked document it is simply that BOM's DF number,
+         * so the word "New" would be wrong there.
+         */
+        ?>
+        <label for="cfgDfRef"><?php echo $cfg_edit ? 'New DF No' : 'DF No'; ?></label>
         <input id="cfgDfRef" name="df_ref"
                class="<?php echo $cfg_edit ? '' : 'ro'; ?>"
                value="<?php echo abom_e($bom->df_ref); ?>"

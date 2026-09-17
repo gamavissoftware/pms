@@ -104,7 +104,27 @@ class Abom extends CI_Controller
                 return;
             }
 
-            $cfg    = $from['cfg'];
+            $cfg = $from['cfg'];
+
+            // PIN THE BUILD THAT WAS ASKED FOR.
+            //
+            // "Generate BOM" on a reference build means "give me this
+            // build". Without pinning, the recorded machine was fed back
+            // through the selection rules and whatever they returned won
+            // — so a build whose recorded machine no longer routes to it
+            // produced a DIFFERENT sheet, with different and usually more
+            // lines than the reference the operator was looking at.
+            //
+            // The engine already honours $cfg['variant_id'] as an
+            // explicit choice; it just was not being told. The picker in
+            // the panel shows the pinned build, so Recalculate keeps it
+            // and "Use auto-detected" hands control back to the rules.
+            //
+            // A disagreement is still REPORTED (see below) — it is a
+            // master-data fault worth fixing. It just no longer decides
+            // which sheet you are shown.
+            $cfg['variant_id'] = $build;
+
             $notice = $this->build_prefill_notice($from);
         } else {
             $cfg = $this->config_from_input($this->default_config());
@@ -125,9 +145,38 @@ class Abom extends CI_Controller
         // recorded against? It must, or the register has offered a
         // button that lands somewhere else — which the operator would
         // otherwise only discover by reading the badge.
-        if ($build > 0 && !empty($result['variant_id'])
-            && (int) $result['variant_id'] !== $build) {
-            $notice = $this->build_prefill_mismatch($from['variant'], $result);
+        // The sheet is now the build that was asked for, so the check is
+        // no longer "which build did we land on" but "would the rules
+        // have found this one on their own". They should, and when they
+        // do not the register is offering a button whose machine routes
+        // elsewhere — still worth saying, just no longer by substituting
+        // a different sheet.
+        if ($build > 0) {
+            // Ask the rules WITHOUT the pin, and without any family
+            // override. $result['family_id'] is no use here: the family
+            // follows the pinned variant, so probing with it would just
+            // confirm the pin and never report a real disagreement.
+            $probe = $cfg;
+            unset($probe['variant_id']);
+            $probe['plc_family_id'] = null;
+
+            $reached = 0;
+
+            try {
+                $fam      = $this->abom_engine->detect_plc_family($probe);
+                $detected = $this->abom_engine->detect_variant($probe, (int) $fam['family_id']);
+                $reached  = $detected ? (int) $detected['variant_id'] : 0;
+            } catch (Exception $e) {
+                // No family rule matched at all. That is itself the
+                // disagreement, and $reached stays 0 — "reaches no build".
+                $reached = 0;
+            }
+
+            if ($reached !== $build) {
+                $notice = $this->build_prefill_mismatch(
+                    $from['variant'], $result, $reached
+                );
+            }
         }
 
         $bom = $this->bom_header_from_config($cfg, $result);
@@ -1572,25 +1621,42 @@ class Abom extends CI_Controller
     }
 
     /**
-     * The recorded machine did not route back to its own build.
+     * The recorded machine does not route back to its own build.
      *
-     * A data fault, not a user error, and it is stated plainly rather
-     * than papered over by pinning a variant override — an override
-     * would hide exactly the disagreement that needs fixing.
+     * A data fault, not a user error, and still stated plainly. What
+     * changed is what it COSTS: the sheet used to be silently swapped
+     * for whichever build the rules reached, which is how "generate from
+     * this reference" ended up showing extra lines. The requested build
+     * is now pinned, so this reports the disagreement without changing
+     * what you are looking at.
      *
      * @param  object $wanted
      * @param  array  $result
+     * @param  int    $reached  variant the rules would have selected
      * @return string
      */
-    private function build_prefill_mismatch($wanted, array $result)
+    private function build_prefill_mismatch($wanted, array $result, $reached = 0)
     {
-        $got = !empty($result['variant']) ? $result['variant']->code : 'no build';
+        $other = '';
 
-        return '<b>&#9888;&#65039; This configuration does not select the '
-            . abom_e($wanted->code) . ' build.</b> The machine recorded against it reaches <b>'
-            . abom_e($got) . '</b> instead, so the selection rules and the recorded '
-            . 'reference machine disagree. The sheet below is for ' . abom_e($got)
-            . '. Report this — it is a master-data fault, not something you have done wrong.';
+        if ($reached > 0) {
+            $row = $this->Abom_master_model->get_variant($reached);
+            if ($row) {
+                $other = $row->code;
+            }
+        }
+
+        return '<b>&#9888;&#65039; Heads up — this build&rsquo;s selection rules disagree '
+            . 'with its recorded machine.</b> The sheet below IS the <b>'
+            . abom_e($wanted->code) . '</b> build, exactly as the reference holds it. '
+            . 'But the machine recorded against it '
+            . ($other !== ''
+                ? 'would reach the <b>' . abom_e($other) . '</b> build'
+                : 'reaches no build at all')
+            . ' if the rules were left to decide, so a BOM configured from scratch '
+            . 'with those numbers would not land here. Nothing you have done wrong, '
+            . 'and nothing to stop you — but worth reporting so the master data can '
+            . 'be corrected.';
     }
 
     /**
