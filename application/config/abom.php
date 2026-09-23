@@ -127,7 +127,20 @@ $config['abom_axes_min']       = 1;
 $config['abom_axes_max']       = 64;
 $config['abom_tracks_min']     = 1;
 $config['abom_tracks_max']     = 24;
-$config['abom_speed_min']      = 40;
+// 1, not 40. Slow machines are real -- large packs run well under 40 PPM
+// -- and 40 was rejecting configurations the business genuinely builds.
+//
+// This is a SANITY floor, not an engineering limit: it only has to keep
+// out a speed that cannot mean anything, and 0 PPM is not a machine. As
+// with the axis ceiling above, what actually decides whether a
+// configuration is buildable is the selection rules, which answer "no
+// build matches this machine" -- a far more useful thing to be told than
+// "out of range".
+//
+// The cost is honest: a slip of 2 for 20 now passes. The speed is on the
+// document title and in the review banner, so it is visible to whoever
+// checks the sheet.
+$config['abom_speed_min']      = 1;
 $config['abom_speed_max']      = 400;
 
 // Approval stages, in order. Internal workflow state — this drives
