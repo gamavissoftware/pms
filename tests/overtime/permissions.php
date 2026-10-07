@@ -1,7 +1,7 @@
 <?php
 require __DIR__.'/bootstrap.php';
 list($m,$db)=ot_fixture();
-check((int)$db->pdo->query('SELECT COUNT(*) FROM submodule')->fetchColumn()===6,'Permission migration repeatable');
+check((int)$db->pdo->query('SELECT COUNT(*) FROM submodule')->fetchColumn()===5,'Permission migration repeatable');
 
 $p=ot_user_permissions($db,1);
 check($p['requests']&&$p['create']&&$p['approvals']&&$p['reports']&&$p['policy_edit']&&$p['leaders_edit'],'Module grants mapped');

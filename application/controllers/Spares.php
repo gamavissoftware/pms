@@ -150,6 +150,13 @@ class Spares extends CI_Controller {
         $this->form_validation->set_rules('company', 'Company Name', 'trim|required');
         $this->form_validation->set_rules('country', 'Country', 'trim|required');
         $this->form_validation->set_rules('brand', 'Brand', 'trim|required');
+
+        // State is mandatory (SAP needs it) whenever SAP has states defined for the chosen country
+        $country_for_state = (int) $this->input->post('country');
+        $this->load->library('Sap_service');
+        if ($country_for_state > 0 && count($this->sap_service->sap_states_for_country($country_for_state)) > 0) {
+            $this->form_validation->set_rules('state', 'State', 'trim|required');
+        }
         
         if ($this->form_validation->run() == FALSE) {
             echo "0~" . strip_tags(validation_errors());
@@ -191,6 +198,10 @@ class Spares extends CI_Controller {
             'status'              => 1,
             'created_at'=>date('Y-m-d H:i:s')
         );
+        if ($this->db->field_exists('state_id', 'spares_customers')) {
+            $state_input = (int) $this->input->post('state');
+            $data['state_id'] = $state_input > 0 ? $state_input : null;
+        }
 
         if ($this->db->insert('spares_customers', $data)) {
             $customer_id = $this->db->insert_id();

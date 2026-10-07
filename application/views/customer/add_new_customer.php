@@ -184,6 +184,14 @@ $themeColor = (!empty($LOGO->colorcode)) ? $LOGO->colorcode : '#4872b8';
                             </div>
                         </div>
                         <div class="col-md-3">
+                            <div class="form-group">
+                                <label>State<span style="color:red">*</span></label>
+                                <select class="form-control" name="state" id="state" required>
+                                    <option value="">Select</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
                             <div class="form-group" id="showhidetaxtype" style="display:none">
                                 <label id="taxt"><span id="gstrequiredsymbol"></span></label>
                                 <input type="text" name="gst" id="gst" class="form-control" autocomplete="off">  
@@ -343,5 +351,22 @@ $('#country').select2();
 </script>
 
 
+<script type="text/javascript">
+// Populate the State dropdown for the chosen country
+function loadStates(countryId, selected){
+    var $st = $("#state");
+    $st.html('<option value="">Select</option>');
+    if(!countryId){ return; }
+    $.getJSON("<?php echo page_url;?>Customer/states_by_country", {country_id: countryId}, function(rows){
+        $.each(rows, function(i, r){
+            $st.append($('<option>').val(r.state_id).text(r.state_name));
+        });
+        if(selected){ $st.val(String(selected)); }
+    });
+}
+$(document).ready(function(){
+    $("#country").on('change', function(){ loadStates($(this).val(), ''); });
+});
+</script>
     </body>
 </html>

@@ -1,0 +1,887 @@
+  :root{
+            --dash-bg:#f6f8fb;
+            --dash-surface:#ffffff;
+            --dash-surface-2:#f8fafc;
+            --dash-border:#e6ebf2;
+            --dash-text:#0f172a;
+            --dash-muted:#64748b;
+            --dash-brand:#4872b8; /* Gamavis preferred */
+            --dash-brand-2:#3b82f6;
+            --dash-success:#16a34a;
+            --dash-warning:#f59e0b;
+            --dash-danger:#ef4444;
+            --dash-shadow: 0 12px 28px rgba(2, 6, 23, .08);
+            --dash-radius: 18px;
+        }
+
+        body{
+            background: var(--dash-bg) !important;
+            color: var(--dash-text);
+        }
+
+        /* Reduce old theme heaviness while keeping layout intact */
+        .container-fluid{ padding-left: 18px; padding-right: 18px; }
+        @media(max-width:768px){ .container-fluid{ padding-left: 10px; padding-right: 10px; } }
+
+        /* Headings */
+        .global_heading{
+            font-weight: 900 !important;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--dash-text) !important;
+            margin: 14px 0 8px !important;
+        }
+        .change_box{
+            background: transparent !important;
+            border: 1px solid var(--dash-border) !important;
+            border-radius: var(--dash-radius) !important;
+            box-shadow: var(--dash-shadow) !important;
+            padding: 18px 18px 12px !important;
+        }
+
+        /* Cards */
+        .card_box{
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%) !important;
+            border: 1px solid var(--dash-border) !important;
+            border-radius: var(--dash-radius) !important;
+            box-shadow: var(--dash-shadow) !important;
+            padding: 16px 16px !important;
+            transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+        }
+        .card_box:hover{
+            transform: translateY(-2px);
+            box-shadow: 0 16px 34px rgba(2, 6, 23, .10) !important;
+            border-color: #dbe5f5 !important;
+        }
+
+        /* If cards contain svg icons, normalize */
+        .card_box svg{
+            width: 28px !important;
+            height: 28px !important;
+            opacity: .9;
+        }
+
+        /* KPI numbers */
+        .stats-value1, .stats-value, .stats-value2, .stats-value3{
+            font-weight: 900 !important;
+            color: var(--dash-text) !important;
+            letter-spacing: -.02em;
+        }
+
+        /* Buttons – keep Bootstrap classes, modernize surfaces */
+        .btn{
+            border-radius: 12px !important;
+            font-weight: 800 !important;
+            letter-spacing: .02em;
+        }
+        .btn-xs{ border-radius: 10px !important; font-weight: 800 !important; }
+        .btn-primary{ background-color: var(--dash-brand) !important; border-color: var(--dash-brand) !important; }
+        .btn-primary:hover{ filter: brightness(1.03); }
+        .btn-success{ background-color: #16a34a !important; border-color: #16a34a !important; }
+        .btn-warning{ background-color: #f59e0b !important; border-color: #f59e0b !important; color:#111827 !important; }
+        .btn-danger{ background-color: #ef4444 !important; border-color: #ef4444 !important; }
+
+        /* Tables */
+        table.table{
+            border-radius: 14px;
+            overflow: hidden;
+            background: var(--dash-surface);
+        }
+        table.table thead th{
+            background: #f3f6fb !important;
+            color: #334155 !important;
+            font-weight: 900 !important;
+            font-size: 12px !important;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--dash-border) !important;
+        }
+        table.table td{
+            border-top: 1px solid #eef2f7 !important;
+            font-size: 12px;
+        }
+        .table-bordered{ border: 1px solid var(--dash-border) !important; }
+        .table-bordered>thead>tr>th, .table-bordered>tbody>tr>td{ border: 1px solid #eef2f7 !important; }
+
+        /* DataTables search input */
+        .dataTables_wrapper .dataTables_filter input{
+            border: 1px solid var(--dash-border) !important;
+            border-radius: 12px !important;
+            padding: 8px 10px !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Alerts/Noty */
+        .noty_bar{
+            border-radius: 14px !important;
+            box-shadow: var(--dash-shadow) !important;
+        }
+
+        /* Task delay child table */
+        .tasks-table{
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 10px 24px rgba(2,6,23,.06);
+        }
+        .tasks-table th{
+            background: #f3f6fb !important;
+            border-bottom: 1px solid var(--dash-border) !important;
+        }
+
+        /* Status highlighting - keep your existing logic, refine tone */
+        .tasks-table .on-time{ background-color: #dcfce7 !important; }
+        .tasks-table .late, .tasks-table .not-started{ background-color: #fee2e2 !important; }
+
+        /* Misc */
+        hr{ border-top: 1px solid #e8eef7 !important; }
+        .pull-right{ float:right; }
+        a{ text-decoration:none !important; }
+
+        /* ==========================================
+   DASHBOARD: SMART TWO-COLUMN GRID (RESPONSIVE)
+   ========================================== */
+
+.dashboard-two-col{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+/* Tablet/Mobile: single column */
+@media (max-width: 991px){
+  .dashboard-two-col{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* If one side is empty -> make it single column */
+.dashboard-two-col.single-col{
+  grid-template-columns: 1fr !important;
+}
+
+.dashboard-two-col .dash-col.is-empty{
+  display: none !important;
+}
+
+/* Ensure chart cards don't keep extra height */
+.dashboard-two-col .card_box{
+  height: auto !important;
+}
+
+/* PIE chart wrapper (keeps pie big in a wide card) */
+.pieChartWrap{
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: 260px;
+  max-height: 380px;
+}
+@media (max-width: 768px){
+  .pieChartWrap{
+    aspect-ratio: 1 / 1;
+    min-height: 240px;
+    max-height: 320px;
+  }
+}
+.pieChartWrap canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+ /* Full-screen overlay */
+            #blocking-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.7);
+                z-index: 9999;
+                display: none;
+                /* Initially hidden */
+            }
+
+            /* Popup content container */
+            #blocking-overlay-content {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
+                width: 90%;
+                height: 80%;
+                overflow: auto;
+            }
+
+            /* Close button */
+            #close-popup {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                font-size: 24px;
+                font-weight: bold;
+                cursor: pointer;
+                color: black;
+                display: none;
+                /* Initially hidden */
+            }
+
+            /* Countdown timer */
+            #countdown {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                font-size: 18px;
+                font-weight: bold;
+                color: black;
+                padding: 5px 10px;
+                background: #f8d7da;
+                border-radius: 5px;
+            }
+
+            /* Table styling */
+            #popup-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+            }
+
+            #popup-table thead th {
+                background-color: #f8f9fa;
+                text-align: center;
+                padding: 10px;
+            }
+
+            #popup-table tbody tr {
+                text-align: center;
+            }
+
+            #popup-table tbody tr:hover {
+                background-color: #f1f1f1;
+            }
+
+            /* Pagination controls */
+            #pagination-controls button {
+                margin: 0 5px;
+            }
+
+            /* Button styling */
+            .table-button {
+                text-align: center;
+                margin-top: 10px;
+            }
+
+            /* ================================
+   CHART CARD / CANVAS RESPONSIVE FIX
+   ================================ */
+
+/* Chart container: gives a predictable height and centers canvas */
+.chart-card,
+.chart-box,
+.graph-card,
+.dashboard-chart-card {
+    height: auto !important;
+}
+
+/* If your chart is inside a widget/card body */
+.chart-container,
+.graph-container,
+.canvas-container,
+#salesChartContainer,
+#revenueChartContainer {
+    position: relative;
+    width: 100% !important;
+    height: 360px;           /* desktop default */
+    min-height: 320px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Make Chart.js canvas responsive */
+.chart-container canvas,
+.graph-container canvas,
+.canvas-container canvas,
+canvas.chartjs-render-monitor {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+}
+
+/* Reduce too much padding inside chart cards (common cause of "floating") */
+.chart-container,
+.graph-container,
+.canvas-container {
+    padding: 10px 14px !important;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .chart-container,
+    .graph-container,
+    .canvas-container,
+    #salesChartContainer,
+    #revenueChartContainer {
+        height: 260px;
+        min-height: 240px;
+        padding: 10px !important;
+    }
+}
+
+.salesChartWrap{
+    position: relative;
+    width: 100%;
+    height: 270px;          /* chart height inside 390px card */
+    margin-top: 12px;
+}
+
+.salesChartWrap canvas{
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+/* Wrapper for ANY chart canvas */
+.chart-wrap{
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 32vh, 420px);  /* mobile -> desktop */
+  min-height: 240px;
+}
+
+/* Chart.js canvas should fill wrapper */
+.chart-wrap canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* Chart cards should not enforce weird fixed height */
+.card_box.chart-card{
+  height: auto !important;
+}
+
+
+/* PIE CHART: make it visually larger + remove extra whitespace */
+.card_box.pie-card{ padding: 18px !important; }
+.pieChartWrap{
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 28vh, 340px); /* tighter than generic chart-wrap */
+  min-height: 240px;
+  max-height: 340px;
+}
+.pieChartWrap canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+@media (max-width: 768px){
+  .pieChartWrap{
+    height: clamp(240px, 40vh, 320px);
+    max-height: 320px;
+  }
+}
+/* Make sure grid collapses on small devices (if Bootstrap row/col used) */
+@media (max-width: 991px){
+  .chart-wrap{
+    height: clamp(220px, 30vh, 320px);
+  }
+}
+
+/* ================================
+   PIE CHART: PERFECT RESPONSIVE FIT
+   ================================ */
+
+/* The pie wrapper will keep a square/near-square area so the pie always looks big */
+.pieChartWrap{
+  position: relative;
+  width: 100%;
+  /* responsive square-like sizing */
+  aspect-ratio: 16 / 10;             /* wide card -> still big pie */
+  max-height: 360px;
+  min-height: 240px;
+}
+
+/* Canvas should fill wrapper completely */
+.pieChartWrap canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* Prevent the parent card from forcing extra height */
+.pieChartWrap{
+  margin: 0 auto;
+}
+
+/* On mobile make it more square */
+@media (max-width: 768px){
+  .pieChartWrap{
+    aspect-ratio: 1 / 1;
+    max-height: 320px;
+    min-height: 240px;
+  }
+}
+
+ table.pretty5 thead th {
+            text-align: center;
+            background: #049dd4;
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        table.pretty5 td {
+            text-align: center;
+            font-size: 12px;
+            
+        }
+
+        .dataTables_wrapper .dataTables_filter {
+            float: right;
+            text-align: right;
+        }
+
+        .stats-box1 {
+            padding: 10px 10px;
+            color: black;
+            border: none;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .stats-box1:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        /* .stats-value1 {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        } */
+
+        .stats-label1 {
+            font-size: 14px;
+            color: black;
+            font-weight: bold;
+        }
+
+        .select2-container {
+            width: 100% !important;
+        }
+
+        .select2-container--default .select2-selection--single {
+            height: 36px !important;
+        }
+
+             /* ===============================
+   DASHBOARD BUTTON VISIBILITY FIX
+   =============================== */
+
+/* Base button text visibility */
+button,
+.btn,
+.btn-primary,
+.btn-success,
+.btn-info,
+.btn-warning,
+.btn-danger,
+a.btn {
+    color: #ffffff !important;
+    opacity: 1 !important;
+    font-weight: 600;
+}
+
+/* If buttons are using light background */
+.btn-outline-primary,
+.btn-outline-success,
+.btn-outline-info,
+.btn-outline-warning,
+.btn-outline-danger {
+    color: #1f2937 !important; /* dark readable text */
+    opacity: 1 !important;
+    font-weight: 600;
+}
+
+/* Fix custom dashboard pills / action buttons */
+.dashboard-btn,
+.action-btn,
+.filter-btn,
+.status-btn {
+    color: #ffffff !important;
+    opacity: 1 !important;
+    font-weight: 600;
+}
+
+/* Fix hover-only visibility issue */
+button:not(:hover),
+.btn:not(:hover),
+a.btn:not(:hover) {
+    filter: none !important;
+}
+
+/* Remove accidental opacity from parent containers */
+.card,
+.card-body,
+.widget,
+.info-box,
+.dashboard-card {
+    opacity: 1 !important;
+}
+
+/* Badge / pill buttons text clarity */
+.badge,
+.pill,
+.label {
+    opacity: 1 !important;
+    font-weight: 600;
+}
+
+        .tasks-table {
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        .tasks-table th,
+        .tasks-table td {
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .tasks-table th {
+            background-color: #f8f9fa;
+        }
+
+        .tasks-table .on-time {
+            background-color: #d4edda;
+        }
+
+        .tasks-table .late,
+        .tasks-table .not-started {
+            background-color: #f8d7da;
+        }
+
+        .noty_type__error {
+            background-color: #ff4d4d !important;
+            /* Red background */
+            color: white !important;
+            /* White text */
+            border: 1px solid #cc0000 !important;
+            /* Optional border */
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2) !important;
+            /* Optional shadow */
+        }
+
+        .custom-red-theme {
+            background-color: #d32f2f !important;
+            /* Dark red background */
+            color: white !important;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+    .neo-section-shell{
+        background:#ffffff;
+        border:1px solid #e6edf5;
+        border-radius:22px;
+        box-shadow:0 10px 26px rgba(36,52,71,.08);
+        padding:18px;
+        margin-bottom:22px;
+    }
+
+    .neo-section-head{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        flex-wrap:wrap;
+        gap:10px;
+        margin-bottom:16px;
+        padding-bottom:12px;
+        border-bottom:1px solid #edf2f7;
+    }
+
+    .neo-section-title{
+        margin:0;
+        font-size:28px;
+        font-weight:800;
+        color:#1f2d3d;
+        letter-spacing:.2px;
+        text-transform:uppercase;
+    }
+
+    .neo-section-subtitle{
+        margin:4px 0 0;
+        color:#718096;
+        font-size:13px;
+    }
+
+    .neo-badge-group{
+        display:flex;
+        flex-wrap:wrap;
+        gap:8px;
+    }
+
+    .neo-head-badge{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:7px 12px;
+        border-radius:18px;
+        font-size:11px;
+        font-weight:800;
+        color:#243447;
+        background:#f4f8fc;
+        border:1px solid #dde7f1;
+    }
+
+    .neo-action-btn{
+        display:inline-block;
+        padding:7px 12px;
+        border-radius:18px;
+        font-size:11px;
+        font-weight:800;
+        text-decoration:none !important;
+        color:#fff !important;
+        margin-left:6px;
+    }
+
+    .neo-action-red{ background:#ef4444; }
+    .neo-action-blue{ background:#3b82f6; }
+    .neo-action-green{ background:#16a34a; }
+
+    .neo-grid-gap{ margin-bottom:18px; }
+
+    .neo-metric-card{
+        background:linear-gradient(180deg,#ffffff 0%,#f9fbfe 100%);
+        border:1px solid #e6edf5;
+        border-radius:20px;
+        min-height:130px;
+        padding:18px 18px 16px;
+        position:relative;
+        overflow:hidden;
+        transition:all .22s ease;
+        box-shadow:0 8px 18px rgba(36,52,71,.05);
+    }
+
+    .neo-metric-card:hover{
+        transform:translateY(-4px);
+        box-shadow:0 14px 26px rgba(36,52,71,.10);
+    }
+
+    .neo-metric-card:before{
+        content:"";
+        position:absolute;
+        left:0;
+        top:0;
+        width:6px;
+        height:100%;
+        border-radius:20px 0 0 20px;
+        background:#4872b8;
+    }
+
+    .neo-metric-blue:before{ background:#4872b8; }
+    .neo-metric-green:before{ background:#16a34a; }
+    .neo-metric-orange:before{ background:#f59e0b; }
+    .neo-metric-red:before{ background:#ef4444; }
+    .neo-metric-purple:before{ background:#7c3aed; }
+    .neo-metric-dark:before{ background:#243447; }
+
+    .neo-metric-icon{
+        position:absolute;
+        right:16px;
+        top:16px;
+        width:42px;
+        height:42px;
+        border-radius:50%;
+        background:#f1f6fb;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        color:#4872b8;
+        font-size:18px;
+    }
+
+    .neo-metric-label{
+        font-size:12px;
+        font-weight:800;
+        text-transform:uppercase;
+        letter-spacing:.35px;
+        color:#5f6c7b;
+        margin-bottom:10px;
+        padding-right:48px;
+        line-height:18px;
+    }
+
+    .neo-metric-value{
+        font-size:24px;
+        line-height:1.2;
+        font-weight:900;
+        color:#0f172a;
+        word-break:break-word;
+    }
+
+    .neo-metric-foot{
+        margin-top:9px;
+        font-size:11px;
+        color:#7b8794;
+        font-weight:600;
+    }
+
+    .neo-metric-link{
+        text-decoration:none !important;
+        color:inherit !important;
+        display:block;
+    }
+
+    .neo-chart-card{
+        background:linear-gradient(180deg,#ffffff 0%,#f9fbfe 100%);
+        border:1px solid #e6edf5;
+        border-radius:22px;
+        padding:18px;
+        height:100%;
+        box-shadow:0 8px 18px rgba(36,52,71,.05);
+    }
+
+    .neo-chart-header{
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-start;
+        gap:8px;
+        margin-bottom:10px;
+        flex-wrap:wrap;
+    }
+
+    .neo-chart-title{
+        margin:0;
+        font-size:18px;
+        font-weight:800;
+        color:#243447;
+        text-transform:uppercase;
+    }
+
+    .neo-chart-caption{
+        font-size:12px;
+        color:#64748b;
+        font-weight:700;
+        margin-top:3px;
+    }
+
+    .neo-legend-wrap{
+        display:flex;
+        gap:14px;
+        flex-wrap:wrap;
+        align-items:center;
+    }
+
+    .neo-legend-item{
+        display:flex;
+        align-items:center;
+        gap:6px;
+        font-size:11px;
+        color:#475569;
+        font-weight:800;
+    }
+
+    .neo-legend-dot{
+        width:10px;
+        height:10px;
+        border-radius:50%;
+        display:inline-block;
+    }
+
+    .neo-dot-red{ background:#ff5b36; }
+    .neo-dot-yellow{ background:#d9dd00; }
+    .neo-dot-green{ background:#2b8b3b; }
+    .neo-dot-pink{ background:#f75d82; }
+    .neo-dot-blue{ background:#4299e1; }
+
+    .neo-chart-body{
+        background:#fff;
+        border:1px solid #edf2f7;
+        border-radius:18px;
+        padding:14px;
+        min-height:290px;
+    }
+
+    .neo-chart-wrap{
+        position:relative;
+        width:100%;
+        min-height:260px;
+    }
+
+    .neo-mini-grid .neo-metric-card{
+        min-height:118px;
+    }
+
+    .neo-leaderboard-card{
+        background:linear-gradient(180deg,#ffffff 0%,#f9fbfe 100%);
+        border:1px solid #e6edf5;
+        border-radius:20px;
+        padding:18px;
+        height:100%;
+        box-shadow:0 8px 18px rgba(36,52,71,.05);
+    }
+
+    .neo-table-wrap{
+        max-height:240px;
+        overflow:auto;
+        border:1px solid #edf2f7;
+        border-radius:14px;
+        margin-top:12px;
+    }
+
+    .neo-table-wrap table{
+        width:100%;
+        margin-bottom:0;
+    }
+
+    .neo-table-wrap thead th{
+        position:sticky;
+        top:0;
+        background:#f8fafc;
+        z-index:2;
+        font-size:11px;
+        text-transform:uppercase;
+        color:#334155;
+        font-weight:800;
+        border-bottom:1px solid #e2e8f0;
+    }
+
+    .neo-table-wrap td{
+        font-size:12px;
+        color:#334155;
+        border-top:1px solid #eef2f7;
+    }
+
+    .neo-table-wrap td a{
+        color:#ef4444;
+        font-weight:800;
+        text-decoration:none;
+    }
+
+    .neo-wide-card{
+        min-height:142px;
+    }
+
+    .neo-soft-divider{
+        height:1px;
+        background:#edf2f7;
+        margin:16px 0;
+    }
+
+    @media(max-width:768px){
+        .neo-section-title{ font-size:22px; }
+        .neo-metric-value{ font-size:22px; }
+        .neo-chart-body{ min-height:250px; }
+        .neo-chart-wrap{ min-height:220px; }
+    }

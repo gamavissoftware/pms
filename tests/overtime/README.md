@@ -25,27 +25,10 @@ Install or upgrade in this order:
 mysql PMS_DB < Database/overtime_001.sql
 mysql PMS_DB < Database/overtime_002_permissions.sql
 mysql PMS_DB < Database/overtime_003_team_requests.sql
-mysql PMS_DB < Database/overtime_004_cost_and_email.sql
 ```
 
 `overtime_003_team_requests.sql` is the upgrade that adds DF linkage and the
-per-person assignment table. `overtime_004_cost_and_email.sql` adds the cost
-master, the stored cost on each person row, the outgoing email log and the
-`MASTER > OVERTIME COST RATES` permission. Both are safe to rerun, including a
-whole-file paste into phpMyAdmin. Module pages show the setup screen until 004
-has run.
-
-To clear trial/test overtime entries before the team starts using the module,
-take a database backup and then run:
-
-```sh
-mysql PMS_DB < Database/overtime_006_clear_entries.sql
-```
-
-This removes overtime requests, assignments, audit history, notifications,
-employee locks and email/chat attempt logs. It preserves module permissions,
-request limits, cost rates, reporting-leader legacy settings and settings
-history.
+per-person assignment table. Run it once after the base module migration.
 
 ## Install
 
@@ -81,83 +64,7 @@ Before rollout, an administrator should review request limits in Settings and co
 - Rejection remarks are optional. Manual workers are recorded for audit/reporting but do not receive PMS notifications.
 - The requester can cancel a pending request, or an approved request before its start time, with a reason. Rejected/cancelled requests cannot be reopened; submit a new request for changes.
 - No delete or silent edit endpoint is provided. Every submission, decision and cancellation has an audit event with actor, timestamp, status transition and remarks.
-- Transactional in-module notifications appear on the requests screen for requesters, assigned PMS users and user 139, and the Overtime menu entry carries a badge: red and pulsing when requests are waiting on this user's approval, neutral when it is only unread updates on their own requests. With approvals waiting, the menu entry goes straight to the inbox.
-- Two outside-the-module announcements are made, both after the database transaction has committed: a new request reaches Shubham Sharma, and the approve/reject decision reaches whoever raised it. Cancellations are not announced. Each goes out over **two independent channels**, email and chat, attempted separately so one failing never stops the other, and neither can fail the request or the decision. Every attempt is written to `overtime_email_log` as SENT, FAILED or SKIPPED with the reason - kinds `REQUESTED`/`APPROVED`/`REJECTED` for mail and `CHAT_*` for chat. No SMS, WhatsApp, payroll or attendance service is invoked.
-- **Email** uses the four `overtime_mail_*` constants in `application/config/constants.php`; with `overtime_mail_pass` empty, mail is logged as FAILED and nothing else changes.
-- **Chat** posts into the ordinary one-to-one conversation between the two people, written by the person whose action it was, so the recipient's normal unread badge does the work and the thread reads as a conversation. It carries the DF, timing, headcount, person-hours, cost, the people, the reason or remarks and a link to the request. Shubham needs chat access to see it; the email and in-module notification reach him either way. If chat is not installed, or the requester is the approver, the attempt is logged SKIPPED with the reason and nothing is sent. Deliberately not tagged to a DF record: chat's `df` ref type points at `df_design_form_table` while overtime links `df_release`, and a mislinked tag is worse than none.
-
-## Overtime cost
-
-`MASTER > OVERTIME COST RATES` (administrator role also required) opens the cost
-master at `Overtime/settings?section=cost`, reachable from the Task Master
-dashboard. One hourly rate per scope, most specific first:
-
-| Person | Rate used |
-|---|---|
-| PMS user with their own rate | that employee rate |
-| PMS user in a department with a rate | that department rate |
-| Manual / contract name typed on a request | the manual rate |
-| Anyone else | the location default |
-
-Department rates deliberately never apply to manual workers. The resolved rate
-and cost are **stored on the person row** when the request is raised and stamped
-again when it is approved, so changing a rate later cannot restate overtime that
-has already happened. "Recalculate stored costs" is the deliberate exception: it
-restates every person row in the business location at the current rates, with an
-audit entry, and exists so overtime raised before the master was configured
-stops reading as zero. Rows with no rate read as zero cost rather than failing.
-
-Reports group by person, department, DF or **day**, each with the number of
-overtime occasions, person entries, hours and cost, split into pending and
-approved. Select a DF in the filters and group by Day for the day-wise overhead
-of one DF. Cost also appears on every request row, on the request detail page and
-in the CSV export.
-
-## Granting overtime on the permission screen
-
-`Master/User_management/user_permission/<user id>` and
-`edit_module_access_permission/<user id>` list the six overtime rows, labelled for what
-they actually do rather than by their raw submodule name:
-
-| Module | Row | Effect |
-|---|---|---|
-| OVERTIME | Raise overtime requests | Opens the module and allows raising a request. The person must also be a team leader, department head or administrator for `can_request_for_team()` to pass. |
-| OVERTIME | Overtime approval inbox | Sees the inbox. The decision itself stays with user 139. |
-| OVERTIME | Overtime reports and cost | Reports, day-wise cost, CSV, and cost on the DF detail page. |
-| MASTER | Overtime master: request limits | Allow to view; **Can edit** to save. |
-| MASTER | Overtime master: cost rates | Allow to view; **Can edit** to add, remove and recalculate. |
-| MASTER | Overtime master: reporting leaders | Legacy; Allow to view, **Can edit** to change. |
-
-The redesigned `views/master/edit_permission.php` renders a single "Allow" switch per
-submodule, which posts `add<module><submodule>` and therefore writes `madd`. `medit` was
-unreachable from it, so every `*_edit` guard in this module - and the whole cost master -
-was permanently read-only whatever an administrator ticked. A second **Can edit** toggle
-is now rendered for the submodules where Edit decides something; both save paths
-(`assigncapabilities`, `edit_capablities`) already read `edit<module><submodule>`, so only
-the view and the row config changed. The rows are resolved by NAME in
-`User_management::overtime_permission_submodules()`, because ids differ per installation.
-
-If the module is missing from the screen entirely, or a row was left disabled or flagged
-for the wrong business location, run `Database/overtime_005_permission_repair.sql`. It
-registers everything by name, corrects `status` / `dynachem` / `shubhampack`, grants
-nothing, is safe to rerun, and finishes by listing the six rows plus whoever already
-holds the right to raise a request.
-
-## Approved overtime on the DF page
-
-`Dashboard/df_full_detail` carries an **Approved Overtime** tab showing what was
-approved against the searched DF: occasions, people engaged, person-hours and
-cost, a day-wise rollup, and one row per person with the rate that applied.
-Pending and rejected requests are excluded - only approved hours are authorised
-work. Rates and amounts are money, so they are only sent to the browser for
-users holding OVERTIME REPORTS or MASTER > OVERTIME COST RATES; everyone else
-sees who worked and for how long, with a note saying why cost is hidden. The
-panel degrades to a message when the overtime module is not installed, and reads
-zero cost when overtime_004 has not been run.
-
-Files: `application/controllers/Dashboard.php` (`df_detail_overtime`) and
-`application/views/dashboard/df_full_detail.php` (`renderOvertime`). Both need
-the `ot_person_name()` helper added in `application/helpers/overtime_helper.php`.
+- Transactional in-module notifications appear on the requests screen for requesters, assigned PMS users and user 139. No email, SMS, WhatsApp, payroll or attendance service is invoked.
 
 ## Default policy
 
@@ -190,8 +97,6 @@ php tests/overtime/regression.php
 php tests/overtime/hod.php
 php tests/overtime/permissions.php
 php tests/overtime/render.php
-php tests/overtime/cost.php
-php tests/overtime/chat.php
 ```
 
 The tests exercise the actual model/controller methods with an isolated SQL adapter. Default tests use in-memory SQLite and translate only engine-specific SQL. The renderer checks all screens for PHP warnings and escaping, and writes fixture HTML to the system temp directory (`pms-overtime-preview`). No production data or notifications are used.
@@ -200,7 +105,6 @@ For real MySQL testing, start a disposable MySQL instance with networking disabl
 
 ```sh
 OVERTIME_TEST_MYSQL_SOCKET=/tmp/pms-overtime-mysql.EXAMPLE/mysql.sock php tests/overtime/regression.php
-OVERTIME_TEST_MYSQL_SOCKET=/tmp/pms-overtime-mysql.EXAMPLE/mysql.sock php tests/overtime/cost.php
 OVERTIME_TEST_MYSQL_SOCKET=/tmp/pms-overtime-mysql.EXAMPLE/mysql.sock php tests/overtime/concurrency.php
 ```
 
@@ -239,9 +143,6 @@ Upload these changed application files together (paths relative to the PMS root)
 application/controllers/Overtime.php
 application/models/Overtime_model.php
 application/helpers/overtime_helper.php
-application/libraries/Overtime_mailer.php
-application/libraries/Overtime_chat.php
-application/config/constants.php
 application/views/overtime/_header.php
 application/views/overtime/_footer.php
 application/views/overtime/create.php
@@ -254,12 +155,7 @@ application/views/overtime/_stats.php
 application/views/overtime/_table.php
 application/views/common/nav-menu.php
 application/views/dashboard/task_master_dashboard.php
-application/views/dashboard/df_full_detail.php
-application/controllers/Dashboard.php
-application/controllers/Master/User_management.php
-application/views/master/edit_permission.php
 Database/overtime_003_team_requests.sql
-Database/overtime_004_cost_and_email.sql
 ```
 
 Import `Database/overtime_002_permissions.sql` if the base permission rows are
@@ -274,7 +170,6 @@ submodule, and set Add/Edit as below:
 | OVERTIME | OVERTIME REPORTS | Allow to view and export scoped reports |
 | MASTER | OVERTIME REQUEST LIMITS | Allow to view; Edit to save limits; administrator role also required |
 | MASTER | OVERTIME REPORTING LEADERS | Legacy only; administrator role also required |
-| MASTER | OVERTIME COST RATES | Allow to view rates; Edit to save, remove and recalculate; administrator role also required |
 
 Permissions are enforced on URLs and writes, not just navigation. Administrators
 also need OVERTIME REQUESTS Add access to raise requests; their admin role now

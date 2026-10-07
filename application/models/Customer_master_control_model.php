@@ -46,13 +46,9 @@ class Customer_master_control_model extends CI_Model
             return array();
         }
 
-        return $this->db
-            ->select('state_id, state_name')
-            ->from('states')
-            ->where('country_id', $country_id)
-            ->order_by('state_name', 'asc')
-            ->get()
-            ->result_array();
+        // Only states that exist in SAP can be selected
+        $this->load->library('Sap_service');
+        return $this->sap_service->sap_states_for_country($country_id);
     }
 
     public function get_marketing_brand_options()
@@ -627,6 +623,7 @@ class Customer_master_control_model extends CI_Model
             'brand_id' => $resolved_brand_id,
             'address' => trim((string) (isset($payload['address']) ? $payload['address'] : '')),
             'country_id' => $this->normalise_int_string(isset($payload['country_id']) ? $payload['country_id'] : ''),
+            'state_id' => $this->normalise_int_string(isset($payload['state_id']) ? $payload['state_id'] : ''),
             'email' => trim((string) (isset($payload['email']) ? $payload['email'] : '')),
             'contact_person' => trim((string) (isset($payload['contact_person']) ? $payload['contact_person'] : '')),
             'contact_person_no' => trim((string) (isset($payload['contact_person_no']) ? $payload['contact_person_no'] : '')),
@@ -651,6 +648,7 @@ class Customer_master_control_model extends CI_Model
             'brand_id' => (int) $next_snapshot['brand_id'],
             'address' => $next_snapshot['address'],
             'country_id' => (int) $next_snapshot['country_id'],
+            'state_id' => (int) $next_snapshot['state_id'] > 0 ? (int) $next_snapshot['state_id'] : null,
             'email' => $next_snapshot['email'],
             'contact_person' => $next_snapshot['contact_person'],
             'contact_person_no' => $next_snapshot['contact_person_no'],
@@ -659,6 +657,11 @@ class Customer_master_control_model extends CI_Model
             'shipping_customer_id' => (int) $next_snapshot['shipping_customer_id'],
             'status' => (int) $next_snapshot['status']
         );
+
+        // state_id exists only after Database/spares_customers_state_001.sql is run
+        if (!$this->db->field_exists('state_id', 'spares_customers')) {
+            unset($update_data['state_id'], $current_snapshot['state_id'], $next_snapshot['state_id']);
+        }
 
         $changed_fields = $this->build_changed_fields(
             $current_snapshot,
@@ -1214,6 +1217,7 @@ class Customer_master_control_model extends CI_Model
             'brand_id' => $this->normalise_int_string(isset($customer['brand_id']) ? $customer['brand_id'] : ''),
             'address' => trim((string) (isset($customer['address']) ? $customer['address'] : '')),
             'country_id' => $this->normalise_int_string(isset($customer['country_id']) ? $customer['country_id'] : ''),
+            'state_id' => $this->normalise_int_string(isset($customer['state_id']) ? $customer['state_id'] : ''),
             'email' => trim((string) (isset($customer['email']) ? $customer['email'] : '')),
             'contact_person' => trim((string) (isset($customer['contact_person']) ? $customer['contact_person'] : '')),
             'contact_person_no' => trim((string) (isset($customer['contact_person_no']) ? $customer['contact_person_no'] : '')),
@@ -1344,6 +1348,7 @@ class Customer_master_control_model extends CI_Model
             'brand_id' => 'Brand',
             'address' => 'Address',
             'country_id' => 'Country',
+            'state_id' => 'State',
             'email' => 'Email',
             'contact_person' => 'Contact Person',
             'contact_person_no' => 'Contact Person No',

@@ -845,11 +845,24 @@ $spares_brand_label = isset($customer['brand_name']) && trim((string) $customer[
                                     <div class="col-md-4">
                                         <div class="form-group">
                                             <label>Country</label>
-                                            <select name="country_id" class="form-control customer-master-select">
+                                            <select name="country_id" id="spares_country" class="form-control customer-master-select">
                                                 <option value="0">Select Country</option>
                                                 <?php foreach ($country_options as $country_option) { ?>
                                                     <option value="<?php echo (int) $country_option['country_id']; ?>" <?php echo (int) $customer['country_id'] === (int) $country_option['country_id'] ? 'selected' : ''; ?>>
                                                         <?php echo customerMasterSafe($country_option['country_name']); ?>
+                                                    </option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label>State</label>
+                                            <select name="state_id" id="spares_state" class="form-control customer-master-select">
+                                                <option value="0">Select State</option>
+                                                <?php foreach ($state_options as $state_option) { ?>
+                                                    <option value="<?php echo (int) $state_option['state_id']; ?>" <?php echo (int) (isset($customer['state_id']) ? $customer['state_id'] : 0) === (int) $state_option['state_id'] ? 'selected' : ''; ?>>
+                                                        <?php echo customerMasterSafe($state_option['state_name']); ?>
                                                     </option>
                                                 <?php } ?>
                                             </select>
@@ -1083,6 +1096,12 @@ $spares_brand_label = isset($customer['brand_name']) && trim((string) $customer[
 
         $(document).on('click', '.remove-contact-row', function () {
             $(this).closest('.contact-row').remove();
+        });
+
+        $('#spares_country').on('change', function () {
+            $.post('<?php echo page_url; ?>Customer_master_control/get_states', { country_id: $(this).val(), selected_state_id: 0 }, function (html) {
+                $('#spares_state').html(html).trigger('change.select2');
+            });
         });
 
         $('#customer_country').on('change', function () {

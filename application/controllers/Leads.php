@@ -2,6 +2,23 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Leads extends CI_Controller {
+
+	private function sync_customer_to_sap($source, $customer_id)
+	{
+		$customer_id = (int) $customer_id;
+		if ($customer_id <= 0) {
+			return;
+		}
+
+		$this->load->library('Sap_service');
+		$result = $source === 'spares'
+			? $this->sap_service->sync_spares_customer($customer_id)
+			: $this->sap_service->sync_marketing_customer($customer_id);
+
+		if (empty($result['success']) && empty($result['skipped'])) {
+			log_message('error', 'SAP customer sync failed for ' . $source . ' customer ' . $customer_id . ': ' . (isset($result['message']) ? $result['message'] : 'Unknown error'));
+		}
+	}
 	
 	public function __construct()
 	{
@@ -839,6 +856,7 @@ $products = $this->salescrm->getProductsTabular($row->id);
 
 					$this->db->insert('customer_detail', $data4);
 					$cust_id = $this->db->insert_id();
+					$this->sync_customer_to_sap('marketing', $cust_id);
 
 
 

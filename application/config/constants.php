@@ -207,7 +207,9 @@ defined('whatsappuser1') OR define('whatsappuser1','shubhampacktaskmanagement');
 defined('whatsapppass1') OR define('whatsapppass1','$shuBhampckTask@2024');
 defined('whatsappuser2') OR define('whatsappuser2','shubhamsharma');
 defined('whatsapppass2') OR define('whatsapppass2','Shubham#59@');
-defined('sap_service_layer_base_url') OR define('sap_service_layer_base_url', getenv('SAP_SERVICE_LAYER_BASE_URL') ?: 'https://analytics23.ubshanacloud.in:50000/b1s/v1');
+// Server-only SAP credentials (not in git): sets SAP_COMPANY_DB / SAP_USERNAME / SAP_PASSWORD
+if (is_file(APPPATH . 'config/sap_local.php')) { require APPPATH . 'config/sap_local.php'; }
+defined('sap_service_layer_base_url') OR define('sap_service_layer_base_url', getenv('SAP_SERVICE_LAYER_BASE_URL') ?: 'https://analytics23.ubshanacloud.in:50000/b1s/v2');
 defined('sap_company_db') OR define('sap_company_db', getenv('SAP_COMPANY_DB') ?: '');
 defined('sap_username') OR define('sap_username', getenv('SAP_USERNAME') ?: '');
 defined('sap_password') OR define('sap_password', getenv('SAP_PASSWORD') ?: '');

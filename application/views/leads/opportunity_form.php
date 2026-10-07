@@ -538,6 +538,33 @@ function fetchAllCountries(selectedCountryId = null) {
                         </div>
                     </div>
 
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="control-label">Country</label>
+                                <span style="color:red;">*</span>
+                                <select class="form-control" id="new_country" style="width:100%">
+                                    <option value="">Select</option>
+                                    <?php
+                                        $q = $this->db->select('country_name, country_id')->from('countries')->where('country_status',1)->get();
+                                        foreach($q->result() as $row){
+                                    ?>
+                                    <option value="<?php echo $row->country_id;?>"><?php echo $row->country_name;?></option>
+                                    <?php }?>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="control-label">State</label>
+                                <span style="color:red;">*</span>
+                                <select class="form-control" id="new_state" style="width:100%">
+                                    <option value="">Select</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row"> 
 
                           <div class="col-md-12">
@@ -733,15 +760,17 @@ function add_customer()
     var contactpersonname11=$("#contactpersonname").val();
     var personcontactno11 =$("#personcontactno").val();
     var acontactno11 =$("#acontactno").val();
+    var new_country=$("#new_country").val();
+    var new_state=$("#new_state").val();
     //alert(contactpersonname11);
 
-    if(new_companyname!='' && new_company_brand!='' && new_email!='' && new_address!='' && personcontactno11!='' && contactpersonname11!='')
+    if(new_companyname!='' && new_company_brand!='' && new_email!='' && new_address!='' && personcontactno11!='' && contactpersonname11!='' && new_country!='' && new_state!='')
     {
 
         $.ajax({
         type:"post",
         url:"<?php echo page_url;?>Customer/add_new_ajax_customer",
-        data:"company="+new_companyname+"&brand="+new_company_brand+"&email="+new_email+"&address="+new_address+"&contactpersonname="+contactpersonname11+"&personcontactno="+personcontactno11+"&acontactno="+acontactno11,
+        data:"company="+new_companyname+"&brand="+new_company_brand+"&email="+new_email+"&address="+new_address+"&contactpersonname="+contactpersonname11+"&personcontactno="+personcontactno11+"&acontactno="+acontactno11+"&country="+new_country+"&state="+new_state,
         beforeSend: function() {
         // setting a timeout
         $("#save").val('Please Wait');
@@ -752,6 +781,7 @@ function add_customer()
                 $("#save").val('Submit');
                 $("#save").attr('disabled',false);
                 var d=data.split('~');
+                if(d[0]==0 && d[1]=='State is required'){ alert('State is required'); return; }
                 if(d[0]==1)
                 {
 
@@ -793,6 +823,19 @@ function add_customer()
     }
     }
 
+</script>
+<script type="text/javascript">
+// Populate the modal State dropdown when the modal Country changes
+$(document).on('change', '#new_country', function(){
+    var $st = $("#new_state");
+    $st.html('<option value="">Select</option>');
+    if(!$(this).val()){ return; }
+    $.getJSON("<?php echo page_url;?>Customer/states_by_country", {country_id: $(this).val()}, function(rows){
+        $.each(rows, function(i, r){
+            $st.append($('<option>').val(r.state_id).text(r.state_name));
+        });
+    });
+});
 </script>
     </body>
 </html>

@@ -3867,6 +3867,29 @@ if($row->lead_id==0){
 
 	}
 
+	// JSON list of states for a country that also exist in SAP; used by the country/state dropdowns on customer forms.
+	public function states_by_country()
+	{
+		$this->load->library('Sap_service');
+		$rows = $this->sap_service->sap_states_for_country($this->input->get_post('country_id'));
+		$this->output->set_content_type('application/json')->set_output(json_encode($rows));
+	}
+
+	// Reads optional POST country/state and returns the customer_detail columns for them.
+	// Returns false when a country is posted without a state although SAP has states defined for that country.
+	private function _customer_country_state_data($country_key='country', $state_key='state')
+	{
+		$country = (int) $this->input->post($country_key);
+		$state = (int) $this->input->post($state_key);
+		if ($country > 0 && $state <= 0) {
+			$this->load->library('Sap_service');
+			if (count($this->sap_service->sap_states_for_country($country)) > 0) {
+				return false;
+			}
+		}
+		return array('country' => $country, 'state' => $state, 'bill_state' => $state, 'ship_state' => $state);
+	}
+
 	public function quotation_preview() {
 		$id=$this->uri->segment(3);
 		header('location:'.site_http_root.'poformat/tcpdf/examples/quotation.php?quotation_id='.$id);
@@ -10207,12 +10230,15 @@ function customerpendingforpaymenttermsapproval() {
 		$contactpersonname = $this->input->post('contactpersonname');
 		$personcontactno = trim($this->input->post('personcontactno'));
 		$acontactno = $this->input->post('acontactno');
+		$geo = $this->_customer_country_state_data();
+		if($geo===false){ echo "0~State is required"; exit; }
 		if($personcontactno<>''){
 		// $a = $this->db->select('contact_no')->from('customer_detail')->where('contact_no',$personcontactno)->get();
 		// if($a->num_rows()>0){
 		// 	echo "Record Already Exist."; exit;
 		// }else{
 				$dr=array('company_brand'=>$brand,'company_name'=>$company,'email'=>$email,'bill_email'=>$email,'address'=>$address,'bill_address'=>$address,'status'=>1,'customer_name'=>$contactpersonname,'contact_no'=>$personcontactno,'alt_contact'=>$acontactno);
+		$dr = array_merge($dr, $geo);
 
 
 		$this->db->insert('customer_detail',$dr);
@@ -10246,6 +10272,11 @@ function add_new_ajax_customer_with_multiple_Record()
     $company = $this->input->post('company');
     $email = $this->input->post('email');
     $address = $this->input->post('address');
+    $geo = $this->_customer_country_state_data();
+    if ($geo === false) {
+        echo "0~State is required";
+        exit;
+    }
 
     // Decode JSON contacts
     $contacts = json_decode($this->input->post('contacts'), true);
@@ -10282,6 +10313,7 @@ function add_new_ajax_customer_with_multiple_Record()
                 'added_on' => date('Y-m-d H:i:s'),
                 'added_by' => $user_id
             );
+            $dr = array_merge($dr, $geo);
 
             $this->db->insert('customer_detail', $dr);
             $customer_id = $this->db->insert_id();
@@ -10364,6 +10396,11 @@ function add_new_ajax_customer_with_multiple_Record()
 		$contactpersonname = $this->input->post('contactpersonname');
 		$personcontactno = trim($this->input->post('personcontactno'));
 		$acontactno = $this->input->post('acontactno');
+		$geo = $this->_customer_country_state_data();
+		if($geo===false){
+			$this->session->set_flashdata('message','<div class="alert alert-danger">State is required.</div>');
+			redirect(page_url.'Customer/addnewcustomer');
+		}
 		if($personcontactno<>''){
 		//$a = $this->db->select('contact_no')->from('customer_detail')->where('contact_no',$personcontactno)->get();
 	//	if($a->num_rows()>0){
@@ -10382,6 +10419,7 @@ function add_new_ajax_customer_with_multiple_Record()
 					'added_by'=>$user_id,
 					'banglore_exhibition'=>1,
 					'alt_contact'=>$acontactno);
+				$dr = array_merge($dr, $geo);
 
 				//echo "<pre>"; print_r($dr); exit;
 		$this->db->insert('customer_detail',$dr);
@@ -10597,6 +10635,12 @@ public function addcustomerinformationindb(){
 
 	$user_id=$_SESSION['logged_in']['user_id'];
 
+	$geo = $this->_customer_country_state_data();
+	if($geo===false){
+		$this->session->set_flashdata('message','<div class="alert alert-danger">State is required.</div>');
+		redirect(page_url.'Customer/addcustomerinformation');
+	}
+
 	$data=array(
 
 		'company_name'=>$this->input->post('new_companyname'),
@@ -10609,6 +10653,7 @@ public function addcustomerinformationindb(){
 		'added_on'=>date('Y-m-d H:i:s'),
 		'added_by'=>$user_id
 		);
+	$data = array_merge($data, $geo);
 
 	$this->db->insert('customer_detail',$data);
 	$customer_id = $this->db->insert_id();
@@ -10634,6 +10679,15 @@ $data = array('company_name'=>$this->input->post('new_companyname'),
 'gst'=>$this->input->post('gstn'),
 'updated_on'=>date('Y-m-d H:i:s'),
 'updated_by'=>$user_id);
+
+if($this->input->post('country')!==null){
+	$geo = $this->_customer_country_state_data();
+	if($geo===false){
+		$this->session->set_flashdata('message','<div class="alert alert-danger">State is required.</div>');
+		redirect(page_url.'Customer/editcustomerinformation/'.$this->uri->segment(3));
+	}
+	$data = array_merge($data, $geo);
+}
 
 $this->db->where('id',$this->uri->segment(3));
 $this->db->update('customer_detail',$data);

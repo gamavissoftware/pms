@@ -184,6 +184,7 @@ if ($selected_address !== '') {
                         <div class="row">
                             <div class="col-md-6 form-group"><label>Company Name<span class="required-star">*</span></label><input type="text" class="form-control" id="new_companyname" name="new_companyname" required></div>
                             <div class="col-md-6 form-group"><label>Country<span class="required-star">*</span></label><select class="form-control" id="new_country" name="new_country" style="width:100%" required><option value="">Select...</option><?php foreach ($countries as $country) : ?><option value="<?php echo (int) $country->country_id; ?>"><?php echo htmlspecialchars($country->country_name, ENT_QUOTES, 'UTF-8'); ?></option><?php endforeach; ?></select></div>
+                            <div class="col-md-6 form-group"><label>State<span class="required-star">*</span></label><select class="form-control" id="new_state" name="new_state" style="width:100%"><option value=""></option></select></div>
                             <div class="col-md-6 form-group"><label>Email<span class="required-star">*</span></label><input type="email" class="form-control" name="new_email" required></div>
                             <div class="col-md-6 form-group"><label>Contact Name<span class="required-star">*</span></label><input type="text" class="form-control" name="contactpersonname" required></div>
                             <div class="col-md-6 form-group"><label>Contact No<span class="required-star">*</span></label><input type="text" class="form-control" name="personcontactno" required></div>
@@ -252,6 +253,18 @@ if ($selected_address !== '') {
         });
 
         $('#country, #new_country').select2({ placeholder: 'Select Country' });
+
+        // State list for the add-customer modal (loaded per country; required only when the country has states)
+        $('#new_state').select2({ placeholder: 'Select State', dropdownParent: $('#add-customer-modal') });
+        $('#new_country').on('change', function() {
+            var cid = $(this).val();
+            $('#new_state').empty().append('<option value=""></option>').prop('required', false).trigger('change');
+            if (!cid) return;
+            $.getJSON("<?php echo page_url;?>Customer/states_by_country", { country_id: cid }, function(rows) {
+                $.each(rows, function(i, r) { $('#new_state').append($('<option>').val(r.state_id).text(r.state_name)); });
+                $('#new_state').prop('required', rows.length > 0).trigger('change');
+            });
+        });
         $('#op_type').on('change', updateOpportunityNumberPreview);
         updateOpportunityNumberPreview();
 

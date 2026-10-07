@@ -340,6 +340,7 @@ class Customer_master_control extends CI_Controller
             'brand_id' => trim((string) $this->input->post('brand_id', true)),
             'address' => trim((string) $this->input->post('address', true)),
             'country_id' => trim((string) $this->input->post('country_id', true)),
+            'state_id' => trim((string) $this->input->post('state_id', true)),
             'email' => trim((string) $this->input->post('email', true)),
             'contact_person' => trim((string) $this->input->post('contact_person', true)),
             'contact_person_no' => trim((string) $this->input->post('contact_person_no', true)),

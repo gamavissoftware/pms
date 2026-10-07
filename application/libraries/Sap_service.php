@@ -48,13 +48,19 @@ class Sap_service
             return array('success' => true, 'skipped' => true, 'message' => 'Customer already synced to SAP.');
         }
 
-        $row = $this->ci->db
+        $this->ci->db
             ->select('c.*, co.country_name')
             ->from('spares_customers c')
             ->join('countries co', 'co.country_id = c.country_id', 'left')
-            ->where('c.customer_id', $customer_id)
-            ->get()
-            ->row_array();
+            ->where('c.customer_id', $customer_id);
+
+        // state_id exists only after Database/spares_customers_state_001.sql is run
+        if ($this->ci->db->field_exists('state_id', 'spares_customers')) {
+            $this->ci->db->select('s.state_name');
+            $this->ci->db->join('states s', 's.state_id = c.state_id', 'left');
+        }
+
+        $row = $this->ci->db->get()->row_array();
 
         if (empty($row)) {
             return array('success' => false, 'message' => 'Customer record not found.');
@@ -156,6 +162,7 @@ class Sap_service
     private function build_spares_payload($row)
     {
         $country_code = $this->find_sap_country_code(isset($row['country_name']) ? $row['country_name'] : '');
+        $state_code = $this->find_sap_state_code(isset($row['state_name']) ? $row['state_name'] : '', $country_code);
         $tax_number = trim((string) (isset($row['tax_number']) ? $row['tax_number'] : ''));
         $pan = strlen($tax_number) >= 12 ? substr($tax_number, 2, 10) : '';
 
@@ -192,8 +199,8 @@ class Sap_service
             'DebitorAccount' => $this->null_if_empty(sap_customer_debitor_account),
             'Valid' => 'tYES',
             'BPAddresses' => array(
-                $this->build_simple_address_payload($base, 'bo_BillTo', $country_code, $tax_number),
-                $this->build_simple_address_payload($base, 'bo_ShipTo', $country_code, $tax_number)
+                $this->build_simple_address_payload($base, 'bo_BillTo', $country_code, $tax_number, $state_code),
+                $this->build_simple_address_payload($base, 'bo_ShipTo', $country_code, $tax_number, $state_code)
             ),
             'ContactEmployees' => array(),
             'BPBankAccounts' => array(),
@@ -232,7 +239,7 @@ class Sap_service
         );
     }
 
-    private function build_simple_address_payload($row, $address_type, $country_code, $gst)
+    private function build_simple_address_payload($row, $address_type, $country_code, $gst, $state_code = '')
     {
         return array(
             'AddressName' => 'PRIMARY',
@@ -241,7 +248,7 @@ class Sap_service
             'ZipCode' => null,
             'City' => null,
             'Country' => $this->null_if_empty($country_code),
-            'State' => null,
+            'State' => $this->null_if_empty($state_code),
             'BuildingFloorRoom' => null,
             'AddressType' => $address_type,
             'StreetNo' => null,
@@ -470,9 +477,48 @@ class Sap_service
         return '';
     }
 
+    // Spelling differences between PMS and SAP master data (compared after normalise_lookup_name strips case/spaces/punctuation).
+    private $lookup_aliases = array(
+        'chhattisgarh' => 'chattisgarh',
+        'lakshadweep' => 'lakshwadeep',
+        'meghalaya' => 'meghlaya',
+        'pondicherry' => 'puducherry'
+    );
+
     private function normalise_lookup_name($value)
     {
-        return preg_replace('/[^a-z0-9]+/', '', strtolower(trim((string) $value)));
+        $key = preg_replace('/[^a-z0-9]+/', '', strtolower(trim((string) $value)));
+        return isset($this->lookup_aliases[$key]) ? $this->lookup_aliases[$key] : $key;
+    }
+
+    /**
+     * PMS states of a country that exist in SAP (SAP_States), as state_id/state_name rows.
+     * Forms use this so only states SAP will accept can be picked; empty when SAP has no states for the country.
+     */
+    public function sap_states_for_country($country_id)
+    {
+        $country_id = (int) $country_id;
+        if ($country_id <= 0 || !$this->ci->db->table_exists('SAP_States')) {
+            return array();
+        }
+
+        $country = $this->ci->db->select('country_name')->from('countries')->where('country_id', $country_id)->get()->row_array();
+        $country_code = $this->find_sap_country_code(isset($country['country_name']) ? $country['country_name'] : '');
+        if ($country_code === '') {
+            return array();
+        }
+
+        $rows = $this->ci->db->select('state_id, state_name')->from('states')
+            ->where('country_id', $country_id)->order_by('state_name', 'asc')->get()->result_array();
+
+        $out = array();
+        foreach ($rows as $row) {
+            if ($this->find_sap_state_code($row['state_name'], $country_code) !== '') {
+                $out[] = $row;
+            }
+        }
+
+        return $out;
     }
 
     private function null_if_empty($value)

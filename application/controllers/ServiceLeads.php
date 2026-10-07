@@ -1419,6 +1419,10 @@ class ServiceLeads extends CI_Controller {
             'status'               => 1,
             'created_at'           => date('Y-m-d H:i:s')
         );
+        if ($this->db->field_exists('state_id', 'spares_customers')) {
+            $state_input = (int) $this->input->post('new_state');
+            $data['state_id'] = $state_input > 0 ? $state_input : null;
+        }
 
         if ($this->db->insert('spares_customers', $data)) {
             $customer_id = $this->db->insert_id();

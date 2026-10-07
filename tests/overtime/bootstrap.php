@@ -45,9 +45,7 @@ class OtDb {
     public function query($sql, $params = array()) {
         if (!$this->mysql) $sql = str_replace(array(' FOR UPDATE','INSERT IGNORE'), array('', 'INSERT OR IGNORE'), $sql);
         if (!$this->mysql && strpos($sql, 'ON DUPLICATE KEY UPDATE') !== false) {
-            $key = 'employee_id';
-            if (strpos($sql, 'overtime_policies') !== false) $key = 'business_location_id';
-            elseif (strpos($sql, 'overtime_cost_rates') !== false) $key = 'business_location_id,scope,scope_id';
+            $key = strpos($sql, 'overtime_policies') !== false ? 'business_location_id' : 'employee_id';
             $sql = str_replace('ON DUPLICATE KEY UPDATE', 'ON CONFLICT(' . $key . ') DO UPDATE SET', $sql);
             $sql = preg_replace('/VALUES\((\w+)\)/', 'excluded.$1', $sql);
         }
@@ -72,16 +70,8 @@ class OtDb {
 }
 function ot_fixture() {
     $db = new OtDb();
-    // overtime_004 carries both schema and a permission row; the permission half belongs
-    // with the rerunnable block below, because its ALTER TABLEs are not rerunnable.
-    $cost_sql = explode('START TRANSACTION;', file_get_contents(__DIR__.'/../../Database/overtime_004_cost_and_email.sql'), 2);
-    $cost_sql[1] = 'START TRANSACTION;' . $cost_sql[1];
-    $schema = file_get_contents(__DIR__ . '/../../Database/overtime_001.sql') . "\n" . file_get_contents(__DIR__.'/../../Database/overtime_003_team_requests.sql') . "\n" . $cost_sql[0];
+    $schema = file_get_contents(__DIR__ . '/../../Database/overtime_001.sql') . "\n" . file_get_contents(__DIR__.'/../../Database/overtime_003_team_requests.sql');
     if (!$db->mysql) {
-    // SQLite has no prepared DDL; run the guarded ALTERs the migration builds directly.
-    preg_match_all("/'(ALTER TABLE [^']+)'/", $schema, $guarded);
-    $schema = preg_replace('/^(SET @ot_|PREPARE ot_stmt|\s+FROM information_schema).*$/m', '', $schema);
-    if ($guarded[1]) $schema .= "\n" . implode(";\n", $guarded[1]) . ';';
     $schema = preg_replace('/--[^\n]*/', '', $schema);
     $schema = preg_replace('/id INT NOT NULL AUTO_INCREMENT/', 'id INTEGER PRIMARY KEY AUTOINCREMENT', $schema);
     $schema = preg_replace('/PRIMARY KEY\(id\),?/', '', $schema);
@@ -91,7 +81,7 @@ function ot_fixture() {
     $schema = preg_replace('/ENGINE=InnoDB DEFAULT CHARSET=utf8mb4/', '', $schema);
     }
     $db->pdo->exec($schema);
-    $db->pdo->exec("CREATE TABLE system_users(user_id INTEGER PRIMARY KEY,first_name TEXT,last_name TEXT,business_location INTEGER,department_id INTEGER,user_role_id INTEGER,user_status INTEGER,email VARCHAR(200));
+    $db->pdo->exec("CREATE TABLE system_users(user_id INTEGER PRIMARY KEY,first_name TEXT,last_name TEXT,business_location INTEGER,department_id INTEGER,user_role_id INTEGER,user_status INTEGER);
         CREATE TABLE user_role(user_role_id INTEGER PRIMARY KEY,isadmin INTEGER,status INTEGER);
         CREATE TABLE departments(department_id INTEGER PRIMARY KEY,department TEXT,departmenthead INTEGER DEFAULT 0,business_loc_id INTEGER DEFAULT 2,status INTEGER DEFAULT 1);
         CREATE TABLE prestogroup_teams(team_id INTEGER PRIMARY KEY,team_leader INTEGER,business_loc_id INTEGER,status INTEGER);
@@ -100,18 +90,17 @@ function ot_fixture() {
         INSERT INTO df_release VALUES(100,'DF-100','Packing line',0),(101,'DF-101','Automation line',0),(102,'DF-102','Closed DF',1);
         INSERT INTO user_role VALUES(1,0,1),(2,1,1),(3,1,0);
         INSERT INTO departments(department_id,department) VALUES(10,'Production'),(20,'Operations');
-        INSERT INTO system_users(user_id,first_name,last_name,business_location,department_id,user_role_id,user_status) VALUES(1,'Asha','Sharma',2,10,1,1),(2,'Dev','Singh',2,10,1,1),(3,'Riya','Mehta',2,20,2,1),(4,'Arjun','Kapoor',2,20,2,1),(5,'Other','Employee',2,20,1,1),(6,'Remote','Admin',3,20,2,1),(7,'Inactive','Admin',2,20,2,0),(8,'Inactive Role','Admin',2,20,3,1);
-        INSERT INTO system_users(user_id,first_name,last_name,business_location,department_id,user_role_id,user_status) VALUES(139,'Shubham','Sharma',2,20,1,1);
+        INSERT INTO system_users VALUES(1,'Asha','Sharma',2,10,1,1),(2,'Dev','Singh',2,10,1,1),(3,'Riya','Mehta',2,20,2,1),(4,'Arjun','Kapoor',2,20,2,1),(5,'Other','Employee',2,20,1,1),(6,'Remote','Admin',3,20,2,1),(7,'Inactive','Admin',2,20,2,0),(8,'Inactive Role','Admin',2,20,3,1);
+        INSERT INTO system_users VALUES(139,'Shubham','Sharma',2,20,1,1);
         INSERT INTO prestogroup_teams VALUES(10,2,2,1),(20,3,2,1),(30,6,3,1),(40,7,2,0);
-        INSERT INTO presto_team_members VALUES(1,10),(2,20),(5,20),(6,30);
-        UPDATE system_users SET email=CONCAT('user',user_id,'@example.test') WHERE user_id<>5;");
+        INSERT INTO presto_team_members VALUES(1,10),(2,20),(5,20),(6,30);");
     $identity = $db->mysql ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
     $db->pdo->exec("CREATE TABLE system_modules(id $identity,modulename VARCHAR(200),status INTEGER,dynachem INTEGER,shubhampack INTEGER);
         CREATE TABLE submodule(id $identity,moduleid INTEGER,submodule VARCHAR(200),status INTEGER,addedOn DATETIME,dynachem INTEGER,shubhampack INTEGER);
         CREATE TABLE module_access(id $identity,role_id INTEGER,moduleid INTEGER,access INTEGER);
         CREATE TABLE module_capablity(id $identity,role_id INTEGER,moduleid INTEGER,submoduleid INTEGER,submodule_access INTEGER,madd INTEGER,medit INTEGER);
         INSERT INTO system_modules(modulename,status,dynachem,shubhampack) VALUES('MASTER',1,1,2);");
-    $permission_sql=file_get_contents(__DIR__.'/../../Database/overtime_002_permissions.sql') . "\n" . $cost_sql[1];
+    $permission_sql=file_get_contents(__DIR__.'/../../Database/overtime_002_permissions.sql');
     if (!$db->mysql) $permission_sql=str_replace(array('START TRANSACTION;','FROM DUAL'),array('BEGIN TRANSACTION;',''),$permission_sql);
     $db->pdo->exec($permission_sql);
     $db->pdo->exec($permission_sql);

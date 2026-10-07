@@ -484,6 +484,33 @@
                 <div id="dynamictasks1"></div>
 
                 <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label class="control-label">Country</label>
+                            <span style="color:red;">*</span>
+                            <select class="form-control" id="new_country" style="width:100%">
+                                <option value="">Select</option>
+                                <?php
+                                    $q = $this->db->select('country_name, country_id')->from('countries')->where('country_status',1)->get();
+                                    foreach($q->result() as $row){
+                                ?>
+                                <option value="<?php echo $row->country_id;?>"><?php echo $row->country_name;?></option>
+                                <?php }?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label class="control-label">State</label>
+                            <span style="color:red;">*</span>
+                            <select class="form-control" id="new_state" style="width:100%">
+                                <option value="">Select</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
                     <div class="col-md-12">
                         <div class="form-group">
                             <label for="field-2" class="control-label"> Address</label>
@@ -684,6 +711,8 @@ function add_customer() {
     var new_company_brand = $("#new_company_brand").val();
     var new_email = $("#new_email").val();
     var new_address = $("#new_address").val();
+    var new_country = $("#new_country").val();
+    var new_state = $("#new_state").val();
 
     // Collect all rows data
     var contactRows = [];
@@ -726,7 +755,7 @@ function add_customer() {
 
     console.log("Collected Contact Rows:", contactRows);
 
-    if (new_companyname && new_company_brand && new_email && new_address && contactRows.length > 0) {
+    if (new_companyname && new_company_brand && new_email && new_address && new_country && new_state && contactRows.length > 0) {
         $.ajax({
             type: "POST",
             url: "<?php echo page_url;?>Customer/add_new_ajax_customer_with_multiple_Record",
@@ -735,6 +764,8 @@ function add_customer() {
                 brand: new_company_brand,
                 email: new_email,
                 address: new_address,
+                country: new_country,
+                state: new_state,
                 contacts: JSON.stringify(contactRows)
             },
             beforeSend: function() {
@@ -744,7 +775,9 @@ function add_customer() {
             success: function(response) {
                 $("#save").val('Submit');
                 $("#save").attr('disabled', false);
-                if (response === 'Record Already Exist.') {
+                if (response === '0~State is required') {
+                    alert('State is required.');
+                } else if (response === 'Record Already Exist.') {
                     alert('Customer Information already exists in our record.');
                 } else {
                     $("#con-close-modal").modal('hide');
@@ -760,6 +793,19 @@ function add_customer() {
 
 
 
+</script>
+<script type="text/javascript">
+// Populate the modal State dropdown when the modal Country changes
+$(document).on('change', '#new_country', function(){
+    var $st = $("#new_state");
+    $st.html('<option value="">Select</option>');
+    if(!$(this).val()){ return; }
+    $.getJSON("<?php echo page_url;?>Customer/states_by_country", {country_id: $(this).val()}, function(rows){
+        $.each(rows, function(i, r){
+            $st.append($('<option>').val(r.state_id).text(r.state_name));
+        });
+    });
+});
 </script>
     </body>
 </html>

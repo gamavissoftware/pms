@@ -2,7 +2,7 @@
 ini_set('session.gc_maxlifetime', 3600); // Example
 ini_set('session.cookie_lifetime', 3600);
 ob_start();
-date_default_timezone_set("Asia/Calcutta");
+date_default_timezone_set("Asia/Kolkata");
 /**
  * CodeIgniter
  *
@@ -57,26 +57,7 @@ date_default_timezone_set("Asia/Calcutta");
  *
  * NOTE: If you change these, also change the error_reporting() code below
  */
-	$detected_host = '';
-	if (isset($_SERVER['HTTP_HOST']))
-	{
-		$detected_host = strtolower((string) $_SERVER['HTTP_HOST']);
-	}
-	elseif (isset($_SERVER['SERVER_NAME']))
-	{
-		$detected_host = strtolower((string) $_SERVER['SERVER_NAME']);
-	}
-
-	$is_local_environment = (
-		PHP_SAPI === 'cli'
-		|| defined('STDIN')
-		|| in_array($detected_host, array('localhost', '127.0.0.1', '::1'), TRUE)
-		|| substr($detected_host, -6) === '.local'
-		|| substr($detected_host, -5) === '.test'
-		|| strpos($detected_host, '.localhost') !== FALSE
-	);
-
-	define('ENVIRONMENT', isset($_SERVER['CI_ENV']) ? $_SERVER['CI_ENV'] : ($is_local_environment ? 'development' : 'production'));
+	define('ENVIRONMENT', isset($_SERVER['CI_ENV']) ? $_SERVER['CI_ENV'] : 'development');
 
 /*
  *---------------------------------------------------------------

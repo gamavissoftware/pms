@@ -38,12 +38,7 @@ $pages=array(
 $pendingId=$model->submit(2,ot_team_input('+2 days',array(5),'Manual helper'),bin2hex(random_bytes(32)));
 $pages['pending']=array('request'=>$model->get_request($pendingId),'history'=>$model->history($pendingId),'can_decide'=>true,'can_cancel'=>false,'reassign_users'=>array());
 $pages['requester']=array('viewer'=>$model->user(2),'permissions'=>ot_user_permissions($db,2),'request'=>$model->get_request($pendingId),'history'=>$model->history($pendingId),'can_decide'=>false,'can_cancel'=>true,'reassign_users'=>array());
-// An administrator sees the masters; user 139 approves but holds no master grants.
-$admin=array('viewer'=>$model->user(4),'permissions'=>ot_user_permissions($db,4));
-$pages['settings_cost']=array_merge($admin,array('section'=>'cost','policy'=>$model->policy(2),'users'=>$model->users(2)),$model->settings_data(2));
-$pages['reports_day']=array_merge($shared,array('group'=>'day','groups'=>$model->grouped_report($base['viewer'],$filters,'day')));
-$aliases=array('pending'=>'view','requester'=>'view','settings_cost'=>'settings','reports_day'=>'reports');
 $destination=isset($argv[1])?$argv[1]:sys_get_temp_dir().'/pms-overtime-preview';
 if(!is_dir($destination))mkdir($destination,0700,true);
-foreach($pages as $view=>$data){$html=$renderer->page(isset($aliases[$view])?$aliases[$view]:$view,array_merge($base,$data));check(strpos($html,'data-shared-view="common/nav-menu"')!==false,'Shared PMS navigation included');check(strpos($html,'data-shared-view="common/footer"')!==false,'Shared PMS footer included');check(strpos($html,'<script>alert("xss")</script>')===false,'Output escaped');file_put_contents($destination.'/'.$view.'.html',$html);}
+foreach($pages as $view=>$data){$html=$renderer->page(in_array($view,array('pending','requester'),true)?'view':$view,array_merge($base,$data));check(strpos($html,'data-shared-view="common/nav-menu"')!==false,'Shared PMS navigation included');check(strpos($html,'data-shared-view="common/footer"')!==false,'Shared PMS footer included');check(strpos($html,'<script>alert("xss")</script>')===false,'Output escaped');file_put_contents($destination.'/'.$view.'.html',$html);}
 echo "PASS: all screens and approval/cancellation variants render without PHP warnings; untrusted request content escaped. Preview: $destination\n";

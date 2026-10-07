@@ -207,6 +207,31 @@
                                                 
                                                 <div id="dynamictasks1"></div>
 
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Country<span style="color:red">*</span></label>
+                                <select class="form-control" name="country" id="country" required>
+                                    <option value="">Select</option>
+                                    <?php
+                                        $q = $this->db->select('country_name, country_id')->from('countries')->where('country_status',1)->get();
+                                        foreach($q->result() as $row){
+                                    ?>
+                                    <option value="<?php echo $row->country_id;?>" <?php if($result->country==$row->country_id){ echo "selected";} ?>><?php echo $row->country_name;?></option>
+                                    <?php }?>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>State<span style="color:red">*</span></label>
+                                <select class="form-control" name="state" id="state" required>
+                                    <option value="">Select</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row"> 
 
                           <div class="col-md-12">
@@ -331,5 +356,23 @@ $('#country').select2();
 </script>
 
 
+<script type="text/javascript">
+// Populate the State dropdown for the chosen country
+function loadStates(countryId, selected){
+    var $st = $("#state");
+    $st.html('<option value="">Select</option>');
+    if(!countryId){ return; }
+    $.getJSON("<?php echo page_url;?>Customer/states_by_country", {country_id: countryId}, function(rows){
+        $.each(rows, function(i, r){
+            $st.append($('<option>').val(r.state_id).text(r.state_name));
+        });
+        if(selected){ $st.val(String(selected)); }
+    });
+}
+$(document).ready(function(){
+    $("#country").on('change', function(){ loadStates($(this).val(), ''); });
+    loadStates("<?php echo (int) $result->country;?>", "<?php echo (int) ($result->state ? $result->state : $result->bill_state);?>");
+});
+</script>
     </body>
 </html>

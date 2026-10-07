@@ -129,6 +129,7 @@ $company_info = $this->db->select('company_name, logo, colorcode')->from('compan
                                     <?php $countries = $this->db->select('country_name, country_id')->from('countries')->where('country_status',1)->order_by('country_name', 'asc')->get()->result(); foreach($countries as $country) { echo '<option value="'.$country->country_id.'">'.htmlspecialchars($country->country_name).'</option>'; } ?>
                                 </select>
                             </div>
+                            <div class="col-md-6 form-group"><label>State<span class="required-star">*</span></label><select class="form-control" id="new_state" name="new_state" style="width:100%"><option value=""></option></select></div>
                             <div class="col-md-6 form-group"><label>Email (use comma for multiple)<span class="required-star">*</span></label><input type="text" class="form-control" id="new_email" name="new_email" required></div>
                             <div class="col-md-4 form-group"><label>Contact Person<span class="required-star">*</span></label><input type="text" class="form-control" id="contactpersonname" name="contactpersonname" required></div>
                             <div class="col-md-4 form-group"><label>Contact No<span class="required-star">*</span></label><input type="text" class="form-control" id="personcontactno" name="personcontactno" required></div>
@@ -194,7 +195,7 @@ $company_info = $this->db->select('company_name, logo, colorcode')->from('compan
             ...validationHandlers,
             rules: {
                 new_companyname: "required", new_company_brand: "required", 
-                new_country: "required", new_address: "required",
+                new_country: "required", new_state: { required: function() { return $("#new_state option[value!='']").length > 0; } }, new_address: "required",
                 new_email: { required: true },
                 contactpersonname: "required", personcontactno: "required"
             }
@@ -210,6 +211,18 @@ $company_info = $this->db->select('company_name, logo, colorcode')->from('compan
         // MODAL SELECT2 INITIALIZERS
         $('#new_company_brand').select2({ placeholder: 'Select or type a Brand', tags: true, dropdownParent: $('#add-customer-modal') });
         $('#new_country').select2({ placeholder: 'Select a Country', dropdownParent: $('#add-customer-modal') }); 
+
+        // State list for the add-customer modal (loaded per country; required only when the country has states)
+        $('#new_state').select2({ placeholder: 'Select State', dropdownParent: $('#add-customer-modal') });
+        $('#new_country').on('change', function() {
+            var cid = $(this).val();
+            $('#new_state').empty().append('<option value=""></option>').prop('required', false).trigger('change');
+            if (!cid) return;
+            $.getJSON("<?php echo page_url;?>Customer/states_by_country", { country_id: cid }, function(rows) {
+                $.each(rows, function(i, r) { $('#new_state').append($('<option>').val(r.state_id).text(r.state_name)); });
+                $('#new_state').prop('required', rows.length > 0).trigger('change');
+            });
+        });
         
         // --- DYNAMIC PRODUCT ROWS ---
         $('#add_product_row').on('click', function() {
@@ -327,6 +340,7 @@ $company_info = $this->db->select('company_name, logo, colorcode')->from('compan
                 company: $("#new_companyname").val(), 
                 brand: $("#new_company_brand").val(),
                 country: $("#new_country").val(),
+                state: $("#new_state").val(),
                 email: $("#new_email").val(),
                 address: $("#new_address").val(), 
                 contactpersonname: $("#contactpersonname").val(),
@@ -340,6 +354,7 @@ $company_info = $this->db->select('company_name, logo, colorcode')->from('compan
                     $('#add_customer_form')[0].reset();
                     $('#new_company_brand').val(null).trigger('change');
                     $('#new_country').val(null).trigger('change');
+                    $('#new_state').empty().trigger('change');
                 } else {
                     var errorMessage = data.split('~')[1] || 'An error occurred or this customer already exists.';
                     alert(errorMessage);

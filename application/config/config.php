@@ -448,7 +448,7 @@ $config['allow_get_array'] = TRUE;
 
 */
 
-$config['log_threshold'] = 4;
+$config['log_threshold'] = 1;  // errors only - 4 wrote 440MB/day (2026-09-23)
 
 
 

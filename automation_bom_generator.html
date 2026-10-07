@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automation BOM Generator — SPM1200L</title>
+<style>
+  :root {
+    --navy:    #1F3864;
+    --blue:    #2E75B6;
+    --lblue:   #DEEAF1;
+    --lgreen:  #E2EFDA;
+    --lyellow: #FFF2CC;
+    --orange:  #FFE0B2;
+    --red:     #C00000;
+    --gray:    #F5F5F5;
+    --dgray:   #555;
+    --border:  #D0D7E3;
+    --white:   #FFFFFF;
+    --success: #217346;
+    --warn:    #BF8F00;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; background: #ECF0F5; color: #222; }
+
+  /* ── HEADER ── */
+  .app-header {
+    background: var(--navy);
+    color: #fff;
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: .3px; }
+  .app-header .sub { font-size: 11px; opacity: .75; margin-top: 2px; }
+  .badge {
+    background: var(--blue); color: #fff;
+    padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;
+    letter-spacing: .5px;
+  }
+
+  /* ── LAYOUT ── */
+  .layout { display: flex; gap: 0; min-height: calc(100vh - 54px); }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 300px; min-width: 300px;
+    background: var(--white);
+    border-right: 2px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .sidebar-title {
+    background: var(--blue); color: #fff;
+    padding: 10px 16px; font-size: 12px; font-weight: 700;
+    letter-spacing: .5px; text-transform: uppercase;
+  }
+  .sidebar-body { padding: 16px; flex: 1; overflow-y: auto; }
+
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block; font-size: 11px; font-weight: 700;
+    color: var(--navy); margin-bottom: 4px; text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  .form-group input, .form-group select {
+    width: 100%; padding: 7px 10px;
+    border: 1.5px solid var(--border); border-radius: 5px;
+    font-size: 13px; font-family: Arial, sans-serif;
+    background: #FAFCFF; outline: none; transition: border .15s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--blue); }
+
+  .plc-badge {
+    display: inline-block; padding: 5px 14px; border-radius: 6px;
+    font-size: 13px; font-weight: 700; margin-top: 4px;
+  }
+  .plc-fx5  { background: var(--lblue); color: var(--navy); }
+  .plc-iqr  { background: var(--lgreen); color: #1A4001; }
+
+  .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .feature-cb { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+  .feature-cb input { width: auto; }
+
+  .divider { border: none; border-top: 1.5px solid var(--border); margin: 16px 0; }
+
+  .btn-gen {
+    width: 100%; padding: 11px;
+    background: var(--navy); color: #fff;
+    border: none; border-radius: 6px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    letter-spacing: .3px; transition: background .15s;
+  }
+  .btn-gen:hover { background: var(--blue); }
+  .btn-gen:active { background: #123; }
+
+  .btn-reset {
+    width: 100%; padding: 7px;
+    background: transparent; color: var(--dgray);
+    border: 1.5px solid var(--border); border-radius: 6px;
+    font-size: 12px; cursor: pointer; margin-top: 8px;
+    transition: all .15s;
+  }
+  .btn-reset:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── MAIN CONTENT ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* BOM config summary bar */
+  .bom-topbar {
+    background: var(--white);
+    border-bottom: 2px solid var(--border);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .config-chip {
+    background: var(--navy); color: #fff;
+    padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 700;
+  }
+  .config-chip.fx5  { background: var(--blue); }
+  .config-chip.iqr  { background: var(--success); }
+  .config-chip.cont { background: var(--warn); color: #fff; }
+  .bom-actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn-sm {
+    padding: 6px 14px; border-radius: 5px; font-size: 12px; font-weight: 700;
+    cursor: pointer; border: none; transition: opacity .15s;
+  }
+  .btn-sm:hover { opacity: .85; }
+  .btn-export { background: var(--success); color: #fff; }
+  .btn-print  { background: var(--blue); color: #fff; }
+  .btn-copy   { background: var(--dgray); color: #fff; }
+
+  /* BOM table area */
+  .bom-area { flex: 1; overflow: auto; padding: 16px 20px; }
+
+  /* Stats row */
+  .stats-row { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 7px;
+    padding: 10px 16px; min-width: 130px;
+  }
+  .stat-card .val { font-size: 22px; font-weight: 700; color: var(--navy); }
+  .stat-card .lbl { font-size: 10px; color: var(--dgray); text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+
+  /* BOM table */
+  .bom-table-wrap { background: var(--white); border-radius: 8px; border: 1.5px solid var(--border); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { background: var(--navy); color: #fff; }
+  thead th { padding: 9px 10px; text-align: center; font-size: 11px; font-weight: 700;
+             letter-spacing: .3px; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
+  thead th.left { text-align: left; }
+
+  .sec-row td {
+    background: var(--blue); color: #fff;
+    font-weight: 700; font-size: 11px; padding: 6px 10px;
+    letter-spacing: .5px; text-transform: uppercase;
+    border-top: 2px solid var(--navy);
+  }
+  .sec-row td span { opacity: .7; font-weight: 400; margin-left: 8px; font-size: 10px; }
+
+  tbody tr.data-row:hover { background: #EEF4FF !important; }
+  tbody tr.data-row td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+
+  .erp-cell { font-family: 'Courier New', monospace; font-size: 11px; color: var(--navy); font-weight: 700; }
+  .erp-new  { color: var(--red); background: var(--orange); padding: 2px 6px; border-radius: 3px; }
+  .desc-cell { max-width: 280px; }
+  .part-cell { font-family: 'Courier New', monospace; font-size: 11px; color: #444; }
+
+  .qty-input {
+    width: 55px; padding: 3px 6px; border: 1.5px solid var(--border);
+    border-radius: 4px; font-size: 12px; font-weight: 700; text-align: center;
+    font-family: Arial; background: #FAFCFF;
+  }
+  .qty-input:focus { border-color: var(--blue); outline: none; }
+  .qty-input.auto  { background: var(--lgreen); color: var(--success); border-color: #B0D4A0; }
+  .qty-input.manual { background: var(--lyellow); border-color: #E0C050; }
+
+  .formula-tag {
+    display: inline-block; padding: 2px 7px; border-radius: 10px;
+    font-size: 10px; font-weight: 700; white-space: nowrap;
+  }
+  .tag-fixed  { background: var(--lblue);  color: var(--navy); }
+  .tag-axes   { background: var(--lgreen); color: var(--success); }
+  .tag-axes1  { background: #D4EDDA; color: #155724; }
+  .tag-manual { background: var(--lyellow); color: var(--warn); }
+
+  .remarks-cell { color: var(--dgray); font-size: 11px; max-width: 180px; }
+
+  .plc-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 4px; vertical-align: middle;
+  }
+  .dot-fx5 { background: var(--blue); }
+  .dot-iqr { background: var(--success); }
+  .dot-both { background: #888; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--dgray);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state h3 { font-size: 16px; margin-bottom: 6px; color: var(--navy); }
+  .empty-state p { font-size: 13px; }
+
+  /* Section filter pills */
+  .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .pill {
+    padding: 4px 12px; border-radius: 12px; font-size: 11px; cursor: pointer;
+    border: 1.5px solid var(--border); background: var(--white); font-weight: 600;
+    transition: all .12s;
+  }
+  .pill.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .pill:hover:not(.active) { border-color: var(--blue); color: var(--blue); }
+
+  /* Tooltip */
+  .tip { position: relative; }
+  .tip:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 4px 8px; border-radius: 4px;
+    font-size: 10px; white-space: nowrap; z-index: 99; pointer-events: none;
+  }
+
+  /* Action items banner */
+  .action-banner {
+    background: #FFF3CD; border: 1.5px solid #FFD04A; border-radius: 7px;
+    padding: 10px 14px; margin-bottom: 14px; font-size: 11px; color: #7A5800;
+  }
+  .action-banner strong { display: block; margin-bottom: 4px; font-size: 12px; }
+
+  /* Print styles */
+  @media print {
+    .sidebar, .bom-topbar .bom-actions, .btn-gen, .btn-reset,
+    .filter-pills, .stats-row, .action-banner { display: none !important; }
+    .layout { display: block; }
+    .main { overflow: visible; }
+    .bom-area { padding: 0; }
+    .bom-topbar { page-break-after: avoid; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <h1>⚙️ Automation BOM Generator</h1>
+    <div class="sub">SPM1200L / SPM1250P · Mitsubishi Automation · Module v1.0</div>
+  </div>
+  <span class="badge">PROTOTYPE</span>
+</header>
+
+<div class="layout">
+
+  <!-- ══ SIDEBAR: Filter Form ══ -->
+  <aside class="sidebar">
+    <div class="sidebar-title">🔧 Machine Configuration</div>
+    <div class="sidebar-body">
+
+      <div class="form-group">
+        <label>DF Number</label>
+        <input type="text" id="dfNum" placeholder="e.g. DF-1900" value="DF-1864">
+      </div>
+
+      <div class="form-group">
+        <label>Machine Model</label>
+        <select id="machineModel">
+          <option value="SPM1200L">SPM1200L</option>
+          <option value="SPM1250P">SPM1250P</option>
+          <option value="SPM1250LC">SPM1250LC</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Number of Axes</label>
+        <input type="number" id="axesCount" min="1" max="20" value="6" placeholder="e.g. 6">
+      </div>
+
+      <div class="form-group">
+        <label>Number of Tracks</label>
+        <input type="number" id="tracksCount" min="1" max="20" value="12" placeholder="e.g. 12">
+      </div>
+
+      <div class="form-group">
+        <label>Speed (PPM)</label>
+        <input type="number" id="speedPPM" min="30" max="300" value="80" placeholder="e.g. 80">
+      </div>
+
+      <div class="form-group">
+        <label>Side</label>
+        <select id="sideSelect">
+          <option value="—">— (Not Specified)</option>
+          <option value="LHS">LHS</option>
+          <option value="RHS">RHS</option>
+          <option value="Both">Both</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Motion Type</label>
+        <select id="motionType">
+          <option value="—">— (Not Specified)</option>
+          <option value="Intermittent">Intermittent</option>
+          <option value="Continuous">Continuous</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Panel Location</label>
+        <select id="panelLocation">
+          <option value="Panel With Machine">Panel With Machine</option>
+          <option value="Standalone">Standalone</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Special Features</label>
+        <div class="feature-grid">
+          <label class="feature-cb"><input type="checkbox" id="feat-traverse"> Traverse</label>
+          <label class="feature-cb"><input type="checkbox" id="feat-flowmeter"> Flowmeter</label>
+          <label class="feature-cb"><input type="checkbox" id="feat-perforation"> Perforation</label>
+          <label class="feature-cb"><input type="checkbox" id="feat-highspeed"> High Speed</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>PLC Family (Auto-Selected)</label>
+        <div id="plcFamilyBadge" class="plc-badge plc-fx5">FX5 Series</div>
+      </div>
+
+      <hr class="divider">
+
+      <button class="btn-gen" onclick="generateBOM()">⚡ Generate BOM</button>
+      <button class="btn-reset" onclick="resetForm()">↺ Reset Filters</button>
+
+      <hr class="divider">
+      <div style="font-size:10px;color:#888;line-height:1.6;">
+        <strong style="color:#555;">Quantity Legend:</strong><br>
+        🟢 Auto = formula-calculated<br>
+        🟡 Manual = engineer review needed<br>
+        🔵 Fixed = always 1 (or specified)
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN CONTENT ══ -->
+  <main class="main">
+
+    <!-- Config bar -->
+    <div class="bom-topbar" id="configBar" style="display:none;">
+      <span id="chipDF" class="config-chip"></span>
+      <span id="chipModel" class="config-chip"></span>
+      <span id="chipAxes" class="config-chip"></span>
+      <span id="chipTracks" class="config-chip"></span>
+      <span id="chipSpeed" class="config-chip"></span>
+      <span id="chipPLC" class="config-chip"></span>
+      <span id="chipMotion" class="config-chip" style="display:none;"></span>
+      <div class="bom-actions">
+        <button class="btn-sm btn-copy" onclick="copyBOM()">📋 Copy</button>
+        <button class="btn-sm btn-print" onclick="window.print()">🖨️ Print</button>
+        <button class="btn-sm btn-export" onclick="exportCSV()">📥 Export CSV</button>
+      </div>
+    </div>
+
+    <div class="bom-area">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState">
+        <div class="icon">📋</div>
+        <h3>Configure your machine and generate BOM</h3>
+        <p>Set the machine parameters in the filter panel on the left,<br>then click <strong>Generate BOM</strong> to create your automation BOM.</p>
+        <br>
+        <p style="font-size:11px;color:#aaa;">Supports SPM1200L · FX5 and iQ-R PLC families · 28 component categories</p>
+      </div>
+
+      <!-- BOM content (hidden until generated) -->
+      <div id="bomContent" style="display:none;">
+        <div class="stats-row" id="statsRow"></div>
+        <div class="action-banner" id="actionBanner" style="display:none;"></div>
+        <div class="filter-pills" id="sectionPills"></div>
+        <div class="bom-table-wrap">
+          <table id="bomTable">
+            <thead>
+              <tr>
+                <th style="width:48px;">S.No.</th>
+                <th style="width:110px;">ERP Code</th>
+                <th class="left" style="width:280px;">Description</th>
+                <th class="left" style="width:160px;">Part No / Model</th>
+                <th style="width:100px;">Manufacturer</th>
+                <th style="width:60px;">Qty</th>
+                <th style="width:55px;">UOM</th>
+                <th class="left" style="width:130px;">Remarks</th>
+                <th style="width:80px;">Formula</th>
+                <th style="width:70px;">PLC</th>
+              </tr>
+            </thead>
+            <tbody id="bomBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════
+// MASTER BOM ITEM DATABASE
+// Format: [erp, desc, partNo, mfr, baseQty, formula, plcFamily,
+//          minAxes, maxAxes, reqMotion, reqFeature, isOptional, section, remarks]
+// ══════════════════════════════════════════════════════════════════════════
+const MASTER_ITEMS = [
+  // ── PLC, I/O's, HMI, RTD, VFD — FX5 ──
+  ["4060524","PLC (40 SINK/SOURCE DI, 40 SOURCE DO)","FX5U-80MT/ESS","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD","Core PLC"],
+  ["4130021","PLC BATTERY","FX3U-32BL","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["2240027","16 SOURCE DI CARD","FX5-16EX/ES","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["2240029","8 DI, 8 DO CARD","FX5-16ET/ESS","MITSUBISHI",1,"FIXED","FX5",7,9,null,null,true,"PLC, I/O's, HMI, RTD, VFD","For 7–9 axis machines"],
+  ["2020122","4 CH. TEMP. CARD","FX5-4LC","MITSUBISHI",7,"MANUAL","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD","Qty ≈ Tracks/1.5"],
+  ["2240009","8 AXIS SIMPLE MOTION CARD","FX5-80SSC-S","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4100058","CONVERTER MODULE","FX5-CNV-BC","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["2030464","65CM CABLE","FX5-65ECA","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4100057","POWER SUPPLY","FX5-1PSU-5V","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4060513","10 INCH HMI","GS2110-WTBD","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["2050435","4 CH. ANALOG OUTPUT CARD","FX5-4DA-ADP","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["2110146","CONNECTOR","LD77MHIOCON","MITSUBISHI",1,"FIXED","FX5",null,9,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  // ── PLC, I/O's, HMI, RTD, VFD — iQ-R ──
+  ["4010222","16 AXIS MOTION CONTROLLER","R16MTCPU","MITSUBISHI",1,"FIXED","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4010223","IQR PLC, 40K STEP","R04ENCPU","MITSUBISHI",1,"FIXED","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4100055","CPU POWER SUPPLY","R61P","MITSUBISHI",1,"FIXED","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4010224","12 SLOT CHASSIS","R312B","MITSUBISHI",1,"FIXED","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4010225","4 CH. RTD INPUT CARD","R60TCRT4","MITSUBISHI",7,"MANUAL","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD","Qty ≈ Tracks"],
+  ["4010226","MODULAR IO HEADER MODULE","M-CCB-H","MITSUBISHI",1,"FIXED","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4010227","16 CH. DI CARD","M-16D","MITSUBISHI",5,"MANUAL","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["4010229","16 CH. DO CARD","M-16T","MITSUBISHI",3,"MANUAL","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["NEW-HMI-15","HMI 15 INCH","GT3715-FHCBD","MITSUBISHI",1,"FIXED","iQ-R",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["NEW-8SLOT","8 SLOT BASE RACK","R38B","MITSUBISHI",1,"FIXED","iQ-R",null,null,"Continuous","FLOWMETER",false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["NEW-RJHD","IQ-R REMOTE HEAD MODULE","RJ72GF15-T2","MITSUBISHI",1,"FIXED","iQ-R",null,null,"Continuous","FLOWMETER",false,"PLC, I/O's, HMI, RTD, VFD",""],
+  ["NEW-HSC","2-CH HIGH SPEED COUNTER MODULE","R62P2","MITSUBISHI",5,"MANUAL","iQ-R",null,null,null,"FLOWMETER",false,"PLC, I/O's, HMI, RTD, VFD","For Flow Meter"],
+  // ── BOTH families ──
+  ["4040022","DYNAMIC BRAKING RESISTOR, 13 OHMS, 500W","—","RECKON",2,"FIXED","BOTH",null,null,null,null,true,"PLC, I/O's, HMI, RTD, VFD","HORZ.+VERT. Regen"],
+  ["2040140","1HP VFD","FR-D740-022-E16","MITSUBISHI",2,"MANUAL","BOTH",null,null,null,null,false,"PLC, I/O's, HMI, RTD, VFD","2 base; add per function"],
+  // ── SERVO AMPLIFIERS & MOTORS ──
+  ["2050391","3KW SERVO AMPLIFIER","MR-JE-300B","MITSUBISHI",2,"MANUAL","BOTH",null,null,null,null,false,"SERVO AMPLIFIERS & MOTORS","HORZ/VERT/FILLING axes"],
+  ["4060641","3KW SERVO MOTOR, 14.3NM, 3000RPM, W/O KEYWAY","HG-SN302J","MITSUBISHI",2,"MANUAL","BOTH",null,null,null,null,false,"SERVO AMPLIFIERS & MOTORS",""],
+  ["4030012","2KW SERVO AMPLIFIER","MR-JE-200B","MITSUBISHI",3,"MANUAL","BOTH",null,null,null,null,false,"SERVO AMPLIFIERS & MOTORS","ROTARY/PULLING axes"],
+  ["4060525","2KW SERVO MOTOR, 9.55NM, 2000RPM, W/O KEYWAY","HG-SN202J","MITSUBISHI",1,"MANUAL","BOTH",null,null,null,null,false,"SERVO AMPLIFIERS & MOTORS",""],
+  ["2050388","1.5KW SERVO MOTOR, 7.16NM, W/O KEYWAY","HG-SN152J","MITSUBISHI",1,"MANUAL","BOTH",null,null,null,null,false,"SERVO AMPLIFIERS & MOTORS","Rotary valve"],
+  ["4060620","1.5KW SERVO MOTOR, 7.16NM, WITH KEYWAY","HG-SN152JK","MITSUBISHI",1,"MANUAL","BOTH",null,null,null,null,false,"SERVO AMPLIFIERS & MOTORS","Pulling axis"],
+  ["4120007","0.7KW SERVO AMPLIFIER","MR-JE-70B","MITSUBISHI",1,"FIXED","BOTH",null,null,null,"PERFORATION",false,"SERVO AMPLIFIERS & MOTORS","Perforation axis"],
+  ["4120009","0.7KW SERVO MOTOR, 3000RPM, 2.4NM, WITH KEYWAY","HG-KN73JK","MITSUBISHI",1,"FIXED","BOTH",null,null,null,"PERFORATION",false,"SERVO AMPLIFIERS & MOTORS",""],
+  ["NEW-400W-AMP","400W SERVO AMPLIFIER","MR-J4-40B","MITSUBISHI",1,"MANUAL","iQ-R",null,null,"Continuous","FLOWMETER",false,"SERVO AMPLIFIERS & MOTORS",""],
+  ["NEW-400W-MOT","400W SERVO MOTOR, 3000 r/min","HG-KR43","MITSUBISHI",1,"MANUAL","iQ-R",null,null,"Continuous","FLOWMETER",false,"SERVO AMPLIFIERS & MOTORS",""],
+  // ── SERVO ENCODER CABLES ──
+  ["2030328","ENCODER CABLE HG-SN/JR/SR 5MTR 1KW-3KW","MR-J3ENSCBL5M-L","MITSUBISHI",5,"AXES","BOTH",null,null,null,null,false,"SERVO ENCODER CABLES","Qty = Axes"],
+  ["2030449","ENCODER CABLE HG-SN/JR/SR 10MTR 0.75KW","MR-J3ENCBL10M-A2-L","MITSUBISHI",1,"FIXED","BOTH",null,null,null,null,true,"SERVO ENCODER CABLES","For perforation/remote"],
+  // ── SERVO POWER CONNECTORS & CABLES ──
+  ["2110119","POWER CABLE CONNECTOR FOR 2KW-3KW","MS3106F2222S+TB","MITSUBISHI",3,"MANUAL","BOTH",null,null,null,null,false,"SERVO POWER CONNECTORS & CABLES","Qty = 2KW+3KW axes"],
+  ["2050389","POWER CABLE CONNECTOR FOR 1KW-1.5KW","MS3106F1810S+TB","MITSUBISHI",2,"MANUAL","BOTH",null,null,null,null,false,"SERVO POWER CONNECTORS & CABLES","Qty = 1-1.5KW axes"],
+  ["4060594","POWER CABLE 0.3 MTR FOR 0.7KW","MR-PWS1CBL03M-A2-L","MITSUBISHI",1,"FIXED","BOTH",null,null,null,null,true,"SERVO POWER CONNECTORS & CABLES","Perforation axis"],
+  // ── SSCNET CABLES & SERVO BATTERY ──
+  ["4060430","SSCNET CABLE 5 MTR","MR-J3BUS5M-A","MITSUBISHI",1,"FIXED","BOTH",null,null,null,null,false,"SSCNET CABLES & SERVO BATTERY","1 per BOM"],
+  ["2030329","SSCNET CABLE 0.5 MTR","MR-J3BUS05M","MITSUBISHI",5,"AXES_MINUS_1","BOTH",null,null,null,null,false,"SSCNET CABLES & SERVO BATTERY","Qty = Axes − 1"],
+  ["2050390","BATTERY SET FOR MR-J4/JE SERVO AMPLIFIER","MR-BAT6V1SET","MITSUBISHI",6,"AXES","BOTH",null,null,null,null,false,"SSCNET CABLES & SERVO BATTERY","Qty = Axes"],
+  // ── ELECTRICAL SECTIONS ──
+  ["2160519","MULTI FUNCTION METER / ENERGY METER","EMPOWER","TRINITY TOUCH",1,"FIXED","BOTH",null,null,null,null,true,"ENERGY METER",""],
+  ["2160587","CURRENT TRANSFORMER 3-IN-1, 100:5A","XMER 3PH 105/21","RISHAB",1,"FIXED","BOTH",null,null,null,null,true,"ENERGY METER",""],
+  ["NEW-SMPS","INDUSTRIAL POWER SUPPLY DIN RAIL, 240W, 24V/10A","RPS240-24-CE","SELEC",1,"FIXED","BOTH",null,null,null,null,true,"SMPS",""],
+  ["NEW-PLCRELAY","ELECTROMECHANICAL PLC RELAY 1 PDT, 24VDC","PLC-RSC-24DC/21","PHOENIX CONTACT",24,"MANUAL","BOTH",null,null,null,null,true,"TERMINAL SOLID STATE RELAY",""],
+  ["2070009","8 PIN RELAY 24VDC","MY2N","OMRON",3,"MANUAL","BOTH",null,null,null,null,true,"RELAYS",""],
+  ["2070030","8 PIN RELAY BASE","P4F-OBA V","OMRON",3,"MANUAL","BOTH",null,null,null,null,true,"RELAYS",""],
+  ["280034","MCB, 2P, C6A, 10KA, C-CURVE","SB202 M-C10","ABB",1,"FIXED","BOTH",null,null,null,null,true,"MCBS",""],
+  ["NEW-MCB-3P-C32","MCB, 3P, C32A, 10KA, C-CURVE","SB203 M-C32","ABB",1,"FIXED","BOTH",null,null,null,null,true,"MCBS",""],
+  ["280006","MCB, 1P, C6A, 10KA, C-CURVE","SB201 M-C6","ABB",1,"FIXED","BOTH",null,null,null,null,true,"MCBS",""],
+  ["280077","MCB, 1P, C10A, 10KA, B-CURVE","SB201 M-B10","ABB",8,"MANUAL","BOTH",null,null,null,null,true,"MCBS","Qty = heater zones"],
+  ["2100272","MCB, 3P, C63A, 10KA, C-CURVE","SB203 M-C63","ABB",1,"FIXED","BOTH",null,null,null,null,true,"MCBS",""],
+  ["NEW-MPCB-16","MPCB, 3P, 10A-16A","MS116-16","ABB",2,"MANUAL","BOTH",null,null,null,null,true,"MPCBS",""],
+  ["NEW-MPCB-10","MPCB, 3P, 6.3A-10A","MS116-10","ABB",3,"MANUAL","BOTH",null,null,null,null,true,"MPCBS",""],
+  ["NEW-MPCB-2.5","MPCB, 3P, 1.6A-2.5A","MS116-2.5","ABB",2,"MANUAL","BOTH",null,null,null,null,true,"MPCBS",""],
+  ["NEW-RCCB","RCCB, 4P, 63A, 30mA","FB204 AC-80/0.03","ABB",1,"FIXED","BOTH",null,null,null,null,true,"RCCB",""],
+  ["NEW-MCCB","MCCB, 4P, 63A, 25KA/TMF","XT1C 160 TMD 63-1000 4p F F","ABB",1,"FIXED","BOTH",null,null,null,null,true,"MCCB",""],
+  ["NEW-CONT-65A","CONTACTOR 3P, AC-3 65A, COIL 230VAC, 1NC+1NO","A63-30-11-80","ABB",1,"FIXED","BOTH",null,null,null,null,true,"CONTACTOR",""],
+  ["2010264","SAFETY CONTACTOR, 3P, 40A, 18.5KW, 24VDC","LC1D40BD","SCHNEIDER",2,"FIXED","BOTH",null,null,null,null,true,"CONTACTOR",""],
+  ["2060046","THREE PHASE MONITORING RELAY DIGITAL TYPE","DMS12099","GIC",1,"FIXED","BOTH",null,null,null,null,true,"PHASE MONITORING RELAY",""],
+  ["2060024","SSR DC TO AC, 25AMP, SMALL SIZE","808 ZDA 48 2500","UNISON",28,"MANUAL","BOTH",null,null,null,null,true,"SSRS","Qty = heater zones"],
+  ["2060013","HEATSINK 12 AMP, WITH SCREW","G-30","UNISON",28,"MANUAL","BOTH",null,null,null,null,true,"SSRS","Qty = SSR count"],
+  ["2020059","DISCONNECTOR SWITCH 32A (BLACK)","PE-32/EA/SVB-SW/HI11","SIEMENS/EATON",1,"FIXED","BOTH",null,null,null,null,true,"DISCONNECTOR SWITCH",""],
+  ["208080","DISCONNECTOR SWITCH 63A (RED)","P3-63/EA/SVB","EATON",1,"FIXED","BOTH",null,null,null,null,true,"DISCONNECTOR SWITCH",""],
+  ["2050517","3 PIN SOCKET, DIN RAIL, 250VAC, 6A","Socket - EO-D/UT","PHOENIX CONTACT",1,"FIXED","BOTH",null,null,null,null,true,"3 PIN SOCKET",""],
+  ["4080024","WEB GUIDING COMPONENT","WSS 21","E+L",1,"FIXED","BOTH",null,null,null,null,true,"WEB ALIGNER",""],
+  ["4070153","ULTRASONIC SENSOR FOR HOPPER LEVEL","UC2000-30GM-E6R-V15","P&F",1,"FIXED","BOTH",null,null,null,null,true,"HOPPER LEVEL SENSOR",""],
+  ["4070100","HOPPER LEVEL SENSOR","NCS-L11/PNP/M12NCS250","ANDERSON NEGGLE",1,"FIXED","BOTH",null,null,null,null,true,"HOPPER LEVEL SENSOR",""],
+  ["NEW-XFMR","TRANSFORMER 17KVA, 3PH IN 380/400/415V, OUT 200/220V","KRYKARD","KRYKARD",1,"FIXED","BOTH",null,null,null,null,true,"TRANSFORMER",""],
+  ["2160498","AIR CONDITIONER 500W (PANEL COOLING)","SK3370320","RITTAL",1,"FIXED","BOTH",null,null,null,null,true,"AIR CONDITONER",""],
+  ["NEW-EMI","EMC/RFI LINE FILTER, 3P, 50A, 520/300VAC","MF 423 3 3D,50A","EMI SOLUTIONS",1,"FIXED","BOTH",null,null,null,null,true,"EMI FILTER",""],
+  ["2070098","SAFETY RELAY","RLY3-EMSS300","SICK",1,"FIXED","BOTH",null,null,null,null,true,"SAFETY RELAYS & SWITCHES",""],
+  ["2020092","SAFETY SWITCH","I17-SA213","SICK",7,"MANUAL","BOTH",null,null,null,null,true,"SAFETY RELAYS & SWITCHES","Qty = guarded doors"],
+  ["2020093","SAFETY SWITCH ACTUATOR KEY","IE16-F2","SICK",7,"MANUAL","BOTH",null,null,null,null,true,"SAFETY RELAYS & SWITCHES",""],
+  ["2140017","RTD SENSOR, 4MM DIA., 50MM, WITH 2MTR WIRE","PT-100","MARATHON",30,"MANUAL","BOTH",null,null,null,null,true,"RTD SENSOR & HEATERS","Qty = heat zones × 2 + spare"],
+  ["2130317","HEATER, 10MM DIA., 175MM, 300W, 220V","MARATHON","MARATHON",26,"MANUAL","BOTH",null,null,null,null,true,"RTD SENSOR & HEATERS",""],
+  ["2130318","HEATER, 12.75MM DIA., 690MM, 750W, 220V","MARATHON","MARATHON",4,"MANUAL","BOTH",null,null,null,null,true,"RTD SENSOR & HEATERS",""],
+  ["2208092","UPS 600VA","UPS PROTECTOR 725","INTEX",1,"FIXED","BOTH",null,null,null,null,false,"UPS",""],
+  ["4070002","REGISTRATION MARK SENSOR","DK-20 (418074)","P&F",2,"MANUAL","BOTH",null,null,null,null,true,"SENSORS","Per web path"],
+  ["2160383","PROXIMITY SENSOR (NO)","NBB5-18GM50-E2-V1","P&F",7,"MANUAL","BOTH",null,null,null,null,true,"SENSORS",""],
+  ["4070125","PROXIMITY SENSOR (NO) WITH CABLE 2.5MTR","NBB5-18GM50-E2","P&F",2,"MANUAL","BOTH",null,null,null,null,true,"SENSORS",""],
+  ["NEW-PROX-NC","PROXIMITY SENSOR (NC)","NBB5-18GM50-E3-V1","P&F",2,"FIXED","BOTH",null,null,null,null,true,"SENSORS",""],
+  ["4070020","SENSOR CABLE, STRAIGHT TYPE 10MTR","V1-G-10M-PVC","P&F",2,"MANUAL","BOTH",null,null,null,null,true,"SENSORS",""],
+  ["2030229","SENSOR CABLE L-TYPE 5MTR","V1-W-5M-PVC","P&F",9,"MANUAL","BOTH",null,null,null,null,true,"SENSORS",""],
+  ["2030253","SENSOR CABLE L-TYPE 10MTR","V1-W-10M-PVC","P&F",1,"MANUAL","BOTH",null,null,null,null,true,"SENSORS",""],
+  ["4070222","LUBRICATION SENSOR","JG-GP18-10(30)DP3","JIGO",1,"FIXED","BOTH",null,null,null,null,true,"SENSORS",""],
+  ["2220046","TOWER LIGHT 3 STAGE WITH BUZZER, 24VDC","TL50B-3AS","BANNER",1,"FIXED","BOTH",null,null,null,null,false,"TOWER LIGHT",""],
+];
+
+const SECTION_ORDER = [
+  "PLC, I/O's, HMI, RTD, VFD",
+  "SERVO AMPLIFIERS & MOTORS",
+  "SERVO ENCODER CABLES",
+  "SERVO POWER CONNECTORS & CABLES",
+  "SSCNET CABLES & SERVO BATTERY",
+  "ENERGY METER","SMPS","TERMINAL SOLID STATE RELAY","RELAYS",
+  "MCBS","MPCBS","RCCB","MCCB","CONTACTOR","PHASE MONITORING RELAY",
+  "SSRS","DISCONNECTOR SWITCH","3 PIN SOCKET",
+  "WEB ALIGNER","HOPPER LEVEL SENSOR","TRANSFORMER",
+  "AIR CONDITONER","EMI FILTER",
+  "SAFETY RELAYS & SWITCHES","RTD SENSOR & HEATERS",
+  "UPS","SENSORS","TOWER LIGHT"
+];
+
+// Index: 0=erp, 1=desc, 2=part, 3=mfr, 4=baseQty, 5=formula, 6=plcFamily,
+//        7=minAxes, 8=maxAxes, 9=reqMotion, 10=reqFeature, 11=isOpt, 12=section, 13=remarks
+
+let currentBOM = [];
+let activeSectionFilter = "ALL";
+
+function detectPLCFamily(axes, speed, motion) {
+  if (axes >= 10 || speed >= 160 || (motion === 'Continuous' && axes >= 12)) return 'iQ-R';
+  return 'FX5';
+}
+
+function updatePLCBadge() {
+  const axes = parseInt(document.getElementById('axesCount').value) || 0;
+  const speed = parseInt(document.getElementById('speedPPM').value) || 0;
+  const motion = document.getElementById('motionType').value;
+  const fam = detectPLCFamily(axes, speed, motion);
+  const badge = document.getElementById('plcFamilyBadge');
+  badge.textContent = fam === 'FX5' ? 'FX5 Series' : 'iQ-R Series';
+  badge.className = 'plc-badge ' + (fam === 'FX5' ? 'plc-fx5' : 'plc-iqr');
+}
+
+['axesCount','speedPPM','motionType'].forEach(id =>
+  document.getElementById(id).addEventListener('input', updatePLCBadge)
+);
+
+function calcQty(item, axes) {
+  const formula = item[5];
+  if (formula === 'AXES') return axes;
+  if (formula === 'AXES_MINUS_1') return Math.max(1, axes - 1);
+  return item[4]; // FIXED or MANUAL
+}
+
+function featureSelected(feat) {
+  const map = {
+    'TRAVERSE': 'feat-traverse',
+    'FLOWMETER': 'feat-flowmeter',
+    'PERFORATION': 'feat-perforation',
+    'HIGH_SPEED': 'feat-highspeed',
+  };
+  const id = map[feat];
+  return id ? document.getElementById(id).checked : false;
+}
+
+function generateBOM() {
+  const axes = parseInt(document.getElementById('axesCount').value) || 6;
+  const tracks = parseInt(document.getElementById('tracksCount').value) || 12;
+  const speed = parseInt(document.getElementById('speedPPM').value) || 80;
+  const motion = document.getElementById('motionType').value;
+  const plcFamily = detectPLCFamily(axes, speed, motion);
+  const panelLoc = document.getElementById('panelLocation').value;
+
+  // Filter items
+  const bom = [];
+  for (const item of MASTER_ITEMS) {
+    const [erp,desc,part,mfr,baseQty,formula,plcFam,minAx,maxAx,reqMotion,reqFeat,isOpt,section] = item;
+
+    // PLC family filter
+    if (plcFam !== 'BOTH' && plcFam !== plcFamily) continue;
+
+    // Axes range filter
+    if (minAx !== null && axes < minAx) continue;
+    if (maxAx !== null && axes > maxAx) continue;
+
+    // Motion type filter
+    if (reqMotion && reqMotion !== motion) continue;
+
+    // Required feature filter
+    if (reqFeat && !featureSelected(reqFeat)) continue;
+
+    // Skip truly optional items (not added unless engineer selects)
+    // We still include optional items but mark them
+    const qty = calcQty(item, axes);
+    bom.push({...{
+      erp, desc, part, mfr, baseQty, formula, plcFam,
+      minAx, maxAx, reqMotion, reqFeat, isOpt, section,
+      remarks: item[13]
+    }, qty, plcFamily: plcFam});
+  }
+
+  currentBOM = bom;
+  renderBOM(bom, axes, tracks, speed, plcFamily, panelLoc, motion);
+}
+
+function renderBOM(bom, axes, tracks, speed, plcFamily, panelLoc, motion) {
+  const dfNum = document.getElementById('dfNum').value || 'New BOM';
+  const model = document.getElementById('machineModel').value;
+  const side = document.getElementById('sideSelect').value;
+
+  // Show elements
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('bomContent').style.display = 'block';
+  document.getElementById('configBar').style.display = 'flex';
+
+  // Config chips
+  document.getElementById('chipDF').textContent = dfNum;
+  document.getElementById('chipModel').textContent = model;
+  document.getElementById('chipAxes').textContent = `${axes} Axis`;
+  document.getElementById('chipTracks').textContent = `${tracks} Track`;
+  document.getElementById('chipSpeed').textContent = `${speed} PPM`;
+  const plcChip = document.getElementById('chipPLC');
+  plcChip.textContent = plcFamily === 'FX5' ? 'FX5 Series' : 'iQ-R Series';
+  plcChip.className = 'config-chip ' + (plcFamily === 'FX5' ? 'fx5' : 'iqr');
+  const motChip = document.getElementById('chipMotion');
+  if (motion !== '—') { motChip.textContent = motion; motChip.style.display=''; }
+  else motChip.style.display = 'none';
+
+  // Stats
+  const totalItems = bom.length;
+  const totalQty = bom.reduce((s, i) => s + (parseInt(i.qty) || 0), 0);
+  const manualCount = bom.filter(i => i.formula === 'MANUAL').length;
+  const newErpCount = bom.filter(i => i.erp.startsWith('NEW')).length;
+  const sections = [...new Set(bom.map(i => i.section))];
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="val">${totalItems}</div><div class="lbl">Line Items</div></div>
+    <div class="stat-card"><div class="val">${totalQty}</div><div class="lbl">Total Qty</div></div>
+    <div class="stat-card"><div class="val">${sections.length}</div><div class="lbl">Categories</div></div>
+    <div class="stat-card"><div class="val" style="color:var(--warn)">${manualCount}</div><div class="lbl">Manual Review</div></div>
+    <div class="stat-card"><div class="val" style="color:var(--red)">${newErpCount}</div><div class="lbl">Missing ERP</div></div>
+  `;
+
+  // Action banner
+  const banner = document.getElementById('actionBanner');
+  const warns = [];
+  if (newErpCount > 0) warns.push(`⚠️ ${newErpCount} items need ERP codes assigned (shown in red)`);
+  if (manualCount > 0) warns.push(`⚠️ ${manualCount} items marked MANUAL — review quantities before finalizing`);
+  if (warns.length) {
+    banner.style.display = '';
+    banner.innerHTML = '<strong>⚠️ Action Required Before Finalizing BOM</strong>' + warns.map(w => `<div>${w}</div>`).join('');
+  } else {
+    banner.style.display = 'none';
+  }
+
+  // Section filter pills
+  const pillsDiv = document.getElementById('sectionPills');
+  pillsDiv.innerHTML = `<button class="pill active" onclick="filterSection('ALL',this)">All (${totalItems})</button>` +
+    SECTION_ORDER.filter(s => sections.includes(s)).map(s => {
+      const cnt = bom.filter(i => i.section === s).length;
+      return `<button class="pill" onclick="filterSection('${s}',this)">${s} (${cnt})</button>`;
+    }).join('');
+
+  activeSectionFilter = 'ALL';
+
+  // BOM table body
+  const tbody = document.getElementById('bomBody');
+  tbody.innerHTML = '';
+  let sno = 0;
+
+  for (const sec of SECTION_ORDER) {
+    const secItems = bom.filter(i => i.section === sec);
+    if (!secItems.length) continue;
+
+    // Section row
+    const secTr = document.createElement('tr');
+    secTr.className = 'sec-row';
+    secTr.setAttribute('data-section', sec);
+    secTr.innerHTML = `<td colspan="10">${sec} <span>(${secItems.length} items)</span></td>`;
+    tbody.appendChild(secTr);
+
+    for (const item of secItems) {
+      sno++;
+      const isNew = item.erp.startsWith('NEW');
+      const isManual = item.formula === 'MANUAL';
+      const isAuto = item.formula === 'AXES' || item.formula === 'AXES_MINUS_1';
+
+      const tr = document.createElement('tr');
+      tr.className = 'data-row';
+      tr.setAttribute('data-section', sec);
+      tr.style.background = item.isOpt ? '#FAFAFA' : '';
+
+      const erpHtml = isNew
+        ? `<span class="erp-new" title="ERP code not yet assigned">${item.erp}</span>`
+        : `<span class="erp-cell">${item.erp}</span>`;
+
+      const formulaTag = {
+        'FIXED': '<span class="formula-tag tag-fixed">FIXED</span>',
+        'AXES': '<span class="formula-tag tag-axes">AXES</span>',
+        'AXES_MINUS_1': '<span class="formula-tag tag-axes1">AXES−1</span>',
+        'MANUAL': '<span class="formula-tag tag-manual">MANUAL ✎</span>',
+      }[item.formula] || '';
+
+      const plcDot = item.plcFamily === 'FX5' ? '<span class="plc-dot dot-fx5"></span>FX5'
+                   : item.plcFamily === 'iQ-R' ? '<span class="plc-dot dot-iqr"></span>iQ-R'
+                   : '<span class="plc-dot dot-both"></span>Both';
+
+      const qtyClass = isAuto ? 'auto' : isManual ? 'manual' : '';
+      const optStyle = item.isOpt ? 'color:#999;' : '';
+
+      tr.innerHTML = `
+        <td style="text-align:center;font-weight:700;${optStyle}">${sno}</td>
+        <td>${erpHtml}</td>
+        <td class="desc-cell" style="${optStyle}">${item.desc}${item.isOpt ? ' <em style="font-size:10px;color:#aaa;">(opt)</em>' : ''}</td>
+        <td class="part-cell">${item.part}</td>
+        <td style="text-align:center;">${item.mfr}</td>
+        <td style="text-align:center;">
+          <input type="number" class="qty-input ${qtyClass}" value="${item.qty}" min="0" onchange="updateQty(this,${sno-1})" title="${item.formula}: ${isAuto ? 'auto-calculated' : 'review required'}">
+        </td>
+        <td style="text-align:center;">NO(S)</td>
+        <td class="remarks-cell">${item.remarks || ''}</td>
+        <td style="text-align:center;">${formulaTag}</td>
+        <td style="text-align:center;font-size:11px;">${plcDot}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+}
+
+function filterSection(section, btn) {
+  activeSectionFilter = section;
+  document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+
+  document.querySelectorAll('#bomBody tr').forEach(tr => {
+    if (section === 'ALL') { tr.style.display = ''; return; }
+    tr.style.display = tr.getAttribute('data-section') === section ? '' : 'none';
+  });
+}
+
+function updateQty(input, idx) {
+  if (currentBOM[idx]) currentBOM[idx].qty = parseInt(input.value) || 0;
+}
+
+function resetForm() {
+  document.getElementById('dfNum').value = '';
+  document.getElementById('machineModel').value = 'SPM1200L';
+  document.getElementById('axesCount').value = 6;
+  document.getElementById('tracksCount').value = 12;
+  document.getElementById('speedPPM').value = 80;
+  document.getElementById('motionType').value = '—';
+  document.getElementById('sideSelect').value = '—';
+  document.getElementById('panelLocation').value = 'Panel With Machine';
+  ['feat-traverse','feat-flowmeter','feat-perforation','feat-highspeed'].forEach(id => {
+    document.getElementById(id).checked = false;
+  });
+  updatePLCBadge();
+  document.getElementById('emptyState').style.display = '';
+  document.getElementById('bomContent').style.display = 'none';
+  document.getElementById('configBar').style.display = 'none';
+}
+
+function exportCSV() {
+  const dfNum = document.getElementById('dfNum').value || 'BOM';
+  const axes = document.getElementById('axesCount').value;
+  const tracks = document.getElementById('tracksCount').value;
+  const speed = document.getElementById('speedPPM').value;
+  const model = document.getElementById('machineModel').value;
+
+  const rows = [
+    [`"${dfNum}, ${model}, ${axes} AXIS, ${tracks} TRACKS, SPEED ${speed} PPM, MITSUBISHI"`],
+    ["S.No.","ERP Code","Description","Part No / Model No","Manufacturer","Qty","UOM","Section","Formula","Remarks"]
+  ];
+  let sno = 0;
+  for (const sec of SECTION_ORDER) {
+    const secItems = currentBOM.filter(i => i.section === sec);
+    if (!secItems.length) continue;
+    rows.push([`"${sec}"`, '', '', '', '', '', '', '', '', '']);
+    for (const item of secItems) {
+      sno++;
+      rows.push([sno, item.erp, `"${item.desc}"`, `"${item.part}"`, item.mfr, item.qty, 'NO(S)', `"${item.section}"`, item.formula, `"${item.remarks}"`]);
+    }
+  }
+
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${dfNum.replace(/[^a-zA-Z0-9\-]/g,'_')}_Automation_BOM.csv`;
+  a.click();
+}
+
+function copyBOM() {
+  let text = '';
+  document.querySelectorAll('#bomBody tr').forEach(tr => {
+    if (tr.classList.contains('sec-row')) {
+      text += '\n' + tr.querySelector('td').textContent + '\n';
+    } else {
+      const cells = tr.querySelectorAll('td');
+      const row = Array.from(cells).map(c => c.textContent.trim()).join('\t');
+      text += row + '\n';
+    }
+  });
+  navigator.clipboard.writeText(text).then(() => alert('BOM copied to clipboard!'));
+}
+
+// Initialize
+updatePLCBadge();
+// Auto-generate on load with defaults for demo
+generateBOM();
+</script>
+</body>
+</html>

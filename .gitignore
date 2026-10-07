@@ -78,3 +78,8 @@ Thumbs.db
 
 # ── AI key config (real key lives only on the server) ────────────────
 application/config/chat_ai.php
+
+application/config/sap_local.php
+googlecalender/mythical-range-*.json
+**/error_log
+App/
