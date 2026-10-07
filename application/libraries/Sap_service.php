@@ -137,7 +137,7 @@ class Sap_service
             'Phone1' => $this->null_if_empty(isset($row['contact_no']) ? $row['contact_no'] : ''),
             'Phone2' => $this->null_if_empty(isset($row['alt_contact']) ? $row['alt_contact'] : ''),
             'Fax' => null,
-            'ContactPerson' => $this->null_if_empty(isset($row['customer_name']) ? $row['customer_name'] : ''),
+            'ContactPerson' => $this->contact_name(isset($row['customer_name']) ? $row['customer_name'] : ''),
             'EmailAddress' => $this->null_if_empty(isset($row['email']) ? $row['email'] : ''),
             'PayTermsGrpCode' => $this->int_or_null(sap_customer_pay_terms_group_code),
             'CreditLimit' => $this->float_or_null(isset($row['credit_limit']) ? $row['credit_limit'] : null),
@@ -153,7 +153,11 @@ class Sap_service
                 $this->build_address_payload($row, 'bo_BillTo', $country_code, $bill_state_code, $gst, 'bill_'),
                 $this->build_address_payload($row, 'bo_ShipTo', $country_code, $ship_state_code, $gst, 'ship_')
             ),
-            'ContactEmployees' => array(),
+            'ContactEmployees' => $this->build_contact_employees(
+                isset($row['customer_name']) ? $row['customer_name'] : '',
+                isset($row['contact_no']) ? $row['contact_no'] : '',
+                isset($row['email']) ? $row['email'] : ''
+            ),
             'BPBankAccounts' => array(),
             'BPFiscalTaxIDCollection' => $pan !== '' ? array(array('TaxId0' => $pan, 'AddrType' => 'bo_BillTo')) : array()
         );
@@ -186,7 +190,7 @@ class Sap_service
             'Phone1' => $this->null_if_empty($base['contact_no']),
             'Phone2' => $this->null_if_empty($base['alt_contact']),
             'Fax' => null,
-            'ContactPerson' => $this->null_if_empty($base['customer_name']),
+            'ContactPerson' => $this->contact_name($base['customer_name']),
             'EmailAddress' => $this->null_if_empty($base['email']),
             'PayTermsGrpCode' => $this->int_or_null(sap_customer_pay_terms_group_code),
             'CreditLimit' => null,
@@ -202,7 +206,7 @@ class Sap_service
                 $this->build_simple_address_payload($base, 'bo_BillTo', $country_code, $tax_number, $state_code),
                 $this->build_simple_address_payload($base, 'bo_ShipTo', $country_code, $tax_number, $state_code)
             ),
-            'ContactEmployees' => array(),
+            'ContactEmployees' => $this->build_contact_employees($base['customer_name'], $base['contact_no'], $base['email']),
             'BPBankAccounts' => array(),
             'BPFiscalTaxIDCollection' => $pan !== '' ? array(array('TaxId0' => $pan, 'AddrType' => 'bo_BillTo')) : array()
         );
@@ -534,6 +538,34 @@ class Sap_service
         }
 
         return $out;
+    }
+
+    // SAP requires the default contact person (ContactPerson) to exist in ContactEmployees; names are limited to 50 chars.
+    private function contact_name($name)
+    {
+        $name = trim((string) $name);
+        if ($name === '' || $name === '-') {
+            return null;
+        }
+
+        return function_exists('mb_substr') ? mb_substr($name, 0, 50) : substr($name, 0, 50);
+    }
+
+    private function build_contact_employees($name, $phone, $email)
+    {
+        $name = $this->contact_name($name);
+        if ($name === null) {
+            return array();
+        }
+
+        $email = trim((string) $email);
+        $phone = trim((string) $phone);
+
+        return array(array(
+            'Name' => $name,
+            'Phone1' => ($phone !== '' && $phone !== '-') ? $phone : null,
+            'E_Mail' => strpos($email, '@') !== false ? $email : null
+        ));
     }
 
     private function null_if_empty($value)
