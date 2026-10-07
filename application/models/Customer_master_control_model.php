@@ -591,11 +591,30 @@ class Customer_master_control_model extends CI_Model
             );
         }
 
+        $this->push_update_to_sap('marketing', $record_id);
+
         return array(
             'success' => true,
             'changed' => true,
             'message' => 'Marketing customer information updated successfully.'
         );
+    }
+
+    // Sends the edit to SAP for customers already synced there; a SAP problem never blocks the PMS save.
+    private function push_update_to_sap($source, $record_id)
+    {
+        try {
+            $this->load->library('Sap_service');
+            $result = $source === 'spares'
+                ? $this->sap_service->update_spares_customer($record_id)
+                : $this->sap_service->update_marketing_customer($record_id);
+
+            if (empty($result['success']) && empty($result['skipped'])) {
+                log_message('error', 'SAP customer update failed for ' . $source . ' customer ' . (int) $record_id . ': ' . (isset($result['message']) ? $result['message'] : 'Unknown error'));
+            }
+        } catch (Exception $e) {
+            log_message('error', 'SAP customer update error for ' . $source . ' customer ' . (int) $record_id . ': ' . $e->getMessage());
+        }
     }
 
     public function update_spares_customer($record_id, $changed_by, $payload = array())
@@ -693,6 +712,8 @@ class Customer_master_control_model extends CI_Model
                 'message' => 'Could not update the spares customer right now. Please try again.'
             );
         }
+
+        $this->push_update_to_sap('spares', $record_id);
 
         return array(
             'success' => true,

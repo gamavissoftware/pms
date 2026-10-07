@@ -309,6 +309,7 @@ class Customer extends CI_Controller {
 		if($result)
 			
 		{
+			$this->sync_customer_update_to_sap('marketing', $this->uri->segment(3));
 			$this->session->set_flashdata('message','<div class="alert alert-info">Thank you, record successfully updated.</div>');
 			redirect(page_url.'Customer/customer_view');
 						
@@ -10452,6 +10453,24 @@ function add_new_ajax_customer_with_multiple_Record()
 		}
 	}
 	
+	// Sends an edit of an already-synced customer to SAP; a SAP problem never blocks the PMS save.
+	private function sync_customer_update_to_sap($source, $customer_id)
+	{
+		$customer_id = (int) $customer_id;
+		if ($customer_id <= 0) {
+			return;
+		}
+
+		$this->load->library('Sap_service');
+		$result = $source === 'spares'
+			? $this->sap_service->update_spares_customer($customer_id)
+			: $this->sap_service->update_marketing_customer($customer_id);
+
+		if (empty($result['success']) && empty($result['skipped'])) {
+			log_message('error', 'SAP customer update failed for ' . $source . ' customer ' . $customer_id . ': ' . (isset($result['message']) ? $result['message'] : 'Unknown error'));
+		}
+	}
+
 	public function viewyourcustomers()
 	{
 		$this->load->view('customer/viewyourcustomers');
@@ -10691,6 +10710,7 @@ if($this->input->post('country')!==null){
 
 $this->db->where('id',$this->uri->segment(3));
 $this->db->update('customer_detail',$data);
+$this->sync_customer_update_to_sap('marketing', $this->uri->segment(3));
 
 $this->session->set_flashdata('message','<div class="alert alert-info">Thank you, record successfully updated.</div>');
 redirect(page_url.'Customer/viewyourcustomers');

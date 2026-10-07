@@ -21,20 +21,26 @@ class Sap_service
             return array('success' => true, 'skipped' => true, 'message' => 'Customer already synced to SAP.');
         }
 
+        $payload = $this->load_marketing_payload($customer_id);
+        if (empty($payload)) {
+            return array('success' => false, 'message' => 'Customer record not found.');
+        }
+
+        return $this->create_business_partner('marketing', $customer_id, $payload);
+    }
+
+    private function load_marketing_payload($customer_id)
+    {
         $row = $this->ci->db
             ->select('c.*, co.country_name, st.state_name')
             ->from('customer_detail c')
             ->join('countries co', 'co.country_id = c.country', 'left')
             ->join('states st', 'st.state_id = c.state', 'left')
-            ->where('c.id', $customer_id)
+            ->where('c.id', (int) $customer_id)
             ->get()
             ->row_array();
 
-        if (empty($row)) {
-            return array('success' => false, 'message' => 'Customer record not found.');
-        }
-
-        return $this->create_business_partner('marketing', $customer_id, $this->build_marketing_payload($row));
+        return empty($row) ? null : $this->build_marketing_payload($row);
     }
 
     public function sync_spares_customer($customer_id)
@@ -48,11 +54,21 @@ class Sap_service
             return array('success' => true, 'skipped' => true, 'message' => 'Customer already synced to SAP.');
         }
 
+        $payload = $this->load_spares_payload($customer_id);
+        if (empty($payload)) {
+            return array('success' => false, 'message' => 'Customer record not found.');
+        }
+
+        return $this->create_business_partner('spares', $customer_id, $payload);
+    }
+
+    private function load_spares_payload($customer_id)
+    {
         $this->ci->db
             ->select('c.*, co.country_name')
             ->from('spares_customers c')
             ->join('countries co', 'co.country_id = c.country_id', 'left')
-            ->where('c.customer_id', $customer_id);
+            ->where('c.customer_id', (int) $customer_id);
 
         // state_id exists only after Database/spares_customers_state_001.sql is run
         if ($this->ci->db->field_exists('state_id', 'spares_customers')) {
@@ -62,11 +78,136 @@ class Sap_service
 
         $row = $this->ci->db->get()->row_array();
 
-        if (empty($row)) {
+        return empty($row) ? null : $this->build_spares_payload($row);
+    }
+
+    /**
+     * Pushes edits of an already-synced PMS customer to SAP (PATCH BusinessPartners).
+     * Customers that were never synced (no SAP card code) are skipped so we never create duplicates of BPs that already exist in SAP.
+     */
+    public function update_marketing_customer($customer_id)
+    {
+        return $this->update_customer('marketing', (int) $customer_id);
+    }
+
+    public function update_spares_customer($customer_id)
+    {
+        return $this->update_customer('spares', (int) $customer_id);
+    }
+
+    private function update_customer($source_type, $customer_id)
+    {
+        if ($customer_id <= 0) {
+            return array('success' => false, 'message' => 'Invalid customer id.');
+        }
+
+        if (!$this->sync_table_ready() || !$this->is_configured()) {
+            return array('success' => false, 'skipped' => true, 'message' => 'SAP sync is not ready.');
+        }
+
+        $sync = $this->ci->db
+            ->select('id, sap_card_code')
+            ->from('SAP_customer_sync')
+            ->where('source_type', $source_type)
+            ->where('source_record_id', $customer_id)
+            ->where('sync_status', 'SUCCESS')
+            ->get()
+            ->row_array();
+
+        if (empty($sync['sap_card_code'])) {
+            return array('success' => true, 'skipped' => true, 'message' => 'Customer is not synced to SAP yet; nothing to update.');
+        }
+
+        $payload = $source_type === 'spares' ? $this->load_spares_payload($customer_id) : $this->load_marketing_payload($customer_id);
+        if (empty($payload)) {
             return array('success' => false, 'message' => 'Customer record not found.');
         }
 
-        return $this->create_business_partner('spares', $customer_id, $this->build_spares_payload($row));
+        $card_code = $sync['sap_card_code'];
+        $login = $this->login();
+        if (empty($login['success'])) {
+            $this->record_update_result($sync['id'], false, isset($login['message']) ? $login['message'] : 'SAP login failed.');
+            return $login;
+        }
+
+        $endpoint = "BusinessPartners('" . rawurlencode($card_code) . "')";
+        $current = $this->request('GET', $endpoint . '?$select=CardCode,CardName,ContactPerson,BPAddresses,ContactEmployees', null, $login['cookie']);
+        if (empty($current['success']) || empty($current['decoded'])) {
+            $message = isset($current['message']) ? $current['message'] : 'Could not read the SAP customer.';
+            $this->record_update_result($sync['id'], false, $message);
+            return $current;
+        }
+
+        $result = $this->request('PATCH', $endpoint, $this->build_update_payload($payload, $current['decoded'], $card_code), $login['cookie']);
+        $this->record_update_result($sync['id'], !empty($result['success']), !empty($result['success']) ? null : (isset($result['message']) ? $result['message'] : 'SAP customer update failed.'));
+
+        return $result;
+    }
+
+    // Fields PMS owns. Series, CardCode, CardType, GroupCode, currency, accounts, terms and tax-id rows are never overwritten.
+    private function build_update_payload($payload, $existing, $card_code)
+    {
+        $patch = array();
+        foreach (array('CardName', 'Phone1', 'Phone2', 'EmailAddress', 'FreeText') as $key) {
+            if (array_key_exists($key, $payload)) {
+                $patch[$key] = $payload[$key];
+            }
+        }
+        if (!empty($payload['CreditLimit'])) {
+            $patch['CreditLimit'] = $payload['CreditLimit'];
+        }
+
+        // Re-use the existing SAP address row for each address type so edits update rather than add rows
+        $existing_addresses = isset($existing['BPAddresses']) && is_array($existing['BPAddresses']) ? $existing['BPAddresses'] : array();
+        $addresses = array();
+        foreach ($payload['BPAddresses'] as $address) {
+            foreach ($existing_addresses as $candidate) {
+                if (isset($candidate['AddressType']) && $candidate['AddressType'] === $address['AddressType']) {
+                    $address['RowNum'] = $candidate['RowNum'];
+                    $address['AddressName'] = $candidate['AddressName'];
+                    $address['BPCode'] = $card_code;
+                    break;
+                }
+            }
+            $addresses[] = $address;
+        }
+        $patch['BPAddresses'] = $addresses;
+
+        // The default contact must exist in the contact list: reuse a contact with the same name, otherwise add it
+        $contact_name = isset($payload['ContactPerson']) ? $payload['ContactPerson'] : null;
+        if ($contact_name !== null) {
+            $found = false;
+            $existing_contacts = isset($existing['ContactEmployees']) && is_array($existing['ContactEmployees']) ? $existing['ContactEmployees'] : array();
+            foreach ($existing_contacts as $contact) {
+                if (isset($contact['Name']) && strcasecmp(trim($contact['Name']), $contact_name) === 0) {
+                    $found = true;
+                    $contact_name = $contact['Name'];
+                    break;
+                }
+            }
+
+            if (!$found && !empty($payload['ContactEmployees'])) {
+                $patch['ContactEmployees'] = $payload['ContactEmployees'];
+            }
+            if ($found || !empty($payload['ContactEmployees'])) {
+                $patch['ContactPerson'] = $contact_name;
+            }
+        }
+
+        return $patch;
+    }
+
+    private function record_update_result($sync_id, $ok, $message)
+    {
+        $this->ci->db->where('id', (int) $sync_id)->update('SAP_customer_sync', array(
+            'error_message' => $ok ? null : 'UPDATE FAILED: ' . $message,
+            'last_attempt_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
+        ));
+
+        if (!$ok) {
+            log_message('error', 'SAP customer update failed: ' . $message);
+        }
     }
 
     private function create_business_partner($source_type, $source_record_id, $payload)
