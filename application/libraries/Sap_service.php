@@ -492,6 +492,21 @@ class Sap_service
     }
 
     /**
+     * States to offer on forms: the SAP-matched states when SAP has states for the country, otherwise all PMS states
+     * for it (saved in PMS only, since SAP has no state codes for that country).
+     */
+    public function states_for_country($country_id)
+    {
+        $rows = $this->sap_states_for_country($country_id);
+        if (!empty($rows)) {
+            return $rows;
+        }
+
+        return $this->ci->db->select('state_id, state_name')->from('states')
+            ->where('country_id', (int) $country_id)->order_by('state_name', 'asc')->get()->result_array();
+    }
+
+    /**
      * PMS states of a country that exist in SAP (SAP_States), as state_id/state_name rows.
      * Forms use this so only states SAP will accept can be picked; empty when SAP has no states for the country.
      */

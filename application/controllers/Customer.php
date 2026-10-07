@@ -3867,11 +3867,11 @@ if($row->lead_id==0){
 
 	}
 
-	// JSON list of states for a country that also exist in SAP; used by the country/state dropdowns on customer forms.
+	// JSON list of states for a country (SAP-matched where SAP has states for it); used by the country/state dropdowns on customer forms.
 	public function states_by_country()
 	{
 		$this->load->library('Sap_service');
-		$rows = $this->sap_service->sap_states_for_country($this->input->get_post('country_id'));
+		$rows = $this->sap_service->states_for_country($this->input->get_post('country_id'));
 		$this->output->set_content_type('application/json')->set_output(json_encode($rows));
 	}
 

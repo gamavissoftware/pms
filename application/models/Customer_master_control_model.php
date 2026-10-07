@@ -46,9 +46,9 @@ class Customer_master_control_model extends CI_Model
             return array();
         }
 
-        // Only states that exist in SAP can be selected
+        // SAP-matched states where SAP has states for the country, otherwise the PMS states
         $this->load->library('Sap_service');
-        return $this->sap_service->sap_states_for_country($country_id);
+        return $this->sap_service->states_for_country($country_id);
     }
 
     public function get_marketing_brand_options()
