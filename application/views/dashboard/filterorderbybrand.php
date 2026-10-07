@@ -38,6 +38,10 @@ foreach ($leaderboard_rows as $leaderboard_row) {
 
 $top_five_share = $brand_report_summary['total_order_value'] > 0 ? ($top_five_value / $brand_report_summary['total_order_value']) * 100 : 0;
 $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $selected_period_label);
+$report_return_url = page_url . 'OrderController';
+if (!empty($_SERVER['QUERY_STRING'])) {
+    $report_return_url .= '?' . $_SERVER['QUERY_STRING'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -59,6 +63,7 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
     <link href="<?php echo assets_url; ?>css/pages.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>plugins/newselect2/select2.min.css" rel="stylesheet" type="text/css" />
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="<?php echo assets_url; ?>js/modernizr.min.js"></script>
@@ -517,6 +522,28 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
             padding-right: 14px;
         }
 
+        .select2-container {
+            width: 100% !important;
+        }
+
+        .assign-brand-note {
+            background: #eefbf7;
+            border: 1px solid #c6efe3;
+            border-radius: var(--radius-md);
+            color: #11634f;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 18px;
+            padding: 12px 14px;
+        }
+
+        .modal-po-context {
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
         .modal-content {
             border: 0;
             border-radius: 18px;
@@ -810,7 +837,7 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
                                     <td><?php echo !empty($brand_row['latest_order_date']) ? date('d-m-Y', strtotime($brand_row['latest_order_date'])) : 'NA'; ?></td>
                                     <td>
                                         <button type="button" class="btn btn-primary btn-xs action-btn view-order-details" data-brand-id="<?php echo htmlspecialchars((string) $brand_row['id'], ENT_QUOTES, 'UTF-8'); ?>" data-brand-name="<?php echo htmlspecialchars($brand_row['name'], ENT_QUOTES, 'UTF-8'); ?>">
-                                            View Orders
+                                            <?php echo ((int) $brand_row['id'] === 0) ? 'Map Brands' : 'View Orders'; ?>
                                         </button>
                                     </td>
                                 </tr>
@@ -841,6 +868,7 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
                                             <th>PO Date</th>
                                             <th>Order Added By</th>
                                             <th>Order Value</th>
+                                            <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="orderDetailsTableBody"></tbody>
@@ -851,6 +879,51 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
                             <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="assignBrandModal" tabindex="-1" role="dialog" aria-labelledby="assignBrandModalLabel">
+                <div class="modal-dialog" role="document">
+                    <form id="assignBrandForm" method="post" action="<?php echo page_url; ?>Task/brandmapping" enctype="multipart/form-data">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                                <h4 class="modal-title" id="assignBrandModalLabel">Assign Brand</h4>
+                            </div>
+                            <div class="modal-body">
+                                <div class="assign-brand-note">
+                                    Select an existing brand, or type a new brand name and press Enter to create it while saving.
+                                </div>
+                                <div id="assignBrandPoContext" class="modal-po-context"></div>
+                                <input type="hidden" id="assignBrandPoId" name="poid" value="">
+                                <input type="hidden" name="return_url" value="<?php echo htmlspecialchars($report_return_url, ENT_QUOTES, 'UTF-8'); ?>">
+
+                                <div class="form-group">
+                                    <label for="assignBrandSelect">Brand</label>
+                                    <select class="form-control brands" name="tagbrand" id="assignBrandSelect" required>
+                                        <option value="">Select Brand</option>
+                                        <?php
+                                        $brand_q = $this->db->select('id, name')->from('company_brand')->order_by('name','asc')->get();
+                                        if ($brand_q->num_rows() > 0) {
+                                            foreach ($brand_q->result() as $brand) {
+                                        ?>
+                                            <option value="<?php echo (int) $brand->id; ?>">
+                                                <?php echo htmlspecialchars(ucwords(strtolower($brand->name)), ENT_QUOTES, 'UTF-8'); ?>
+                                            </option>
+                                        <?php } } ?>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-success action-btn">
+                                    <i class="fa fa-check"></i> Save Brand
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -879,6 +952,7 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
     <script src="<?php echo assets_url; ?>plugins/datatables/buttons.print.min.js"></script>
     <script src="<?php echo assets_url; ?>plugins/datatables/dataTables.responsive.min.js"></script>
     <script src="<?php echo assets_url; ?>plugins/datatables/responsive.bootstrap.min.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/newselect2/select2.min.js" type="text/javascript"></script>
     <script src="<?php echo assets_url; ?>js/jquery.core.js"></script>
     <script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
 
@@ -931,6 +1005,22 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
             return dateString;
         }
 
+        function escapeHtml(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function openAssignBrandModal(poId, poLabel) {
+            $('#assignBrandPoId').val(poId);
+            $('#assignBrandPoContext').text(poLabel ? 'PO: ' + poLabel : 'Selected PO');
+            $('#assignBrandSelect').val('').trigger('change');
+            $('#assignBrandModal').modal('show');
+        }
+
         function buildOrderDetailsUrl(brandId) {
             const params = [];
 
@@ -969,14 +1059,19 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
                     let rowsHtml = '';
                     response.forEach(function(order, index) {
                         const addedBy = [order.title || '', order.first_name || '', order.last_name || ''].join(' ').replace(/\s+/g, ' ').trim();
+                        const poLabel = [order.pono || '', order.company_name || ''].filter(Boolean).join(' - ');
+                        const actionHtml = Number(brandId) === 0 && order.id
+                            ? '<button type="button" class="btn btn-success btn-xs action-btn assign-order-brand" data-po-id="' + escapeHtml(order.id) + '" data-po-label="' + escapeHtml(poLabel) + '"><i class="fa fa-tag"></i> Assign Brand</button>'
+                            : '<span class="text-muted">Mapped</span>';
 
                         rowsHtml += '<tr>' +
                             '<td>' + (index + 1) + '</td>' +
-                            '<td>' + (order.company_name || '') + '</td>' +
-                            '<td>' + (order.pono || '') + '</td>' +
-                            '<td>' + (order.podate || 'NA') + '</td>' +
-                            '<td>' + (addedBy || 'NA') + '</td>' +
+                            '<td>' + escapeHtml(order.company_name || '') + '</td>' +
+                            '<td>' + escapeHtml(order.pono || '') + '</td>' +
+                            '<td>' + escapeHtml(order.podate || 'NA') + '</td>' +
+                            '<td>' + escapeHtml(addedBy || 'NA') + '</td>' +
                             '<td>' + formatIndianCurrency(order.order_value) + '</td>' +
+                            '<td>' + actionHtml + '</td>' +
                             '</tr>';
                     });
 
@@ -1004,6 +1099,16 @@ $export_title = 'Brand_Performance_' . preg_replace('/[^A-Za-z0-9]+/', '_', $sel
 
             $('.view-order-details').on('click', function () {
                 openOrderDetails($(this).data('brand-id'), $(this).data('brand-name'));
+            });
+
+            $('#orderDetailsTableBody').on('click', '.assign-order-brand', function () {
+                openAssignBrandModal($(this).data('po-id'), $(this).data('po-label'));
+            });
+
+            $('.brands').select2({
+                tags: true,
+                width: '100%',
+                dropdownParent: $('#assignBrandModal')
             });
 
             if (chartBrandData.length > 0 && document.getElementById('brandPerformanceChart')) {

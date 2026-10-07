@@ -1,24 +1,79 @@
 <?php defined('BASEPATH') OR exit('No direct script access allowed');
 
+/*
+| Running DF finance control room.
+|
+| Every figure on this page comes from one of three registers: the PO book, the
+| payment-term claim schedule, and the DF dispatch ledger. The view only
+| presents what the controller has already reconciled.
+*/
+
 $report = isset($report) && is_array($report) ? $report : array();
 $filters = isset($filters) && is_array($filters) ? $filters : array();
 $df_options = isset($df_options) && is_array($df_options) ? $df_options : array();
+
 $rows = isset($report['rows']) && is_array($report['rows']) ? $report['rows'] : array();
 $summary = isset($report['summary']) && is_array($report['summary']) ? $report['summary'] : array();
 $insights = isset($report['insights']) && is_array($report['insights']) ? $report['insights'] : array();
-$top_risk_rows = isset($report['top_risk_rows']) && is_array($report['top_risk_rows']) ? $report['top_risk_rows'] : array();
-$gap_rows = isset($report['gap_rows']) && is_array($report['gap_rows']) ? $report['gap_rows'] : array();
+$action_rows = isset($report['action_rows']) && is_array($report['action_rows']) ? $report['action_rows'] : array();
+$config_issues = isset($report['config_issues']) && is_array($report['config_issues']) ? $report['config_issues'] : array();
 $marketing_summary = isset($report['marketing_summary']) && is_array($report['marketing_summary']) ? $report['marketing_summary'] : array();
 $filter_summary = isset($report['filter_summary']) && is_array($report['filter_summary']) ? $report['filter_summary'] : array();
 
-$start_date_value = !empty($filters['has_date_filter']) ? (isset($filters['start_date']) ? $filters['start_date'] : '') : '';
-$end_date_value = !empty($filters['has_date_filter']) ? (isset($filters['end_date']) ? $filters['end_date'] : '') : '';
+$has_date_filter = !empty($filters['has_date_filter']);
+$start_date_value = $has_date_filter && isset($filters['start_date']) ? $filters['start_date'] : '';
+$end_date_value = $has_date_filter && isset($filters['end_date']) ? $filters['end_date'] : '';
 $current_df_filter = isset($filters['df_id']) ? (string) $filters['df_id'] : 'ALL';
+$filter_path = ($has_date_filter ? $start_date_value . '/' . $end_date_value : 'ALL/ALL') . '/' . $current_df_filter;
 
 if (!function_exists('accounts_master_report_escape')) {
     function accounts_master_report_escape($value)
     {
         return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('accounts_master_report_value')) {
+    function accounts_master_report_value($source, $key, $fallback = '')
+    {
+        return isset($source[$key]) ? $source[$key] : $fallback;
+    }
+}
+
+/*
+| Split an order into the four states its money can be in. Segments are clamped
+| so a DF billed ahead of its milestones still renders a sane bar.
+*/
+if (!function_exists('accounts_master_report_flow')) {
+    function accounts_master_report_flow($row)
+    {
+        $order = max(0, (float) accounts_master_report_value($row, 'order_value', 0));
+        if ($order <= 0) {
+            return array();
+        }
+
+        $received = min(max(0, (float) accounts_master_report_value($row, 'received_amount', 0)), $order);
+        $unpaid = min(max(0, (float) accounts_master_report_value($row, 'balance_amount', 0)), $order - $received);
+        $ready = min(max(0, (float) accounts_master_report_value($row, 'unbilled_amount', 0)), $order - $received - $unpaid);
+        $pipeline = max(0, $order - $received - $unpaid - $ready);
+
+        $segments = array();
+        foreach (array(
+            array('received', 'Received', $received),
+            array('unpaid', 'Invoiced, awaiting payment', $unpaid),
+            array('ready', 'Ready to invoice', $ready),
+            array('pipeline', 'Not yet earned', $pipeline)
+        ) as $segment) {
+            if ($segment[2] > 0.01) {
+                $segments[] = array(
+                    'key' => $segment[0],
+                    'label' => $segment[1],
+                    'width' => round(($segment[2] / $order) * 100, 2)
+                );
+            }
+        }
+
+        return $segments;
     }
 }
 ?>
@@ -27,14 +82,14 @@ if (!function_exists('accounts_master_report_escape')) {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Finance master dashboard for running DFs">
+    <meta name="description" content="Running DF finance control room">
     <meta name="author" content="<?php echo copyright; ?>">
     <link rel="shortcut icon" href="<?php echo assets_url; ?>images/favicon.ico">
-    <title><?php echo sitetitle; ?> | Finance Master Dashboard</title>
+    <title><?php echo sitetitle; ?> | Running DF Finance Control</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <link href="<?php echo assets_url; ?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo assets_url; ?>css/core.css" rel="stylesheet" type="text/css" />
@@ -45,875 +100,11 @@ if (!function_exists('accounts_master_report_escape')) {
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo assets_url; ?>plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo assets_url; ?>plugins/datatables/buttons.bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <link href="<?php echo assets_url; ?>plugins/datatables/responsive.bootstrap.min.css" rel="stylesheet" type="text/css" />
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
     <script src="<?php echo assets_url; ?>js/modernizr.min.js"></script>
 
-    <style>
-        :root{
-            --finance-ink:#13233b;
-            --finance-muted:#5c7089;
-            --finance-line:#d9e3ef;
-            --finance-surface:#ffffff;
-            --finance-bg:#f2f6fb;
-            --finance-brand:#0f4fb7;
-            --finance-teal:#0f766e;
-            --finance-warning:#b45309;
-            --finance-danger:#b42318;
-            --finance-good:#15803d;
-            --finance-violet:#6d28d9;
-            --finance-shadow:0 22px 55px rgba(15, 23, 42, .08);
-        }
-
-        body{
-            font-family:'Plus Jakarta Sans', sans-serif;
-            background:
-                radial-gradient(circle at top left, rgba(15, 79, 183, .10), transparent 26%),
-                radial-gradient(circle at top right, rgba(15, 118, 110, .09), transparent 22%),
-                linear-gradient(180deg, #edf3f9 0%, #f7fbff 40%, #eef4fa 100%);
-            color:var(--finance-ink);
-        }
-
-        .finance-page-shell{
-            padding:18px 0 34px;
-        }
-
-        .finance-card{
-            border-radius:26px;
-            background:rgba(255,255,255,.96);
-            border:1px solid rgba(217, 227, 239, .95);
-            box-shadow:var(--finance-shadow);
-        }
-
-        .hero-card{
-            position:relative;
-            overflow:hidden;
-            padding:30px;
-            background:
-                radial-gradient(circle at right bottom, rgba(255,255,255,.14), transparent 30%),
-                linear-gradient(135deg, rgba(19, 35, 59, .98) 0%, rgba(15, 79, 183, .96) 55%, rgba(15, 118, 110, .94) 100%);
-            color:#fff;
-        }
-
-        .hero-card:before,
-        .hero-card:after{
-            content:"";
-            position:absolute;
-            border-radius:999px;
-            background:rgba(255,255,255,.09);
-        }
-
-        .hero-card:before{
-            width:240px;
-            height:240px;
-            right:-70px;
-            top:-90px;
-        }
-
-        .hero-card:after{
-            width:170px;
-            height:170px;
-            bottom:-55px;
-            left:-45px;
-        }
-
-        .hero-card > .row{
-            position:relative;
-            z-index:1;
-        }
-
-        .hero-kicker{
-            display:inline-block;
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.18em;
-            text-transform:uppercase;
-            color:rgba(255,255,255,.72);
-        }
-
-        .hero-title{
-            margin:12px 0 8px;
-            font-size:35px;
-            line-height:1.06;
-            font-weight:800;
-            letter-spacing:-.03em;
-            color:#fff;
-        }
-
-        .hero-copy{
-            max-width:860px;
-            font-size:14px;
-            line-height:1.8;
-            color:rgba(255,255,255,.84);
-        }
-
-        .hero-chip-row{
-            display:flex;
-            flex-wrap:wrap;
-            gap:10px;
-            margin-top:18px;
-        }
-
-        .hero-chip{
-            display:inline-flex;
-            align-items:center;
-            gap:8px;
-            padding:9px 14px;
-            border-radius:999px;
-            background:rgba(255,255,255,.11);
-            border:1px solid rgba(255,255,255,.16);
-            color:#fff;
-            font-size:12px;
-            font-weight:800;
-        }
-
-        .hero-actions{
-            display:flex;
-            justify-content:flex-end;
-            gap:12px;
-            flex-wrap:wrap;
-            margin-top:8px;
-        }
-
-        .hero-btn{
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-            gap:8px;
-            min-height:42px;
-            padding:0 16px;
-            border-radius:999px;
-            border:1px solid rgba(255,255,255,.16);
-            background:rgba(255,255,255,.12);
-            color:#fff;
-            font-size:12px;
-            font-weight:800;
-            text-decoration:none;
-        }
-
-        .hero-btn:hover,
-        .hero-btn:focus{
-            color:#fff;
-            text-decoration:none;
-            background:rgba(255,255,255,.18);
-        }
-
-        .alert-shell{
-            margin-top:18px;
-            border-radius:18px;
-            border:none;
-            box-shadow:0 12px 30px rgba(15, 118, 110, .10);
-        }
-
-        .filter-card{
-            margin-top:18px;
-            padding:24px;
-        }
-
-        .section-title{
-            margin:0;
-            font-size:22px;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .section-copy{
-            margin-top:6px;
-            font-size:13px;
-            line-height:1.75;
-            color:var(--finance-muted);
-        }
-
-        .filter-grid{
-            display:grid;
-            grid-template-columns:repeat(4, minmax(0, 1fr));
-            gap:14px;
-            margin-top:20px;
-            align-items:end;
-        }
-
-        @media (max-width:1100px){
-            .filter-grid{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
-        }
-
-        @media (max-width:640px){
-            .filter-grid{ grid-template-columns:1fr; }
-        }
-
-        .filter-label{
-            display:block;
-            margin-bottom:8px;
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.12em;
-            text-transform:uppercase;
-            color:var(--finance-muted);
-        }
-
-        .filter-card .form-control{
-            min-height:46px;
-            border-radius:14px;
-            border:1px solid var(--finance-line);
-            box-shadow:none;
-        }
-
-        .filter-action-row{
-            display:flex;
-            flex-wrap:wrap;
-            gap:10px;
-        }
-
-        .filter-btn{
-            min-height:46px;
-            padding:0 18px;
-            border-radius:14px;
-            border:none;
-            font-size:12px;
-            font-weight:800;
-            letter-spacing:.04em;
-        }
-
-        .filter-btn.primary{
-            background:linear-gradient(135deg, var(--finance-brand) 0%, #0ea5c6 100%);
-            color:#fff;
-        }
-
-        .filter-btn.soft{
-            background:#eef4fb;
-            color:var(--finance-ink);
-            text-decoration:none;
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-        }
-
-        .kpi-grid{
-            display:grid;
-            grid-template-columns:repeat(4, minmax(0, 1fr));
-            gap:14px;
-            margin-top:18px;
-        }
-
-        @media (max-width:1200px){
-            .kpi-grid{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
-        }
-
-        @media (max-width:640px){
-            .kpi-grid{ grid-template-columns:1fr; }
-        }
-
-        .kpi-card{
-            padding:18px;
-            min-height:134px;
-            border-radius:22px;
-            border:1px solid #e1eaf5;
-            background:linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
-        }
-
-        .kpi-label{
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.12em;
-            text-transform:uppercase;
-            color:var(--finance-muted);
-        }
-
-        .kpi-value{
-            margin-top:10px;
-            font-size:29px;
-            line-height:1.02;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .kpi-note{
-            margin-top:9px;
-            font-size:12px;
-            line-height:1.7;
-            color:var(--finance-muted);
-        }
-
-        .signal-grid{
-            display:grid;
-            grid-template-columns:1.15fr 1fr 1fr;
-            gap:18px;
-            margin-top:18px;
-        }
-
-        @media (max-width:1200px){
-            .signal-grid{ grid-template-columns:1fr; }
-        }
-
-        .signal-card{
-            padding:22px;
-        }
-
-        .signal-kicker{
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.16em;
-            text-transform:uppercase;
-            color:#1d4ed8;
-        }
-
-        .signal-title{
-            margin-top:12px;
-            font-size:24px;
-            line-height:1.35;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .signal-copy{
-            margin-top:12px;
-            font-size:13px;
-            line-height:1.8;
-            color:var(--finance-muted);
-        }
-
-        .signal-list{
-            margin:16px 0 0;
-            padding:0;
-            list-style:none;
-        }
-
-        .signal-list li{
-            position:relative;
-            padding-left:18px;
-            margin-top:10px;
-            font-size:13px;
-            line-height:1.7;
-            color:var(--finance-ink);
-        }
-
-        .signal-list li:before{
-            content:"";
-            position:absolute;
-            left:0;
-            top:9px;
-            width:8px;
-            height:8px;
-            border-radius:999px;
-            background:linear-gradient(135deg, var(--finance-brand) 0%, #0ea5c6 100%);
-        }
-
-        .mini-panel-title{
-            font-size:17px;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .mini-panel-copy{
-            margin-top:5px;
-            font-size:12px;
-            line-height:1.7;
-            color:var(--finance-muted);
-        }
-
-        .mini-list{
-            display:flex;
-            flex-direction:column;
-            gap:12px;
-            margin-top:16px;
-        }
-
-        .mini-item{
-            border-radius:18px;
-            padding:14px;
-            border:1px solid #e5edf7;
-            background:#fff;
-        }
-
-        .mini-item-title{
-            font-size:14px;
-            line-height:1.45;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .mini-item-copy{
-            margin-top:5px;
-            font-size:12px;
-            line-height:1.7;
-            color:var(--finance-muted);
-        }
-
-        .mini-meta{
-            display:flex;
-            flex-wrap:wrap;
-            gap:8px;
-            margin-top:10px;
-        }
-
-        .mini-chip{
-            display:inline-flex;
-            align-items:center;
-            padding:6px 10px;
-            border-radius:999px;
-            background:#edf4fb;
-            color:#244464;
-            font-size:11px;
-            font-weight:800;
-        }
-
-        .mini-chip.red{ background:#fde7e5; color:var(--finance-danger); }
-        .mini-chip.amber{ background:#ffedd5; color:var(--finance-warning); }
-        .mini-chip.green{ background:#dcfce7; color:var(--finance-good); }
-        .mini-chip.violet{ background:#ede9fe; color:var(--finance-violet); }
-
-        .report-card{
-            margin-top:18px;
-            padding:22px;
-        }
-
-        .report-toolbar{
-            display:flex;
-            flex-wrap:wrap;
-            justify-content:space-between;
-            align-items:flex-end;
-            gap:14px;
-            margin-bottom:18px;
-        }
-
-        .report-toolbar-right{
-            display:flex;
-            flex-wrap:wrap;
-            gap:12px;
-            align-items:end;
-        }
-
-        .toolbar-control label{
-            display:block;
-            margin-bottom:7px;
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.12em;
-            text-transform:uppercase;
-            color:var(--finance-muted);
-        }
-
-        .toolbar-select{
-            min-width:190px;
-            min-height:42px;
-            border-radius:14px;
-            border:1px solid var(--finance-line);
-            padding:0 10px;
-            font-size:12px;
-            font-weight:700;
-            color:var(--finance-ink);
-            background:#fff;
-        }
-
-        .toolbar-text{
-            font-size:12px;
-            line-height:1.7;
-            color:var(--finance-muted);
-        }
-
-        .table-wrap{
-            overflow-x:auto;
-            border-radius:22px;
-            border:1px solid #e3ebf5;
-        }
-
-        table.finance-table{
-            width:100% !important;
-            min-width:1650px;
-            margin:0 !important;
-            border-collapse:separate;
-            border-spacing:0;
-        }
-
-        table.finance-table thead th{
-            background:#f6f9fd;
-            border-bottom:1px solid #e3ebf5 !important;
-            color:var(--finance-muted);
-            padding:16px 14px !important;
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.12em;
-            text-transform:uppercase;
-            vertical-align:middle;
-        }
-
-        table.finance-table tbody td{
-            padding:16px 14px !important;
-            border-top:1px solid #edf3f9 !important;
-            background:#fff;
-            vertical-align:top;
-        }
-
-        table.finance-table tbody tr:hover td{
-            background:#fbfdff;
-        }
-
-        .row-gap td{ background:#fff7f6 !important; }
-        .row-critical td{ background:#fff8f1 !important; }
-        .row-watch td{ background:#fbfbfe !important; }
-
-        .index-pill{
-            width:36px;
-            height:36px;
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-            border-radius:12px;
-            background:#edf4fb;
-            color:#1f4060;
-            font-size:12px;
-            font-weight:800;
-        }
-
-        .cell-title{
-            font-size:14px;
-            line-height:1.45;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .cell-copy{
-            margin-top:5px;
-            font-size:12px;
-            line-height:1.7;
-            color:var(--finance-muted);
-        }
-
-        .inline-grid{
-            display:grid;
-            grid-template-columns:repeat(2, minmax(0, 1fr));
-            gap:10px;
-            margin-top:12px;
-        }
-
-        .inline-stat{
-            border-radius:16px;
-            padding:11px 12px;
-            background:#f7fbff;
-            border:1px solid #e3ebf5;
-        }
-
-        .inline-label{
-            font-size:10px;
-            font-weight:800;
-            letter-spacing:.10em;
-            text-transform:uppercase;
-            color:var(--finance-muted);
-        }
-
-        .inline-value{
-            margin-top:5px;
-            font-size:13px;
-            line-height:1.5;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .status-pill{
-            display:inline-flex;
-            align-items:center;
-            gap:7px;
-            padding:6px 11px;
-            border-radius:999px;
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.04em;
-            text-transform:uppercase;
-            border:1px solid;
-        }
-
-        .status-gap{ background:#fde7e5; color:var(--finance-danger); border-color:#f8c7c2; }
-        .status-critical{ background:#ffedd5; color:var(--finance-warning); border-color:#fed7aa; }
-        .status-watch{ background:#e0f2fe; color:#0369a1; border-color:#bae6fd; }
-        .status-active{ background:#dbeafe; color:#1d4ed8; border-color:#bfdbfe; }
-        .status-collected{ background:#dcfce7; color:var(--finance-good); border-color:#bbf7d0; }
-        .status-completed{ background:#dcfce7; color:var(--finance-good); border-color:#bbf7d0; }
-        .status-approval{ background:#ede9fe; color:var(--finance-violet); border-color:#ddd6fe; }
-        .status-pending{ background:#eef4fb; color:#2f4f6c; border-color:#d9e3ef; }
-        .status-delayed{ background:#fde7e5; color:var(--finance-danger); border-color:#f8c7c2; }
-        .status-overdue{ background:#fde7e5; color:var(--finance-danger); border-color:#f8c7c2; }
-        .status-collection_pending{ background:#ffedd5; color:var(--finance-warning); border-color:#fed7aa; }
-        .status-partial{ background:#e0f2fe; color:#0369a1; border-color:#bae6fd; }
-        .status-partial_overdue{ background:#fff1c2; color:#9a6700; border-color:#fde68a; }
-        .status-received{ background:#dcfce7; color:var(--finance-good); border-color:#bbf7d0; }
-        .status-planned{ background:#eef4fb; color:#2f4f6c; border-color:#d9e3ef; }
-        .status-unmapped{ background:#f8e8ea; color:#9f1239; border-color:#fecdd3; }
-        .status-due{ background:#fde7e5; color:var(--finance-danger); border-color:#f8c7c2; }
-        .status-not_due{ background:#e0f2fe; color:#0369a1; border-color:#bae6fd; }
-        .status-hold{ background:#ede9fe; color:var(--finance-violet); border-color:#ddd6fe; }
-        .status-not_updated{ background:#eef4fb; color:#2f4f6c; border-color:#d9e3ef; }
-
-        .issue-list{
-            margin:12px 0 0;
-            padding-left:17px;
-            color:var(--finance-muted);
-        }
-
-        .issue-list li{
-            margin-bottom:7px;
-            font-size:12px;
-            line-height:1.7;
-        }
-
-        .milestone-stack{
-            display:flex;
-            flex-direction:column;
-            gap:12px;
-        }
-
-        .milestone-card{
-            border-radius:18px;
-            border:1px solid #e5edf7;
-            background:#fdfefe;
-            padding:14px;
-        }
-
-        .milestone-head{
-            display:flex;
-            justify-content:space-between;
-            gap:12px;
-            align-items:flex-start;
-            flex-wrap:wrap;
-        }
-
-        .milestone-title{
-            font-size:13px;
-            line-height:1.55;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .milestone-sub{
-            margin-top:4px;
-            font-size:12px;
-            color:var(--finance-muted);
-            line-height:1.7;
-        }
-
-        .milestone-grid{
-            display:grid;
-            grid-template-columns:repeat(2, minmax(0, 1fr));
-            gap:10px;
-            margin-top:12px;
-        }
-
-        .milestone-stat{
-            border-radius:14px;
-            padding:10px 11px;
-            background:#f7fbff;
-            border:1px solid #e3ebf5;
-        }
-
-        .milestone-meta{
-            display:flex;
-            flex-wrap:wrap;
-            gap:8px;
-            margin-top:12px;
-        }
-
-        .followup-box{
-            margin-top:12px;
-            padding:11px 12px;
-            border-radius:14px;
-            border:1px solid #e7eef8;
-            background:#ffffff;
-            font-size:12px;
-            line-height:1.75;
-            color:#304860;
-        }
-
-        .dispatch-ledger-box{
-            margin-top:12px;
-            border-radius:18px;
-            border:1px solid #e3ebf5;
-            background:#f7fbff;
-            padding:14px;
-        }
-
-        .dispatch-ledger-head{
-            display:flex;
-            justify-content:space-between;
-            align-items:flex-start;
-            gap:12px;
-            flex-wrap:wrap;
-        }
-
-        .dispatch-ledger-title{
-            font-size:11px;
-            font-weight:800;
-            letter-spacing:.12em;
-            text-transform:uppercase;
-            color:var(--finance-muted);
-        }
-
-        .dispatch-ledger-grid{
-            display:grid;
-            grid-template-columns:repeat(2, minmax(0, 1fr));
-            gap:10px;
-            margin-top:12px;
-        }
-
-        .dispatch-ledger-note{
-            margin-top:12px;
-            font-size:12px;
-            line-height:1.75;
-            color:var(--finance-muted);
-        }
-
-        .dispatch-ledger-note strong{
-            color:var(--finance-ink);
-        }
-
-        .dispatch-ledger-empty{
-            margin-top:12px;
-            font-size:12px;
-            line-height:1.75;
-            color:var(--finance-muted);
-        }
-
-        .action-stack{
-            display:flex;
-            flex-direction:column;
-            gap:9px;
-        }
-
-        .action-link{
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-            min-height:38px;
-            padding:0 12px;
-            border-radius:12px;
-            font-size:12px;
-            font-weight:800;
-            text-decoration:none;
-            transition:all .15s ease;
-        }
-
-        .action-link.primary{
-            color:#fff;
-            background:linear-gradient(135deg, var(--finance-brand) 0%, #0ea5c6 100%);
-        }
-
-        .action-link.soft{
-            background:#edf4fb;
-            color:#173a60;
-        }
-
-        .action-link:hover,
-        .action-link:focus{
-            text-decoration:none;
-            transform:translateY(-1px);
-        }
-
-        .update-link{
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-            min-height:34px;
-            padding:0 12px;
-            border:none;
-            border-radius:10px;
-            background:#0f4fb7;
-            color:#fff;
-            font-size:11px;
-            font-weight:800;
-        }
-
-        .update-link:hover,
-        .update-link:focus{
-            color:#fff;
-            background:#0c4398;
-            text-decoration:none;
-        }
-
-        .empty-state{
-            padding:52px 24px;
-            text-align:center;
-            font-size:14px;
-            line-height:1.9;
-            color:var(--finance-muted);
-        }
-
-        .dataTables_wrapper .dataTables_filter input,
-        .dataTables_wrapper .dataTables_length select{
-            border:1px solid var(--finance-line);
-            border-radius:12px;
-            min-height:38px;
-            padding:0 10px;
-            color:var(--finance-ink);
-            background:#fff;
-        }
-
-        .dt-buttons .btn{
-            border-radius:12px !important;
-            border:1px solid var(--finance-line) !important;
-            background:#fff !important;
-            color:var(--finance-ink) !important;
-            padding:9px 14px !important;
-            font-size:12px !important;
-            font-weight:800 !important;
-        }
-
-        .modal-content{
-            border-radius:22px;
-            box-shadow:0 25px 60px rgba(15, 23, 42, .16);
-            border:none;
-        }
-
-        .modal-header{
-            border-bottom:1px solid #e7eef8;
-            padding:18px 22px;
-        }
-
-        .modal-body{
-            padding:22px;
-        }
-
-        .modal-title{
-            font-size:20px;
-            font-weight:800;
-            color:var(--finance-ink);
-        }
-
-        .modal-note{
-            margin-top:10px;
-            padding:12px 14px;
-            border-radius:14px;
-            background:#f7fbff;
-            border:1px solid #e3ebf5;
-            font-size:12px;
-            line-height:1.75;
-            color:var(--finance-muted);
-        }
-
-        #pageloader1{
-            display:none;
-            text-align:center;
-            padding:16px 0 0;
-        }
-
-        #pageloader1 img{
-            width:70px;
-        }
-
-        @media (max-width:991px){
-            .hero-actions{ justify-content:flex-start; }
-        }
-
-        @media (max-width:767px){
-            .hero-card,
-            .filter-card,
-            .report-card,
-            .signal-card{ padding:22px 18px; }
-            .hero-title{ font-size:29px; }
-            .signal-title{ font-size:19px; }
-            .report-toolbar{ align-items:stretch; }
-            .report-toolbar-right{ width:100%; }
-            .toolbar-control,
-            .toolbar-select{ width:100%; }
-        }
-    </style>
+    <?php $this->load->view('accounts/_finance_theme'); ?>
 </head>
 <body>
     <header id="topnav">
@@ -922,60 +113,56 @@ if (!function_exists('accounts_master_report_escape')) {
     <?php $this->load->view('common/info-section.php'); ?>
 
     <div class="wrapper">
-        <div class="container-fluid finance-page-shell">
-            <div class="hero-card finance-card">
+        <div class="container-fluid fin-shell">
+
+            <div class="fin-card fin-hero">
                 <div class="row">
                     <div class="col-lg-8">
-                        <span class="hero-kicker">Finance Control Room</span>
-                        <div class="hero-title">Running DF Finance Master Dashboard</div>
-                        <div class="hero-copy">
-                            This view tracks each running DF against PO value, configured payment milestones, received amount, overdue exposure, upcoming collections, milestone mapping gaps, and the DF-wise dispatch ledger so the finance team and management can act on one clean source of truth.
+                        <span class="fin-kicker">Finance Control Room</span>
+                        <div class="fin-title">Running DF Finance Control</div>
+                        <div class="fin-lede">
+                            Every running DF, read across three registers: the purchase orders booked against it,
+                            the payment milestones those orders are claimable under, and the dispatch ledger that
+                            records what was actually invoiced and collected. The gap between what has become
+                            claimable and what has been invoiced is the cash available to raise today.
                         </div>
-                        <div class="hero-chip-row">
-                            <span class="hero-chip"><i class="fa fa-calendar"></i> <?php echo accounts_master_report_escape(isset($filter_summary['date_range_label']) ? $filter_summary['date_range_label'] : 'All Running DF Timeline'); ?></span>
-                            <span class="hero-chip"><i class="fa fa-sitemap"></i> <?php echo accounts_master_report_escape(isset($filter_summary['df_label']) ? $filter_summary['df_label'] : 'All Running DFs'); ?></span>
-                            <span class="hero-chip"><i class="fa fa-clock-o"></i> Generated <?php echo accounts_master_report_escape(isset($filter_summary['generated_on']) ? $filter_summary['generated_on'] : ''); ?></span>
+                        <div class="fin-chip-row">
+                            <span class="fin-chip"><i class="fa fa-calendar"></i> <?php echo accounts_master_report_escape(accounts_master_report_value($filter_summary, 'date_range_label', 'All running DFs')); ?></span>
+                            <span class="fin-chip"><i class="fa fa-sitemap"></i> <?php echo accounts_master_report_escape(accounts_master_report_value($filter_summary, 'df_label', 'All running DFs')); ?></span>
+                            <span class="fin-chip"><i class="fa fa-clock-o"></i> Generated <?php echo accounts_master_report_escape(accounts_master_report_value($filter_summary, 'generated_on')); ?></span>
                         </div>
                     </div>
                     <div class="col-lg-4">
-                        <div class="hero-actions">
-                            <a href="<?php echo page_url; ?>Accounts/paymentdashboard/<?php echo date('Y-m-d'); ?>/<?php echo date('Y-m-d', strtotime('+7 days')); ?>/ALL" class="hero-btn"><i class="fa fa-line-chart"></i> Upcoming Payments</a>
-                            <a href="<?php echo page_url; ?>Accounts/overduepaymentdashboard" class="hero-btn"><i class="fa fa-exclamation-triangle"></i> Overdue Payments</a>
+                        <div class="fin-hero-actions">
+                            <a href="<?php echo page_url; ?>Accounts/paymentdashboard/<?php echo date('Y-m-d'); ?>/<?php echo date('Y-m-d', strtotime('+7 days')); ?>/ALL" class="fin-btn"><i class="fa fa-line-chart"></i> Upcoming Payments</a>
+                            <a href="<?php echo page_url; ?>Accounts/overduepaymentdashboard" class="fin-btn"><i class="fa fa-exclamation-triangle"></i> Overdue Payments</a>
+                            <a href="<?php echo page_url; ?>Machine/mcsdispatchreport" class="fin-btn"><i class="fa fa-truck"></i> Dispatch Ledger</a>
                         </div>
                     </div>
                 </div>
             </div>
 
             <?php if ($this->session->flashdata('message')): ?>
-                <div class="alert alert-info alert-shell">
-                    <?php echo $this->session->flashdata('message'); ?>
-                </div>
+                <div style="margin-bottom:18px;"><?php echo $this->session->flashdata('message'); ?></div>
             <?php endif; ?>
 
-            <div class="filter-card finance-card">
-                <div class="row">
-                    <div class="col-lg-7">
-                        <h3 class="section-title">Filter & Scope</h3>
-                        <div class="section-copy"><?php echo accounts_master_report_escape(isset($filter_summary['date_scope_note']) ? $filter_summary['date_scope_note'] : ''); ?></div>
-                    </div>
-                    <div class="col-lg-5 text-left lg-text-right">
-                        <div class="section-copy">Use this filter to review recent running DF releases or drill into one DF without losing payment control visibility.</div>
-                    </div>
-                </div>
+            <div class="fin-card fin-filter">
+                <h3 class="fin-section-title">Scope</h3>
+                <div class="fin-section-copy"><?php echo accounts_master_report_escape(accounts_master_report_value($filter_summary, 'date_scope_note')); ?></div>
 
-                <form method="post" action="<?php echo page_url; ?>Accounts/filterbydate" class="filter-grid">
+                <form method="post" action="<?php echo page_url; ?>Accounts/filterbydate" class="fin-filter-grid">
                     <div>
-                        <label class="filter-label" for="start_date">Start Date</label>
+                        <label class="fin-label" for="start_date">DF released from</label>
                         <input type="date" id="start_date" name="start_date" class="form-control" value="<?php echo accounts_master_report_escape($start_date_value); ?>">
                     </div>
                     <div>
-                        <label class="filter-label" for="end_date">End Date</label>
+                        <label class="fin-label" for="end_date">DF released up to</label>
                         <input type="date" id="end_date" name="end_date" class="form-control" value="<?php echo accounts_master_report_escape($end_date_value); ?>">
                     </div>
                     <div>
-                        <label class="filter-label" for="df_no">DF Selection</label>
+                        <label class="fin-label" for="df_no">DF</label>
                         <select id="df_no" name="df_no" class="form-control">
-                            <option value="ALL">ALL</option>
+                            <option value="ALL">All running DFs</option>
                             <?php foreach ($df_options as $df_option): ?>
                                 <option value="<?php echo (int) $df_option['id']; ?>" <?php echo $current_df_filter === (string) $df_option['id'] ? 'selected' : ''; ?>>
                                     <?php echo accounts_master_report_escape(trim($df_option['df_no'] . ' ' . $df_option['df_description'])); ?>
@@ -984,415 +171,372 @@ if (!function_exists('accounts_master_report_escape')) {
                         </select>
                     </div>
                     <div>
-                        <label class="filter-label">Actions</label>
-                        <div class="filter-action-row">
-                            <button type="submit" class="filter-btn primary">Apply Filter</button>
-                            <a href="<?php echo page_url; ?>Accounts/allrunningdf/ALL/ALL/<?php echo accounts_master_report_escape($current_df_filter); ?>" class="filter-btn soft">All Dates</a>
+                        <label class="fin-label">&nbsp;</label>
+                        <div class="fin-filter-actions">
+                            <button type="submit" class="fin-btn primary">Apply</button>
+                            <a href="<?php echo page_url; ?>Accounts/allrunningdf/ALL/ALL/<?php echo accounts_master_report_escape($current_df_filter); ?>" class="fin-btn">All dates</a>
                         </div>
                     </div>
                 </form>
             </div>
 
-            <div class="kpi-grid">
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Visible PO Value</div>
-                    <div class="kpi-value"><?php echo accounts_master_report_escape(isset($summary['total_order_value_display']) ? $summary['total_order_value_display'] : '₹0.00'); ?></div>
-                    <div class="kpi-note"><?php echo (int) (isset($summary['po_count']) ? $summary['po_count'] : 0); ?> PO row(s) across <?php echo (int) (isset($summary['df_count']) ? $summary['df_count'] : 0); ?> running DF(s).</div>
+            <div class="fin-kpi-grid">
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Order book</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'order_value_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note"><?php echo (int) accounts_master_report_value($summary, 'po_count', 0); ?> PO(s) across <?php echo (int) accounts_master_report_value($summary, 'df_count', 0); ?> running DF(s).</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Received Amount</div>
-                    <div class="kpi-value"><?php echo accounts_master_report_escape(isset($summary['total_received_amount_display']) ? $summary['total_received_amount_display'] : '₹0.00'); ?></div>
-                    <div class="kpi-note"><?php echo (int) (isset($summary['collection_percentage']) ? $summary['collection_percentage'] : 0); ?>% of visible order value is already captured.</div>
+                <div class="fin-card fin-kpi headline">
+                    <div class="fin-kpi-label">Ready to invoice</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'unbilled_amount_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Claimable under the payment terms but not yet invoiced, across <?php echo (int) accounts_master_report_value($summary, 'unbilled_df_count', 0); ?> DF(s). This is the fastest cash available.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Pending Collection</div>
-                    <div class="kpi-value"><?php echo accounts_master_report_escape(isset($summary['total_pending_amount_display']) ? $summary['total_pending_amount_display'] : '₹0.00'); ?></div>
-                    <div class="kpi-note">This is the remaining collection exposure across the current filter.</div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Claimable to date</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'claimable_amount_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Milestones whose trigger task is already complete.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Overdue Exposure</div>
-                    <div class="kpi-value" style="color:var(--finance-danger);"><?php echo accounts_master_report_escape(isset($summary['total_overdue_amount_display']) ? $summary['total_overdue_amount_display'] : '₹0.00'); ?></div>
-                    <div class="kpi-note"><?php echo (int) (isset($summary['overdue_row_count']) ? $summary['overdue_row_count'] : 0); ?> row(s) already have overdue payment pressure.</div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Billing blocked by late work</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'slipped_amount_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Milestones past their target date whose work is still open, across <?php echo (int) accounts_master_report_value($summary, 'slipped_df_count', 0); ?> DF(s). Clearing the work is what turns this into an invoice.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Upcoming 7 Days</div>
-                    <div class="kpi-value"><?php echo accounts_master_report_escape(isset($summary['total_upcoming_amount_display']) ? $summary['total_upcoming_amount_display'] : '₹0.00'); ?></div>
-                    <div class="kpi-note">Expected milestone exposure due within the next seven days.</div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Not yet earned</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'pipeline_amount_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Order value sitting behind milestones that have not been reached.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Configuration Gaps</div>
-                    <div class="kpi-value"><?php echo (int) (isset($summary['gap_row_count']) ? $summary['gap_row_count'] : 0); ?></div>
-                    <div class="kpi-note">Rows with missing payment-term setup, milestone mapping, or follow-up visibility issues.</div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Invoiced</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'invoiced_amount_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Recorded on the dispatch ledger. Each invoice number is counted once.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Critical Rows</div>
-                    <div class="kpi-value"><?php echo (int) (isset($summary['critical_row_count']) ? $summary['critical_row_count'] : 0); ?></div>
-                    <div class="kpi-note">Rows currently tagged as overdue or configuration-gap driven risk.</div>
+                <div class="fin-card fin-kpi good">
+                    <div class="fin-kpi-label">Received</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'received_amount_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note"><?php echo (int) accounts_master_report_value($summary, 'collection_percentage', 0); ?>% of the visible order book is collected.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Milestone Pressure</div>
-                    <div class="kpi-value"><?php echo (int) (isset($summary['milestone_count']) ? $summary['milestone_count'] : 0); ?></div>
-                    <div class="kpi-note"><?php echo (int) (isset($summary['overdue_milestone_count']) ? $summary['overdue_milestone_count'] : 0); ?> milestone(s) carry overdue payment exposure.</div>
+                <div class="fin-card fin-kpi danger">
+                    <div class="fin-kpi-label">Overdue</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'overdue_amount_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Invoiced, unpaid and past the ledger due date, across <?php echo (int) accounts_master_report_value($summary, 'overdue_df_count', 0); ?> DF(s).</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Dispatch Ledger Coverage</div>
-                    <div class="kpi-value"><?php echo (int) (isset($summary['dispatch_tracker_row_count']) ? $summary['dispatch_tracker_row_count'] : 0); ?></div>
-                    <div class="kpi-note"><?php echo (int) (isset($summary['dispatch_tracker_missing_count']) ? $summary['dispatch_tracker_missing_count'] : 0); ?> visible DF(s) do not yet have DF-wise dispatch ledger data.</div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Balance due</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'balance_amount_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Invoiced and still awaiting payment, due or not.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Dispatch Ledger Received</div>
-                    <div class="kpi-value"><?php echo accounts_master_report_escape(isset($summary['dispatch_tracker_received_total_display']) ? $summary['dispatch_tracker_received_total_display'] : '₹0.00'); ?></div>
-                    <div class="kpi-note">DF-wise collection captured directly on the dispatch billing ledger.</div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Payment terms to fix</div>
+                    <div class="fin-kpi-value"><?php echo (int) accounts_master_report_value($summary, 'config_df_count', 0); ?></div>
+                    <div class="fin-kpi-note">DF(s) whose payment-term setup needs correction before their numbers can be relied on.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Dispatch Ledger Balance</div>
-                    <div class="kpi-value"><?php echo accounts_master_report_escape(isset($summary['dispatch_tracker_balance_total_display']) ? $summary['dispatch_tracker_balance_total_display'] : '₹0.00'); ?></div>
-                    <div class="kpi-note"><?php echo (int) (isset($summary['dispatch_tracker_due_count']) ? $summary['dispatch_tracker_due_count'] : 0); ?> DF(s) are marked Due and <?php echo (int) (isset($summary['dispatch_tracker_hold_count']) ? $summary['dispatch_tracker_hold_count'] : 0); ?> DF(s) are on Hold there.</div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">No ledger entry</div>
+                    <div class="fin-kpi-value"><?php echo (int) accounts_master_report_value($summary, 'no_ledger_df_count', 0); ?></div>
+                    <div class="fin-kpi-note">Running DF(s) with nothing invoiced or collected recorded against them yet.</div>
                 </div>
-                <div class="kpi-card finance-card">
-                    <div class="kpi-label">Dispatch Sync Gaps</div>
-                    <div class="kpi-value"><?php echo (int) (isset($summary['dispatch_sync_gap_count']) ? $summary['dispatch_sync_gap_count'] : 0); ?></div>
-                    <div class="kpi-note">DF(s) where DF-wise dispatch ledger amounts differ from finance milestone receipts.</div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">No PO recorded</div>
+                    <div class="fin-kpi-value"><?php echo (int) accounts_master_report_value($summary, 'no_po_df_count', 0); ?></div>
+                    <div class="fin-kpi-note">Running DF(s) with no purchase order booked against them.</div>
                 </div>
             </div>
 
-            <div class="signal-grid">
-                <div class="signal-card finance-card">
-                    <div class="signal-kicker">Management Readout</div>
-                    <div class="signal-title">
-                        <?php if (!empty($summary['total_overdue_amount']) && $summary['total_overdue_amount'] > 0): ?>
-                            Visible overdue finance exposure needs direct follow-up and configuration review.
-                        <?php elseif (!empty($summary['gap_row_count']) && $summary['gap_row_count'] > 0): ?>
-                            The biggest current finance risk is configuration quality, not collection delay.
+            <div class="fin-panel-grid">
+                <div class="fin-card fin-panel">
+                    <h3 class="fin-section-title">Act on these first</h3>
+                    <div class="fin-section-copy">Ranked by amount. Each row names the single next step.</div>
+                    <div class="fin-list">
+                        <?php if (!empty($action_rows)): ?>
+                            <?php foreach ($action_rows as $action): ?>
+                                <div class="fin-item <?php echo accounts_master_report_escape($action['tone']); ?>">
+                                    <div class="fin-item-top">
+                                        <div class="fin-item-title"><?php echo accounts_master_report_escape($action['action']); ?> &middot; <?php echo accounts_master_report_escape($action['df_no']); ?></div>
+                                        <div class="fin-item-amount"><?php echo accounts_master_report_escape($action['amount_display']); ?></div>
+                                    </div>
+                                    <div class="fin-item-copy"><?php echo accounts_master_report_escape($action['company_name']); ?> &mdash; <?php echo accounts_master_report_escape($action['detail']); ?></div>
+                                </div>
+                            <?php endforeach; ?>
                         <?php else: ?>
-                            The current finance view is active, mapped, and ready for routine management review.
+                            <div class="fin-empty">Nothing needs chasing or invoicing in this view.</div>
                         <?php endif; ?>
                     </div>
-                    <div class="signal-copy">
-                        This report separates commercial exposure, milestone readiness, collection tracking, and DF-wise dispatch billing so finance can explain not only what is due, but also why it is blocked and whether both registers are aligned.
+                </div>
+
+                <div class="fin-card fin-panel">
+                    <h3 class="fin-section-title">Payment terms to correct</h3>
+                    <div class="fin-section-copy">
+                        Faults in the payment-term master, not in a single order. Fixing one term repairs every DF using it.
+                        Duplicate milestone generations are already excluded from the figures above so orders are not billed twice.
                     </div>
-                    <ul class="signal-list">
+                    <div class="fin-list">
+                        <?php if (!empty($config_issues)): ?>
+                            <?php foreach ($config_issues as $config_issue): ?>
+                                <div class="fin-item slate">
+                                    <div class="fin-item-top">
+                                        <div class="fin-item-title"><?php echo accounts_master_report_escape($config_issue['problem']); ?></div>
+                                        <div class="fin-item-amount"><?php echo accounts_master_report_escape($config_issue['order_value_display']); ?></div>
+                                    </div>
+                                    <div class="fin-item-copy">
+                                        <?php if ((int) $config_issue['payment_term_id'] > 0): ?>
+                                            Term #<?php echo (int) $config_issue['payment_term_id']; ?> &mdash;
+                                        <?php endif; ?>
+                                        <?php echo accounts_master_report_escape($config_issue['payment_term_name']); ?>
+                                        <br><?php echo (int) $config_issue['df_count']; ?> running DF(s) affected.
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <div class="fin-empty">Every payment term in this view is configured correctly.</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="fin-card fin-panel">
+                    <h3 class="fin-section-title">Readout</h3>
+                    <div class="fin-section-copy">What the current view says about the running order book.</div>
+                    <ul class="fin-bullets">
                         <?php foreach ($insights as $insight): ?>
                             <li><?php echo accounts_master_report_escape($insight); ?></li>
                         <?php endforeach; ?>
                     </ul>
-                </div>
 
-                <div class="signal-card finance-card">
-                    <div class="mini-panel-title">Top Finance Risk</div>
-                    <div class="mini-panel-copy">Rows with the highest immediate finance pressure based on health priority, overdue amount, and pending amount.</div>
-                    <div class="mini-list">
-                        <?php if (!empty($top_risk_rows)): ?>
-                            <?php foreach ($top_risk_rows as $risk_row): ?>
-                                <div class="mini-item">
-                                    <div class="mini-item-title"><?php echo accounts_master_report_escape($risk_row['df_no']); ?> | <?php echo accounts_master_report_escape($risk_row['po_no']); ?></div>
-                                    <div class="mini-item-copy"><?php echo accounts_master_report_escape($risk_row['company_name']); ?></div>
-                                    <div class="mini-meta">
-                                        <span class="mini-chip red"><?php echo accounts_master_report_escape($risk_row['overdue_amount_display']); ?> overdue</span>
-                                        <span class="mini-chip amber"><?php echo accounts_master_report_escape($risk_row['pending_amount_display']); ?> pending</span>
-                                        <span class="mini-chip"><?php echo accounts_master_report_escape($risk_row['health_label']); ?></span>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <div class="empty-state" style="padding:28px 12px;">No finance risk visible in the current filter.</div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <div class="signal-card finance-card">
-                    <div class="mini-panel-title">Marketing Pressure</div>
-                    <div class="mini-panel-copy">Pending and overdue collection exposure grouped by the marketing owner mapped on each visible PO.</div>
-                    <div class="mini-list">
-                        <?php if (!empty($marketing_summary)): ?>
+                    <?php if (!empty($marketing_summary)): ?>
+                        <h3 class="fin-section-title" style="margin-top:18px;">By owner</h3>
+                        <div class="fin-list">
                             <?php foreach ($marketing_summary as $marketing_row): ?>
-                                <div class="mini-item">
-                                    <div class="mini-item-title"><?php echo accounts_master_report_escape($marketing_row['label']); ?></div>
-                                    <div class="mini-meta">
-                                        <span class="mini-chip"><?php echo (int) $marketing_row['df_count']; ?> row(s)</span>
-                                        <span class="mini-chip amber"><?php echo accounts_master_report_escape($marketing_row['pending_amount_display']); ?> pending</span>
-                                        <span class="mini-chip red"><?php echo accounts_master_report_escape($marketing_row['overdue_amount_display']); ?> overdue</span>
+                                <div class="fin-item slate">
+                                    <div class="fin-item-top">
+                                        <div class="fin-item-title"><?php echo accounts_master_report_escape($marketing_row['label']); ?></div>
+                                        <div class="fin-item-amount"><?php echo accounts_master_report_escape($marketing_row['unbilled_amount_display']); ?></div>
+                                    </div>
+                                    <div class="fin-item-copy">
+                                        <?php echo (int) $marketing_row['df_count']; ?> DF(s) &middot;
+                                        order <?php echo accounts_master_report_escape($marketing_row['order_value_display']); ?> &middot;
+                                        ready to invoice <?php echo accounts_master_report_escape($marketing_row['unbilled_amount_display']); ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
-                        <?php else: ?>
-                            <div class="empty-state" style="padding:28px 12px;">No marketing ownership signal available.</div>
-                        <?php endif; ?>
-                    </div>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
-            <div class="report-card finance-card">
-                <div class="report-toolbar">
+            <div class="fin-card fin-report">
+                <div class="fin-toolbar">
                     <div>
-                        <h3 class="section-title">Finance Register by Running DF</h3>
-                        <div class="section-copy">This register shows DF-wise commercial value, collection progress, milestone mapping, overdue pressure, the latest finance follow-up trail, and the DF-wise dispatch billing ledger in one table.</div>
+                        <h3 class="fin-section-title">Running DF register</h3>
+                        <div class="fin-section-copy">One row per running DF: its purchase orders, the claim schedule those orders sit on, and the dispatch ledger holding the money.</div>
                     </div>
-                    <div class="report-toolbar-right">
-                        <div class="toolbar-control">
-                            <label for="healthFilter">Health Filter</label>
-                            <select id="healthFilter" class="toolbar-select">
-                                <option value="">All health states</option>
-                                <option value="gap">Configuration Gap</option>
-                                <option value="critical">Overdue</option>
-                                <option value="watch">Watch</option>
-                                <option value="active">Active</option>
-                                <option value="collected">Collected</option>
+                    <div class="fin-toolbar-right">
+                        <div>
+                            <label class="fin-label" for="healthFilter">Show</label>
+                            <select id="healthFilter" class="fin-select">
+                                <option value="">Everything</option>
+                                <option value="overdue">Payment overdue</option>
+                                <option value="unbilled">Ready to invoice</option>
+                                <option value="config">Configuration gap</option>
+                                <option value="nopo">No PO recorded</option>
+                                <option value="watch">Awaiting payment</option>
+                                <option value="collected">Fully collected</option>
+                                <option value="ontrack">On track</option>
                             </select>
                         </div>
-                        <div class="toolbar-text" id="reportVisibleCounter"></div>
-                        <div id="financeReportButtons"></div>
                     </div>
                 </div>
 
-                <div class="table-wrap">
-                    <table id="financeRunningDfTable" class="table finance-table">
+                <div class="table-responsive">
+                    <table id="finRegister" class="table fin-table" style="width:100%;">
                         <thead>
                             <tr>
-                                <th style="width:70px;">#</th>
-                                <th style="width:230px;">Company & DF</th>
-                                <th style="width:220px;">PO & Dates</th>
-                                <th style="width:340px;">Commercial & Dispatch Snapshot</th>
-                                <th style="width:290px;">Payment Health</th>
-                                <th style="width:620px;">Milestone Intelligence</th>
-                                <th style="width:180px;">Marketing</th>
-                                <th style="width:150px;">Actions</th>
+                                <th style="width:36px;">#</th>
+                                <th style="width:17%;">DF &amp; customer</th>
+                                <th style="width:16%;">Purchase order</th>
+                                <th style="width:21%;">Money position</th>
+                                <th style="width:15%;">Status</th>
+                                <th style="width:16%;">Claim schedule</th>
+                                <th style="width:15%;">Dispatch ledger</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if (!empty($rows)): ?>
-                                <?php foreach ($rows as $index => $row): ?>
-                                    <?php
-                                    $row_class = 'row-watch';
-                                    if ($row['health_key'] === 'gap') {
-                                        $row_class = 'row-gap';
-                                    } elseif ($row['health_key'] === 'critical') {
-                                        $row_class = 'row-critical';
-                                    } elseif ($row['health_key'] === 'active' || $row['health_key'] === 'collected') {
-                                        $row_class = '';
-                                    }
-                                    ?>
-                                    <tr class="<?php echo $row_class; ?>" data-health="<?php echo accounts_master_report_escape($row['health_key']); ?>">
-                                        <td data-order="<?php echo (int) $row['health_priority']; ?>">
-                                            <span class="index-pill"><?php echo $index + 1; ?></span>
-                                        </td>
-                                        <td>
-                                            <div class="cell-title"><?php echo accounts_master_report_escape($row['company_name']); ?></div>
-                                            <div class="cell-copy">
-                                                <?php echo accounts_master_report_escape($row['df_no']); ?><br>
-                                                <?php echo accounts_master_report_escape($row['df_description'] !== '' ? $row['df_description'] : 'DF description not available'); ?>
-                                            </div>
-                                            <div class="mini-meta">
-                                                <span class="mini-chip"><?php echo accounts_master_report_escape($row['customer_currency'] !== '' ? $row['customer_currency'] : 'Currency N/A'); ?></span>
-                                                <span class="mini-chip">Release <?php echo accounts_master_report_escape($row['df_release_date']); ?></span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div class="cell-title"><?php echo accounts_master_report_escape($row['po_no'] !== '' ? $row['po_no'] : 'PO not linked'); ?></div>
-                                            <div class="cell-copy">PO Date: <?php echo accounts_master_report_escape($row['po_date']); ?></div>
-                                            <div class="cell-copy">Payment Term: <?php echo accounts_master_report_escape($row['payment_term_name'] !== '' ? $row['payment_term_name'] : 'Not Mapped'); ?></div>
-                                            <?php if ($row['po_download_url'] !== ''): ?>
-                                                <div class="mini-meta">
-                                                    <a href="<?php echo accounts_master_report_escape($row['po_download_url']); ?>" target="_blank" class="action-link soft" style="min-height:34px;">Download PO</a>
-                                                </div>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td data-order="<?php echo (float) $row['pending_amount']; ?>">
-                                            <div class="inline-grid">
-                                                <div class="inline-stat">
-                                                    <div class="inline-label">Order Value</div>
-                                                    <div class="inline-value"><?php echo accounts_master_report_escape($row['order_value_display']); ?></div>
-                                                </div>
-                                                <div class="inline-stat">
-                                                    <div class="inline-label">Received</div>
-                                                    <div class="inline-value"><?php echo accounts_master_report_escape($row['received_amount_display']); ?></div>
-                                                </div>
-                                                <div class="inline-stat">
-                                                    <div class="inline-label">Pending</div>
-                                                    <div class="inline-value"><?php echo accounts_master_report_escape($row['pending_amount_display']); ?></div>
-                                                </div>
-                                                <div class="inline-stat">
-                                                    <div class="inline-label">Collection %</div>
-                                                    <div class="inline-value"><?php echo (int) $row['collection_percentage']; ?>%</div>
-                                                </div>
-                                                <div class="inline-stat">
-                                                    <div class="inline-label">Overdue</div>
-                                                    <div class="inline-value"><?php echo accounts_master_report_escape($row['overdue_amount_display']); ?></div>
-                                                </div>
-                                                <div class="inline-stat">
-                                                    <div class="inline-label">Upcoming 7 Days</div>
-                                                    <div class="inline-value"><?php echo accounts_master_report_escape($row['upcoming_amount_display']); ?></div>
-                                                </div>
-                                            </div>
-                                            <div class="dispatch-ledger-box">
-                                                <div class="dispatch-ledger-head">
-                                                    <div class="dispatch-ledger-title">DF Dispatch Ledger</div>
-                                                    <span class="status-pill status-<?php echo accounts_master_report_escape($row['dispatch_due_state_key']); ?>"><?php echo accounts_master_report_escape($row['dispatch_due_state_label']); ?></span>
-                                                </div>
-                                                <?php if ($row['dispatch_tracker_available']): ?>
-                                                    <div class="dispatch-ledger-grid">
-                                                        <div class="milestone-stat">
-                                                            <div class="inline-label">Invoice</div>
-                                                            <div class="inline-value"><?php echo accounts_master_report_escape($row['dispatch_invoice_no'] !== '' ? $row['dispatch_invoice_no'] : 'Not Updated'); ?></div>
-                                                        </div>
-                                                        <div class="milestone-stat">
-                                                            <div class="inline-label">Invoice Date</div>
-                                                            <div class="inline-value"><?php echo accounts_master_report_escape($row['dispatch_invoice_date']); ?></div>
-                                                        </div>
-                                                        <div class="milestone-stat">
-                                                            <div class="inline-label">Invoice Amount</div>
-                                                            <div class="inline-value"><?php echo accounts_master_report_escape($row['dispatch_invoice_amount_display']); ?></div>
-                                                        </div>
-                                                        <div class="milestone-stat">
-                                                            <div class="inline-label">Taxable Sale</div>
-                                                            <div class="inline-value"><?php echo accounts_master_report_escape($row['dispatch_taxable_sale_display']); ?></div>
-                                                        </div>
-                                                        <div class="milestone-stat">
-                                                            <div class="inline-label">Ledger Received</div>
-                                                            <div class="inline-value"><?php echo accounts_master_report_escape($row['dispatch_payment_received_display']); ?></div>
-                                                        </div>
-                                                        <div class="milestone-stat">
-                                                            <div class="inline-label">Ledger Balance</div>
-                                                            <div class="inline-value"><?php echo accounts_master_report_escape($row['dispatch_balance_amount_display']); ?></div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="dispatch-ledger-note">
-                                                        <strong>Due Date:</strong> <?php echo accounts_master_report_escape($row['dispatch_due_date']); ?><br>
-                                                        <strong>Machines:</strong> <?php echo accounts_master_report_escape($row['dispatch_nos_of_machines']); ?><br>
-                                                        <?php if ($row['dispatch_remarks'] !== ''): ?>
-                                                            <strong>Remarks:</strong> <?php echo nl2br(accounts_master_report_escape($row['dispatch_remarks'])); ?><br>
+                        <?php if (!empty($rows)): ?>
+                            <?php foreach ($rows as $index => $row): ?>
+                                <?php
+                                $row_class = '';
+                                if ($row['health_key'] === 'overdue' || $row['health_key'] === 'nopo') {
+                                    $row_class = 'row-overdue';
+                                } elseif ($row['health_key'] === 'unbilled') {
+                                    $row_class = 'row-unbilled';
+                                } elseif ($row['health_key'] === 'config') {
+                                    $row_class = 'row-config';
+                                }
+                                $flow_segments = accounts_master_report_flow($row);
+                                ?>
+                                <tr class="<?php echo $row_class; ?>" data-health="<?php echo accounts_master_report_escape($row['health_key']); ?>">
+                                    <td data-order="<?php echo (int) $index; ?>"><span class="fin-idx"><?php echo $index + 1; ?></span></td>
+
+                                    <td>
+                                        <div class="cell-title"><?php echo accounts_master_report_escape($row['company_name']); ?></div>
+                                        <div class="cell-copy">
+                                            <strong><?php echo accounts_master_report_escape($row['df_no']); ?></strong><br>
+                                            <?php echo accounts_master_report_escape($row['df_description'] !== '' ? $row['df_description'] : 'No DF description'); ?>
+                                        </div>
+                                        <div>
+                                            <span class="tag">Released <?php echo accounts_master_report_escape($row['df_release_date']); ?></span>
+                                            <?php foreach ($row['currencies'] as $currency): ?>
+                                                <span class="tag <?php echo $currency !== 'INR' ? 'export' : ''; ?>"><?php echo accounts_master_report_escape($currency); ?></span>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <div class="cell-copy" style="margin-top:6px;">
+                                            <a href="<?php echo accounts_master_report_escape($row['df_detail_url']); ?>" target="_blank">DF detail</a> &middot;
+                                            <a href="<?php echo accounts_master_report_escape($row['gantt_url']); ?>" target="_blank">Gantt</a>
+                                        </div>
+                                    </td>
+
+                                    <td>
+                                        <?php if (!empty($row['pos'])): ?>
+                                            <?php foreach ($row['pos'] as $po): ?>
+                                                <div style="margin-bottom:9px;">
+                                                    <div class="cell-title"><?php echo accounts_master_report_escape($po['po_no'] !== '' ? $po['po_no'] : 'PO not numbered'); ?></div>
+                                                    <div class="cell-copy">
+                                                        Dated <?php echo accounts_master_report_escape($po['po_date']); ?><br>
+                                                        <strong><?php echo accounts_master_report_escape($po['order_value_display']); ?></strong>
+                                                        <?php if ($po['currency_amount_display'] !== ''): ?>
+                                                            <br><span class="tag export"><?php echo accounts_master_report_escape($po['currency_amount_display']); ?></span>
                                                         <?php endif; ?>
-                                                        <?php if ($row['dispatch_commissioning_status'] !== ''): ?>
-                                                            <strong>Commissioning:</strong> <?php echo accounts_master_report_escape($row['dispatch_commissioning_status']); ?><br>
-                                                        <?php endif; ?>
-                                                        <strong>Last Updated:</strong> <?php echo accounts_master_report_escape($row['dispatch_last_updated_by']); ?> on <?php echo accounts_master_report_escape($row['dispatch_last_updated_on']); ?>
                                                     </div>
-                                                <?php else: ?>
-                                                    <div class="dispatch-ledger-empty">
-                                                        DF-wise dispatch billing ledger is not updated yet for this row.
+                                                    <div class="cell-copy" style="margin-top:4px;">
+                                                        <?php echo accounts_master_report_escape($po['payment_term_name'] !== '' ? $po['payment_term_name'] : 'No payment term linked'); ?>
                                                     </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </td>
-                                        <td data-order="<?php echo (float) $row['overdue_amount']; ?>">
-                                            <span class="status-pill status-<?php echo accounts_master_report_escape($row['health_key']); ?>"><?php echo accounts_master_report_escape($row['health_label']); ?></span>
-                                            <div class="cell-copy" style="margin-top:12px;">
-                                                <?php if ($row['latest_followup_text'] !== ''): ?>
-                                                    Latest follow-up: <?php echo accounts_master_report_escape($row['latest_followup_text']); ?><br>
-                                                    Logged on <?php echo accounts_master_report_escape($row['latest_followup_on_display']); ?>
-                                                <?php else: ?>
-                                                    No latest finance follow-up note is visible on this row.
-                                                <?php endif; ?>
-                                            </div>
-                                            <div class="dispatch-ledger-note">
-                                                <strong>Dispatch Ledger:</strong> <?php echo accounts_master_report_escape($row['dispatch_sync_gap_note'] !== '' ? $row['dispatch_sync_gap_note'] : $row['dispatch_tracker_note']); ?>
-                                            </div>
-                                            <?php if (!empty($row['issues'])): ?>
-                                                <ul class="issue-list">
-                                                    <?php foreach ($row['issues'] as $issue): ?>
-                                                        <li><?php echo accounts_master_report_escape($issue); ?></li>
-                                                    <?php endforeach; ?>
-                                                </ul>
+                                                    <?php if ($po['download_url'] !== ''): ?>
+                                                        <div class="cell-copy"><a href="<?php echo accounts_master_report_escape($po['download_url']); ?>" target="_blank">Download PO</a></div>
+                                                    <?php endif; ?>
+                                                    <?php if ($po['order_on_hold']): ?>
+                                                        <span class="tag">Order on hold</span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <div class="cell-copy">No purchase order is recorded against this DF.</div>
+                                        <?php endif; ?>
+                                    </td>
+
+                                    <td data-order="<?php echo (float) $row['unbilled_amount']; ?>">
+                                        <div class="money-grid">
+                                            <div class="money-stat"><div class="m-label">Order</div><div class="m-value"><?php echo accounts_master_report_escape($row['order_value_display']); ?></div></div>
+                                            <div class="money-stat"><div class="m-label">Claimable</div><div class="m-value"><?php echo accounts_master_report_escape($row['claimable_amount_display']); ?></div></div>
+                                            <div class="money-stat ready"><div class="m-label">Ready to invoice</div><div class="m-value"><?php echo accounts_master_report_escape($row['unbilled_amount_display']); ?></div></div>
+                                            <div class="money-stat"><div class="m-label">Invoiced</div><div class="m-value"><?php echo accounts_master_report_escape($row['invoiced_amount_display']); ?></div></div>
+                                            <div class="money-stat received"><div class="m-label">Received</div><div class="m-value"><?php echo accounts_master_report_escape($row['received_amount_display']); ?></div></div>
+                                            <div class="money-stat <?php echo $row['overdue_balance'] > 0 ? 'overdue' : ''; ?>"><div class="m-label">Balance</div><div class="m-value"><?php echo accounts_master_report_escape($row['balance_amount_display']); ?></div></div>
+                                            <?php if ($row['slipped_amount'] > 0.01): ?>
+                                                <div class="money-stat overdue"><div class="m-label">Blocked by late work</div><div class="m-value"><?php echo accounts_master_report_escape($row['slipped_amount_display']); ?></div></div>
                                             <?php endif; ?>
-                                        </td>
-                                        <td>
-                                            <div class="milestone-stack">
-                                                <?php if (!empty($row['milestones'])): ?>
-                                                    <?php foreach ($row['milestones'] as $milestone): ?>
-                                                        <?php $milestone_context_label = json_encode($row['df_no'] . ' | ' . ($milestone['task_name'] !== '' ? $milestone['task_name'] : 'Milestone')); ?>
-                                                        <div class="milestone-card">
-                                                            <div class="milestone-head">
-                                                                <div>
-                                                                    <div class="milestone-title"><?php echo accounts_master_report_escape($milestone['task_name'] !== '' ? $milestone['task_name'] : 'Milestone task not linked'); ?></div>
-                                                                    <div class="milestone-sub">Target Date: <?php echo accounts_master_report_escape($milestone['target_date']); ?></div>
-                                                                </div>
-                                                                <div class="mini-meta" style="margin-top:0;">
-                                                                    <span class="mini-chip"><?php echo rtrim(rtrim(number_format((float) $milestone['payment_percentage'], 2, '.', ''), '0'), '.'); ?>%</span>
-                                                                    <span class="status-pill status-<?php echo accounts_master_report_escape($milestone['work_status_key']); ?>"><?php echo accounts_master_report_escape($milestone['work_status_label']); ?></span>
-                                                                    <span class="status-pill status-<?php echo accounts_master_report_escape($milestone['payment_status_key']); ?>"><?php echo accounts_master_report_escape($milestone['payment_status_label']); ?></span>
-                                                                </div>
-                                                            </div>
+                                        </div>
 
-                                                            <div class="milestone-grid">
-                                                                <div class="milestone-stat">
-                                                                    <div class="inline-label">Milestone Value</div>
-                                                                    <div class="inline-value"><?php echo accounts_master_report_escape($milestone['scheduled_amount_display']); ?></div>
-                                                                </div>
-                                                                <div class="milestone-stat">
-                                                                    <div class="inline-label">Received</div>
-                                                                    <div class="inline-value"><?php echo accounts_master_report_escape($milestone['amount_received_display']); ?></div>
-                                                                </div>
-                                                                <div class="milestone-stat">
-                                                                    <div class="inline-label">Outstanding</div>
-                                                                    <div class="inline-value"><?php echo accounts_master_report_escape($milestone['outstanding_amount_display']); ?></div>
-                                                                </div>
-                                                                <div class="milestone-stat">
-                                                                    <div class="inline-label">Updated By / On</div>
-                                                                    <div class="inline-value">
-                                                                        <?php echo accounts_master_report_escape($milestone['receiver_name']); ?><br>
-                                                                        <span style="font-size:11px; font-weight:700; color:var(--finance-muted);"><?php echo accounts_master_report_escape($milestone['payment_received_on']); ?></span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
+                                        <?php if (!empty($flow_segments)): ?>
+                                            <div class="flow">
+                                                <?php foreach ($flow_segments as $segment): ?>
+                                                    <span class="<?php echo accounts_master_report_escape($segment['key']); ?>" style="width:<?php echo (float) $segment['width']; ?>%;" title="<?php echo accounts_master_report_escape($segment['label']); ?>"></span>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            <div class="flow-key">
+                                                <?php foreach ($flow_segments as $segment): ?>
+                                                    <span><i class="<?php echo accounts_master_report_escape($segment['key']); ?>" style="background:<?php
+                                                        echo $segment['key'] === 'received' ? '#0a8f5b' : ($segment['key'] === 'unpaid' ? '#0f4fb7' : ($segment['key'] === 'ready' ? '#e2a13b' : '#cdd7e3')); ?>;"></i><?php echo accounts_master_report_escape($segment['label']); ?></span>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </td>
 
-                                                            <div class="followup-box">
-                                                                <strong>Follow-up:</strong>
-                                                                <?php if ($milestone['followup_text'] !== ''): ?>
-                                                                    <?php echo nl2br(accounts_master_report_escape($milestone['followup_text'])); ?><br>
-                                                                    <span style="color:var(--finance-muted);">Logged <?php echo accounts_master_report_escape($milestone['followup_logged_on']); ?> | Next follow-up <?php echo accounts_master_report_escape($milestone['next_followup']); ?></span>
-                                                                <?php else: ?>
-                                                                    No finance follow-up has been logged for this milestone yet.
-                                                                <?php endif; ?>
-                                                            </div>
+                                    <td data-order="<?php echo (float) $row['overdue_balance']; ?>">
+                                        <span class="pill <?php echo accounts_master_report_escape($row['health_key']); ?>"><?php echo accounts_master_report_escape($row['health_label']); ?></span>
+                                        <div class="cell-copy" style="margin-top:9px;"><?php echo accounts_master_report_escape($row['focus']); ?></div>
+                                        <?php if (!empty($row['issues'])): ?>
+                                            <ul class="issue-list">
+                                                <?php foreach ($row['issues'] as $issue): ?>
+                                                    <li><?php echo accounts_master_report_escape($issue); ?></li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        <?php endif; ?>
+                                    </td>
 
-                                                            <div class="milestone-meta">
-                                                                <?php if ($milestone['can_update_receipt']): ?>
-                                                                    <button
-                                                                        type="button"
-                                                                        class="update-link"
-                                                                        onclick="openPaymentReceiptModal(<?php echo (int) $milestone['record_id']; ?>, '<?php echo number_format((float) $milestone['prefill_receipt_amount'], 2, '.', ''); ?>', '<?php echo number_format((float) $milestone['target_receipt_amount'], 2, '.', ''); ?>', '<?php echo number_format((float) $milestone['current_received_amount'], 2, '.', ''); ?>', <?php echo $milestone_context_label; ?>)"
-                                                                    >
-                                                                        Update Receipt
-                                                                    </button>
-                                                                <?php endif; ?>
-                                                                <?php if ((float) $milestone['outstanding_amount'] > 0): ?>
-                                                                    <span class="mini-chip amber"><?php echo accounts_master_report_escape($milestone['outstanding_amount_display']); ?> to collect</span>
-                                                                <?php else: ?>
-                                                                    <span class="mini-chip green">Fully captured</span>
-                                                                <?php endif; ?>
-                                                            </div>
+                                    <td>
+                                        <?php if ($row['milestone_count'] > 0): ?>
+                                            <?php foreach ($row['pos'] as $po): ?>
+                                                <?php foreach ($po['milestones'] as $milestone): ?>
+                                                    <div class="ms-card">
+                                                        <div class="ms-head">
+                                                            <div class="ms-name"><?php echo accounts_master_report_escape($milestone['task_name']); ?></div>
+                                                            <span class="tag"><?php echo accounts_master_report_escape($milestone['percentage_display']); ?></span>
                                                         </div>
-                                                    <?php endforeach; ?>
-                                                <?php else: ?>
-                                                    <div class="empty-state" style="padding:30px 12px;">No milestone configuration is available for this row.</div>
-                                                <?php endif; ?>
+                                                        <div class="ms-meta">
+                                                            <strong><?php echo accounts_master_report_escape($milestone['amount_display']); ?></strong>
+                                                            &middot; <?php echo accounts_master_report_escape($milestone['trigger_date']); ?>
+                                                        </div>
+                                                        <div style="margin-top:5px;">
+                                                            <span class="pill <?php echo accounts_master_report_escape($milestone['claim_status_key']); ?>"><?php echo accounts_master_report_escape($milestone['claim_status_label']); ?></span>
+                                                        </div>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <div class="ledger-empty">No claim schedule can be built for this DF. Fix the payment term first.</div>
+                                        <?php endif; ?>
+                                    </td>
+
+                                    <td>
+                                        <div class="ledger-box">
+                                            <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+                                                <strong style="font-size:11.5px;">Ledger</strong>
+                                                <span class="pill <?php echo accounts_master_report_escape($row['due_status_key']); ?>"><?php echo accounts_master_report_escape($row['due_status_label']); ?></span>
                                             </div>
-                                        </td>
-                                        <td>
-                                            <div class="cell-title"><?php echo accounts_master_report_escape($row['marketing_person']); ?></div>
-                                            <div class="cell-copy">Collection owner mapped from the PO creator.</div>
-                                        </td>
-                                        <td>
-                                            <div class="action-stack">
-                                                <a href="<?php echo accounts_master_report_escape($row['df_detail_url']); ?>" target="_blank" class="action-link primary">DF Intelligence</a>
-                                                <a href="<?php echo accounts_master_report_escape($row['gantt_url']); ?>" target="_blank" class="action-link soft">Open Gantt</a>
-                                                <?php if ($row['po_download_url'] !== ''): ?>
-                                                    <a href="<?php echo accounts_master_report_escape($row['po_download_url']); ?>" target="_blank" class="action-link soft">PO File</a>
-                                                <?php endif; ?>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <tr>
-                                    <td colspan="8">
-                                        <div class="empty-state">
-                                            No running DF finance rows matched the current filter.<br>
-                                            Try widening the DF release date range or switching DF selection back to `ALL`.
+                                            <?php if ($row['ledger_available']): ?>
+                                                <div class="ms-meta" style="margin-top:7px;">
+                                                    Invoice <strong><?php echo accounts_master_report_escape($row['invoice_no'] !== '' ? $row['invoice_no'] : 'not numbered'); ?></strong>
+                                                    dated <?php echo accounts_master_report_escape($row['invoice_date']); ?><br>
+                                                    Due <?php echo accounts_master_report_escape($row['due_date']); ?>
+                                                    <?php if ($row['days_overdue'] > 0): ?>
+                                                        &mdash; <span style="color:#c22f3d;font-weight:700;"><?php echo (int) $row['days_overdue']; ?> day(s) late</span>
+                                                    <?php endif; ?>
+                                                    <?php if ($row['nos_of_machines'] !== ''): ?><br>Machines: <?php echo accounts_master_report_escape($row['nos_of_machines']); ?><?php endif; ?>
+                                                    <?php if ($row['remarks'] !== ''): ?><br>Note: <?php echo accounts_master_report_escape($row['remarks']); ?><?php endif; ?>
+                                                    <br>Updated by <?php echo accounts_master_report_escape($row['last_updated_by']); ?> on <?php echo accounts_master_report_escape($row['last_updated_on']); ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="ledger-empty" style="margin-top:7px;">Nothing invoiced or collected is recorded for this DF yet.</div>
+                                            <?php endif; ?>
+                                            <button type="button" class="fin-btn primary ledger-edit"
+                                                    style="margin-top:9px; padding:8px 10px; font-size:12px; width:100%;"
+                                                    data-df-id="<?php echo (int) $row['df_id']; ?>"
+                                                    data-label="<?php echo accounts_master_report_escape($row['df_no'] . ' - ' . $row['company_name']); ?>"
+                                                    data-invoice-no="<?php echo accounts_master_report_escape($row['invoice_no']); ?>"
+                                                    data-invoice-date="<?php echo accounts_master_report_escape($row['invoice_date_raw']); ?>"
+                                                    data-invoice-amount="<?php echo (float) $row['invoiced_amount']; ?>"
+                                                    data-taxable-sale="<?php echo (float) $row['taxable_sale']; ?>"
+                                                    data-received="<?php echo (float) $row['received_amount']; ?>"
+                                                    data-due-date="<?php echo accounts_master_report_escape($row['due_date_raw']); ?>"
+                                                    data-due-status="<?php echo accounts_master_report_escape($row['due_status_label']); ?>"
+                                                    data-remarks="<?php echo accounts_master_report_escape($row['remarks']); ?>"
+                                                    data-claimable="<?php echo accounts_master_report_escape($row['claimable_amount_display']); ?>"
+                                                    data-unbilled="<?php echo accounts_master_report_escape($row['unbilled_amount_display']); ?>">
+                                                <?php echo $row['ledger_available'] ? 'Update invoice / receipt' : 'Record invoice / receipt'; ?>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
-                            <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="7">
+                                    <div class="fin-empty">
+                                        No running DF matched this filter.<br>
+                                        Switch the DF selection back to <strong>All running DFs</strong> or press <strong>All dates</strong>.
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
@@ -1400,42 +544,89 @@ if (!function_exists('accounts_master_report_escape')) {
         </div>
     </div>
 
-    <div id="updateprogress" class="modal fade" role="dialog">
-        <form id="updateprogressform" method="post" action="<?php echo page_url; ?>Accounts/updatepaymentdetail/<?php echo isset($filters['start_date']) ? accounts_master_report_escape($filters['start_date']) : 'ALL'; ?>/<?php echo isset($filters['end_date']) ? accounts_master_report_escape($filters['end_date']) : 'ALL'; ?>/<?php echo accounts_master_report_escape($current_df_filter); ?>" enctype="multipart/form-data">
-            <div id="pageloader1">
-                <img src="<?php echo assets_url; ?>images/loading.gif" alt="processing...">
-            </div>
+    <div id="ledgerModal" class="modal fade" role="dialog">
+        <form method="post" action="<?php echo page_url; ?>Accounts/update_df_ledger/<?php echo accounts_master_report_escape($filter_path); ?>">
+            <input type="hidden" name="df_id" id="ledger_df_id" value="">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
                         <button type="button" class="close" data-dismiss="modal">&times;</button>
-                        <div class="modal-title">Update Payment Receipt</div>
+                        <h4 class="modal-title">Invoice &amp; receipt</h4>
+                        <div class="fin-section-copy" id="ledger_context"></div>
                     </div>
                     <div class="modal-body">
-                        <input type="hidden" id="taskkiid" name="taskkiid" value="">
-                        <div class="form-group">
-                            <label class="filter-label" for="receiptTargetInfo">Milestone Context</label>
-                            <input type="text" id="receiptTargetInfo" class="form-control" readonly value="">
+                        <div class="modal-note" id="ledger_helper"></div>
+
+                        <div class="row" style="margin-top:14px;">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="fin-label" for="ledger_invoice_no">Invoice number</label>
+                                    <input type="text" class="form-control" name="invoice_no" id="ledger_invoice_no" maxlength="100">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="fin-label" for="ledger_invoice_date">Invoice date</label>
+                                    <input type="date" class="form-control" name="invoice_date" id="ledger_invoice_date">
+                                </div>
+                            </div>
                         </div>
+
                         <div class="row">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="form-group">
-                                    <label class="filter-label" for="amountreceived">Received Amount</label>
-                                    <input type="number" class="form-control" name="amountreceived" id="amountreceived" step="any" required value="">
+                                    <label class="fin-label" for="ledger_invoice_amount">Invoice amount</label>
+                                    <input type="number" step="any" min="0" class="form-control" name="invoice_amount" id="ledger_invoice_amount" value="0">
                                 </div>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="form-group">
-                                    <label class="filter-label" for="paymentreceivedate">Payment Date</label>
-                                    <input type="date" class="form-control" name="paymentreceivedate" id="paymentreceivedate" required value="<?php echo date('Y-m-d'); ?>">
+                                    <label class="fin-label" for="ledger_taxable_sale">Taxable sale</label>
+                                    <input type="number" step="any" min="0" class="form-control" name="taxable_sale" id="ledger_taxable_sale" value="0">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="fin-label" for="ledger_received">Payment received</label>
+                                    <input type="number" step="any" min="0" class="form-control" name="payment_received" id="ledger_received" value="0">
                                 </div>
                             </div>
                         </div>
-                        <div class="modal-note" id="receiptHelperNote">
-                            Enter the cumulative amount received against this milestone. The report will compare it against the target milestone value to decide whether the milestone is fully collected or still partial.
+
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="fin-label" for="ledger_due_date">Payment due date</label>
+                                    <input type="date" class="form-control" name="due_date" id="ledger_due_date">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="fin-label" for="ledger_due_status">Due status</label>
+                                    <select class="form-control" name="payment_due_status" id="ledger_due_status">
+                                        <option value="">Not updated</option>
+                                        <option value="Due">Due</option>
+                                        <option value="Not Due">Not Due</option>
+                                        <option value="Received">Received</option>
+                                        <option value="Hold">Hold</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="fin-label">Balance</label>
+                                    <input type="text" class="form-control" id="ledger_balance" readonly value="0.00">
+                                </div>
+                            </div>
                         </div>
-                        <div class="text-center" style="margin-top:18px;">
-                            <button type="submit" class="filter-btn primary" style="min-width:190px;">Save Receipt Update</button>
+
+                        <div class="form-group">
+                            <label class="fin-label" for="ledger_remarks">Remarks</label>
+                            <textarea class="form-control" name="remarks" id="ledger_remarks" rows="2"></textarea>
+                        </div>
+
+                        <div class="text-center" style="margin-top:16px;">
+                            <button type="submit" class="fin-btn primary" style="min-width:210px;">Save to dispatch ledger</button>
                         </div>
                     </div>
                 </div>
@@ -1451,115 +642,64 @@ if (!function_exists('accounts_master_report_escape')) {
     <script src="<?php echo assets_url; ?>plugins/datatables/dataTables.buttons.min.js"></script>
     <script src="<?php echo assets_url; ?>plugins/datatables/buttons.bootstrap.min.js"></script>
     <script src="<?php echo assets_url; ?>plugins/datatables/jszip.min.js"></script>
-    <script src="<?php echo assets_url; ?>plugins/datatables/pdfmake.min.js"></script>
-    <script src="<?php echo assets_url; ?>plugins/datatables/vfs_fonts.js"></script>
     <script src="<?php echo assets_url; ?>plugins/datatables/buttons.html5.min.js"></script>
     <script src="<?php echo assets_url; ?>plugins/datatables/buttons.print.min.js"></script>
-    <script src="<?php echo assets_url; ?>plugins/datatables/dataTables.responsive.min.js"></script>
-    <script src="<?php echo assets_url; ?>plugins/datatables/responsive.bootstrap.min.js"></script>
     <script src="<?php echo assets_url; ?>js/jquery.core.js"></script>
     <script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
 
     <script>
-        function openPaymentReceiptModal(recordId, prefillAmount, targetAmount, currentAmount, contextLabel) {
-            $('#taskkiid').val(recordId);
-            $('#amountreceived').val(prefillAmount);
-            $('#receiptTargetInfo').val(contextLabel);
-            $('#receiptHelperNote').text(
-                'Target milestone value: INR ' + targetAmount +
-                ' | Current captured value: INR ' + currentAmount +
-                '. Enter the latest cumulative amount received for this milestone.'
-            );
-            $('#updateprogress').modal('show');
-        }
-
-        $(document).ready(function () {
-            var hasRows = <?php echo !empty($rows) ? 'true' : 'false'; ?>;
-            var healthFilterValue = '';
-            var financeTable = null;
-
-            $('#updateprogressform').on('submit', function () {
-                $('#pageloader1').fadeIn();
-            });
-
-            if (!hasRows) {
-                $('#reportVisibleCounter').text('Visible rows: 0');
-                $('#healthFilter').prop('disabled', true);
-                return;
-            }
-
-            financeTable = $('#financeRunningDfTable').DataTable({
+        $(function () {
+            var register = $('#finRegister').DataTable({
                 order: [[0, 'asc']],
                 pageLength: 25,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
-                scrollX: true,
-                responsive: false,
-                dom: 'Blfrtip',
+                lengthMenu: [[10, 25, 50, -1], [10, 25, 50, 'All']],
+                dom: 'Bfrtip',
                 buttons: [
-                    {
-                        extend: 'excelHtml5',
-                        title: 'Running DF Finance Master Dashboard',
-                        exportOptions: {
-                            columns: [0, 1, 2, 3, 4, 5, 6]
-                        }
-                    },
-                    {
-                        extend: 'csvHtml5',
-                        title: 'Running DF Finance Master Dashboard',
-                        exportOptions: {
-                            columns: [0, 1, 2, 3, 4, 5, 6]
-                        }
-                    },
-                    {
-                        extend: 'print',
-                        title: 'Running DF Finance Master Dashboard',
-                        exportOptions: {
-                            columns: [0, 1, 2, 3, 4, 5, 6]
-                        }
-                    }
+                    { extend: 'excelHtml5', text: 'Excel', title: 'Running DF finance control', exportOptions: { columns: ':visible' } },
+                    { extend: 'csvHtml5', text: 'CSV', title: 'Running DF finance control', exportOptions: { columns: ':visible' } },
+                    { extend: 'print', text: 'Print', title: 'Running DF finance control', exportOptions: { columns: ':visible' } }
                 ],
-                columnDefs: [
-                    { orderable: false, targets: [5, 7] }
-                ],
-                language: {
-                    search: 'Search register',
-                    lengthMenu: 'Show _MENU_ rows',
-                    info: 'Showing _START_ to _END_ of _TOTAL_ finance row(s)',
-                    infoEmpty: 'No finance rows found',
-                    zeroRecords: 'No finance rows match the current search'
-                }
+                columnDefs: [{ orderable: false, targets: [5, 6] }]
             });
-
-            financeTable.buttons().container().appendTo('#financeReportButtons');
-
-            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
-                if (settings.nTable.id !== 'financeRunningDfTable') {
-                    return true;
-                }
-
-                if (!healthFilterValue) {
-                    return true;
-                }
-
-                var rowNode = financeTable.row(dataIndex).node();
-                return String($(rowNode).attr('data-health') || '') === healthFilterValue;
-            });
-
-            function refreshVisibleCounter() {
-                var info = financeTable.page.info();
-                $('#reportVisibleCounter').text('Visible rows: ' + info.recordsDisplay + ' of ' + info.recordsTotal);
-            }
 
             $('#healthFilter').on('change', function () {
-                healthFilterValue = String($(this).val() || '');
-                financeTable.draw();
+                var wanted = $(this).val();
+                $.fn.dataTable.ext.search = [];
+                if (wanted !== '') {
+                    $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+                        return $(register.row(dataIndex).node()).attr('data-health') === wanted;
+                    });
+                }
+                register.draw();
             });
 
-            financeTable.on('draw', function () {
-                refreshVisibleCounter();
-            });
+            function recalcBalance() {
+                var invoiced = parseFloat($('#ledger_invoice_amount').val()) || 0;
+                var received = parseFloat($('#ledger_received').val()) || 0;
+                $('#ledger_balance').val((invoiced - received).toFixed(2));
+            }
+            $('#ledger_invoice_amount, #ledger_received').on('input', recalcBalance);
 
-            refreshVisibleCounter();
+            $(document).on('click', '.ledger-edit', function () {
+                var b = $(this);
+                $('#ledger_df_id').val(b.data('df-id'));
+                $('#ledger_context').text(b.data('label'));
+                $('#ledger_invoice_no').val(b.data('invoice-no'));
+                $('#ledger_invoice_date').val(b.data('invoice-date'));
+                $('#ledger_invoice_amount').val(b.data('invoice-amount'));
+                $('#ledger_taxable_sale').val(b.data('taxable-sale'));
+                $('#ledger_received').val(b.data('received'));
+                $('#ledger_due_date').val(b.data('due-date'));
+                $('#ledger_due_status').val(b.data('due-status') === 'Not updated' ? '' : b.data('due-status'));
+                $('#ledger_remarks').val(b.data('remarks'));
+                $('#ledger_helper').text(
+                    'Claimable to date on this DF is ' + b.data('claimable') +
+                    ', of which ' + b.data('unbilled') + ' is not invoiced yet. ' +
+                    'This writes to the same dispatch ledger the dispatch report screen reads.'
+                );
+                recalcBalance();
+                $('#ledgerModal').modal('show');
+            });
         });
     </script>
 </body>

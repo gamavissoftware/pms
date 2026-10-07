@@ -11,13 +11,28 @@ class Spare_parts_model extends CI_Model {
     private $table = 'spare_parts_for_trading';
     
     // --- Server-side DataTable Configuration ---
-    private $column_order = array(null, 'id', 'code', 'description', 'price', 'status', 'added_on', null); // Columns for ordering
+    private $column_order = array('id', 'code', 'description', 'price', 'available_qty', 'stock_updated_on', 'status', 'added_on', null); // Columns for ordering
     private $column_search = array('id', 'code', 'description'); // Columns for searching
     private $order = array('id' => 'desc'); // Default order
+    private $inventory_columns_available = null;
 
     public function __construct() {
         parent::__construct();
         $this->load->database();
+    }
+
+    /**
+     * The inventory fields are added by Database/spares_master_inventory_001.sql.
+     * Keeping this check here lets the page fail softly before the migration is run.
+     *
+     * @return bool
+     */
+    public function inventory_columns_available() {
+        if ($this->inventory_columns_available === null) {
+            $this->inventory_columns_available = $this->db->field_exists('available_qty', $this->table);
+        }
+
+        return $this->inventory_columns_available;
     }
 
     // =========================================================================
@@ -102,7 +117,18 @@ class Spare_parts_model extends CI_Model {
         }
 
         if ($this->input->post('order')) { // here order processing
-            $this->db->order_by($this->column_order[$this->input->post('order')['0']['column']], $this->input->post('order')['0']['dir']);
+            $order = $this->input->post('order');
+            $column_index = isset($order['0']['column']) ? (int) $order['0']['column'] : 0;
+            $direction = isset($order['0']['dir']) && strtolower($order['0']['dir']) === 'asc' ? 'asc' : 'desc';
+            $column_name = isset($this->column_order[$column_index]) ? $this->column_order[$column_index] : null;
+
+            if (in_array($column_name, array('available_qty', 'stock_updated_on'), true) && !$this->inventory_columns_available()) {
+                $column_name = 'id';
+            }
+
+            if ($column_name) {
+                $this->db->order_by($column_name, $direction);
+            }
         } else if (isset($this->order)) {
             $order = $this->order;
             $this->db->order_by(key($order), $order[key($order)]);
@@ -182,6 +208,123 @@ class Spare_parts_model extends CI_Model {
         // This is safer than permanently deleting data.
         $this->db->where('id', $id);
         return $this->db->update($this->table, array('status' => 0));
+    }
+
+    /**
+     * Inventory summary for the spare parts master dashboard.
+     *
+     * @return object
+     */
+    public function get_inventory_summary() {
+        $summary = new stdClass();
+        $summary->total_parts = 0;
+        $summary->active_parts = 0;
+        $summary->available_qty = 0;
+        $summary->zero_stock = 0;
+        $summary->last_stock_update = null;
+
+        $this->db->from($this->table);
+        $summary->total_parts = (int) $this->db->count_all_results();
+
+        $this->db->from($this->table);
+        $this->db->where('status', 1);
+        $summary->active_parts = (int) $this->db->count_all_results();
+
+        if ($this->inventory_columns_available()) {
+            $row = $this->db->select('SUM(available_qty) AS available_qty, SUM(CASE WHEN available_qty <= 0 THEN 1 ELSE 0 END) AS zero_stock, MAX(stock_updated_on) AS last_stock_update', false)
+                ->from($this->table)
+                ->get()
+                ->row();
+
+            if ($row) {
+                $summary->available_qty = (float) $row->available_qty;
+                $summary->zero_stock = (int) $row->zero_stock;
+                $summary->last_stock_update = $row->last_stock_update;
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * Finds a spare part by code. Matching is case-insensitive after trimming.
+     *
+     * @param string $code
+     * @return object|null
+     */
+    public function get_part_by_code($code) {
+        $code = trim((string) $code);
+        if ($code === '') {
+            return null;
+        }
+
+        $query = $this->db->where('LOWER(TRIM(code)) = ' . $this->db->escape(strtolower($code)), null, false)
+            ->limit(1)
+            ->get($this->table);
+
+        return $query->row();
+    }
+
+    /**
+     * Updates available stock quantity for a spare code.
+     *
+     * @param string $code
+     * @param float $qty
+     * @param int|null $user_id
+     * @return array
+     */
+    public function update_stock_by_code($code, $qty, $user_id = null) {
+        if (!$this->inventory_columns_available()) {
+            return array('ok' => false, 'message' => 'Inventory columns are not available. Run Database/spares_master_inventory_001.sql first.');
+        }
+
+        $part = $this->get_part_by_code($code);
+        if (!$part) {
+            return array('ok' => false, 'message' => 'Part code not found.');
+        }
+
+        $data = array(
+            'available_qty' => $qty,
+            'stock_updated_on' => date('Y-m-d H:i:s'),
+            'stock_updated_by' => $user_id
+        );
+
+        $this->db->where('id', $part->id);
+        $ok = $this->db->update($this->table, $data);
+
+        return array('ok' => $ok, 'message' => $ok ? 'Updated' : 'Database update failed.', 'part' => $part);
+    }
+
+    /**
+     * Records one stock upload summary.
+     *
+     * @param array $data
+     * @return int
+     */
+    public function log_stock_upload($data) {
+        if (!$this->db->table_exists('spares_master_stock_uploads')) {
+            return 0;
+        }
+
+        $this->db->insert('spares_master_stock_uploads', $data);
+        return (int) $this->db->insert_id();
+    }
+
+    /**
+     * Recent upload history shown on the master page.
+     *
+     * @param int $limit
+     * @return array
+     */
+    public function get_recent_stock_uploads($limit = 5) {
+        if (!$this->db->table_exists('spares_master_stock_uploads')) {
+            return array();
+        }
+
+        return $this->db->order_by('uploaded_on', 'DESC')
+            ->limit((int) $limit)
+            ->get('spares_master_stock_uploads')
+            ->result();
     }
 }
 

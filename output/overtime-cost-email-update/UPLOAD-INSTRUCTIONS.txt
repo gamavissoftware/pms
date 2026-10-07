@@ -1,0 +1,93 @@
+OVERTIME COST, EMAIL AND MENU BADGE UPDATE
+
+What this adds
+  1. Overtime menu badge. Shubham Sharma (user 139) sees a red, pulsing count of
+     requests waiting for approval, and the menu entry goes straight to the
+     approval inbox. Everyone else sees a neutral count of unread overtime
+     updates. The badge clears itself as the work is done.
+  2. Email AND chat. A new request emails user 139 and posts into his one-to-one
+     chat with the person who raised it; approving or rejecting answers in the
+     same chat thread and emails the requester. Cancellations are not announced.
+     The two channels are independent - one failing never stops the other, and
+     neither can fail the request or the decision. Every attempt is recorded in
+     the new overtime_email_log table as SENT, FAILED or SKIPPED with the reason
+     (CHAT_* kinds for chat). Shubham needs chat access to see the chat message;
+     the email and in-module notification reach him either way.
+  3. Overtime cost master, under MASTER > OVERTIME COST RATES. An hourly rate
+     per location, per department, per employee, and one for manual/contract
+     labour. The most specific rate wins.
+  4. Select2 people picker on the overtime request form. "Select PMS users" is
+     now a searchable tag box instead of a Ctrl-click list.
+  5. Approved Overtime tab on Dashboard/df_full_detail, showing what was
+     approved against the searched DF: occasions, people, person-hours, cost,
+     a day-wise rollup and one row per person. Cost figures only reach users
+     with an overtime reporting or cost-rate grant.
+  6. Overtime on the user-wise permission screen, labelled for what each row
+     does, plus a "Can edit" toggle on the three overtime masters. Without it
+     medit could never be set from that screen, so saving cost rates and request
+     limits was impossible for everyone.
+  7. Cost reporting. Reports group by Day as well as person, department and DF,
+     with the number of overtime occasions and the pending/approved cost. Filter
+     to one DF and group by Day for that DF's day-wise overhead. Cost also shows
+     on request rows, the request page and the CSV export.
+
+Steps
+  1. Upload the application/ and Database/ files to the same paths in PMS.
+  2. application/config/constants.php in this package IS your live file, taken
+     from the server, with only the four overtime_mail_* lines added and the
+     sending mailbox already filled in. Upload it as-is. If the server copy has
+     been edited since 22 Sep, add just the lines from overtime-mail-constants.txt
+     instead, above the page_url22 line, rather than overwriting the file.
+  3. Import Database/overtime_004_cost_and_email.sql in phpMyAdmin. It is safe
+     to rerun and preserves all existing requests, history and assignments.
+     Until it has run, overtime pages show the setup message.
+  3b. Import Database/overtime_005_permission_repair.sql. It registers every
+     overtime row on the permission screen whatever state the database is in,
+     corrects any row left disabled or flagged for the wrong business location,
+     grants nothing, and is safe to rerun. It ends by listing the six rows and
+     whoever already holds the right to raise a request - send me that output
+     if the rows do not appear on the screen afterwards.
+  4. In the user-wise Module Permission screen, allow MASTER > OVERTIME COST
+     RATES, with Edit for whoever maintains the rates. An administrator role is
+     required as well, as for the other overtime masters.
+  5. Open Dashboard/task_master_dashboard > Overtime Cost Rates and enter at
+     least a location default rate. Then press "Recalculate stored costs" once,
+     so overtime raised before today stops reporting as zero.
+  6. Check Overtime/reports, group by Day, and confirm the costs read correctly.
+
+Notes
+  The rate that applied is stored on each person row when the request is raised
+  and again when it is approved, so changing a rate later never restates
+  overtime that already happened. "Recalculate stored costs" is the one
+  deliberate exception and is recorded in the settings audit.
+
+  Local checks passed on SQLite and on MySQL 9.6, including the concurrency
+  suite and a rehearsed upgrade over an existing database with data. Live
+  deployment, the SMTP password and permission assignment are still required.
+
+Included files
+  application/controllers/Overtime.php
+  application/models/Overtime_model.php
+  application/helpers/overtime_helper.php
+  application/libraries/Overtime_mailer.php
+  application/libraries/Overtime_chat.php
+  application/views/overtime/_header.php
+  application/views/overtime/_footer.php
+  application/views/overtime/create.php
+  application/views/overtime/_stats.php
+  application/views/overtime/_table.php
+  application/views/overtime/_filters.php
+  application/views/overtime/reports.php
+  application/views/overtime/settings.php
+  application/views/overtime/view.php
+  application/views/overtime/setup.php
+  application/views/common/nav-menu.php
+  application/views/dashboard/task_master_dashboard.php
+  application/views/dashboard/df_full_detail.php
+  application/controllers/Dashboard.php
+  application/config/constants.php
+  application/controllers/Master/User_management.php
+  application/views/master/edit_permission.php
+  Database/overtime_004_cost_and_email.sql
+  Database/overtime_005_permission_repair.sql
+  overtime-mail-constants.txt  (fallback snippet only; not for upload)

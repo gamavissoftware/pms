@@ -1,0 +1,22 @@
+Overtime HOD default update
+
+Upload these two files to the matching paths in your PMS installation:
+application/models/Overtime_model.php
+application/views/overtime/create.php
+
+No SQL migration or existing controller changes are required for this update.
+
+Team leaders of active company teams and users with an active administrator
+role default to their active department's HOD in the same business location.
+Explicit Overtime Reporting Leaders overrides take priority. If no department
+HOD is configured, the existing company-team mapping is used.
+Other employees continue to use their company-team leader.
+
+A configured HOD who is inactive, missing, in another location or the requester
+cannot be used. Correct the HOD or assign a reporting override under Task Master.
+The selected approver still needs Overtime Approvals + Edit permission.
+The two approval stages and independent final administrator remain required.
+Existing requests retain their saved approval route.
+
+Local PHP HOD, workflow, permissions and rendering checks passed on SQLite.
+Live deployment and verification have not been performed.

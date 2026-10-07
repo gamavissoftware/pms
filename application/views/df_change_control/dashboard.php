@@ -38,6 +38,8 @@ if (!function_exists('changeControlPriorityClass')) {
 
 $assigned_only_access = !empty($module_nav['assigned_only_access']);
 $can_raise_request = !empty($module_nav['can_raise_request']);
+// Holders of "Raise ECN / IOM" alone see this page as a record of their own requests.
+$requester_only_access = !empty($module_nav['requester_only_access']);
 $assigned_delayed_count = 0;
 
 if (!empty($assigned_queue)) {
@@ -56,7 +58,7 @@ if (!empty($assigned_queue)) {
     <meta name="description" content="">
     <meta name="author" content="<?php echo copyright; ?>">
     <link rel="shortcut icon" href="<?php echo assets_url; ?>images/favicon.ico">
-    <title><?php echo sitetitle; ?> DF Change Control Dashboard</title>
+    <title><?php echo sitetitle; ?> <?php echo $requester_only_access ? 'My ECN / IOM Requests' : 'DF Change Control Dashboard'; ?></title>
 
     <link href="<?php echo assets_url; ?>plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo assets_url; ?>plugins/datatables/buttons.bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -223,10 +225,11 @@ if (!empty($assigned_queue)) {
 
     <div class="wrapper">
         <div class="container-fluid">
+            <?php $this->load->view('df_change_control/_approval_queue'); ?>
             <div class="row">
                 <div class="col-sm-12">
                     <div class="page-title-box">
-                        <h4 class="page-title text-center">DF Change Control Dashboard</h4>
+                        <h4 class="page-title text-center"><?php echo $requester_only_access ? 'My ECN / IOM Requests' : 'DF Change Control Dashboard'; ?></h4>
                     </div>
                     <?php echo $this->session->flashdata('message'); ?>
                     <?php $this->load->view('df_change_control/_module_nav', array('module_nav' => $module_nav)); ?>
@@ -234,18 +237,24 @@ if (!empty($assigned_queue)) {
             </div>
 
             <div class="dashboard-hero">
-                <?php if ($assigned_only_access) { ?>
+                <?php if ($requester_only_access) { ?>
+                    <h3>My ECN / IOM Requests</h3>
+                    <p>Every DF change request you have raised, with its approval state and the progress each department has made on it. Open any row to read the department remarks and reply to the assignee.</p>
+                    <div class="hero-actions">
+                        <a href="<?php echo page_url; ?>Df_change_control/create" class="btn btn-warning">Raise Change Request</a>
+                    </div>
+                <?php } elseif ($assigned_only_access) { ?>
                     <h3>Assigned DF Change Control Tasks</h3>
                     <p>This screen is focused only on the department actions assigned to you, so you can update progress and close work without the extra management overview panels.</p>
                     <div class="hero-actions">
                         <a href="<?php echo page_url; ?>Df_change_control#assigned-queue" class="btn btn-warning">Open My Assignments</a>
                     </div>
                 <?php } else { ?>
-                    <h3>Rework, Add-On, Revision and ECN / IOM Intelligence</h3>
+                    <h3>Rework, Add-On, Revision and Change Control Intelligence</h3>
                     <p>This dashboard gives one place to see change requests raised on DFs, department-head planning queues, team execution queues, and the department load created by rework or client-side changes. Every request remains linked to the DF and is available from the Gantt chart.</p>
                     <div class="hero-actions">
                         <?php if ($can_raise_request) { ?>
-                            <a href="<?php echo page_url; ?>Df_change_control/create" class="btn btn-warning">Raise ECN / IOM</a>
+                            <a href="<?php echo page_url; ?>Df_change_control/create" class="btn btn-warning">Raise Change Request</a>
                         <?php } ?>
                         <a href="<?php echo page_url; ?>Mom/momdashboard" class="btn btn-default">Open MOM Module</a>
                     </div>
@@ -257,7 +266,109 @@ if (!empty($assigned_queue)) {
                     <strong>Migration pending:</strong> Please run <code><?php echo $migration_file; ?></code> before using this module.
                 </div>
             <?php } else { ?>
-                <?php if ($assigned_only_access) { ?>
+                <?php if ($requester_only_access) { ?>
+                    <div class="section-note">
+                        <strong>Your Requests Only:</strong> This screen lists the ECN / IOM / change requests raised by you. Department queues and company-wide counters are reserved for the DF Change Control Dashboard permission.
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-2 col-sm-4">
+                            <div class="metric-card metric-navy">
+                                <div class="metric-label">My Requests</div>
+                                <div class="metric-value"><?php echo (int)$stats['total_requests']; ?></div>
+                                <div class="metric-foot">Raised by me so far</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4">
+                            <div class="metric-card metric-orange">
+                                <div class="metric-label">Awaiting Approval</div>
+                                <div class="metric-value"><?php echo (int)$stats['pending_approval_requests']; ?></div>
+                                <div class="metric-foot">Not released to departments yet</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4">
+                            <div class="metric-card metric-blue">
+                                <div class="metric-label">In Progress</div>
+                                <div class="metric-value"><?php echo (int)$stats['active_requests']; ?></div>
+                                <div class="metric-foot">Under planning or execution</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4">
+                            <div class="metric-card metric-green">
+                                <div class="metric-label">Completed</div>
+                                <div class="metric-value"><?php echo (int)$stats['completed_requests']; ?></div>
+                                <div class="metric-foot">Closed by every department</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4">
+                            <div class="metric-card metric-red">
+                                <div class="metric-label">Delayed Actions</div>
+                                <div class="metric-value"><?php echo (int)$stats['delayed_actions']; ?></div>
+                                <div class="metric-foot">Past target on my requests</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4">
+                            <div class="metric-card metric-slate">
+                                <div class="metric-label">Rejected</div>
+                                <div class="metric-value"><?php echo (int)$stats['rejected_requests']; ?></div>
+                                <div class="metric-foot">Returned without release</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-card" id="my-requests">
+                        <div class="panel-head">
+                            <h4>ECN / IOM Requests Raised By Me</h4>
+                            <p>Open a request to follow the department remarks, target dates and completion notes recorded against it.</p>
+                        </div>
+                        <div class="panel-body">
+                            <table id="myRequestsTable" class="table table-bordered table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Ref</th>
+                                        <th>DF</th>
+                                        <th>Type</th>
+                                        <th>Departments</th>
+                                        <th>Priority</th>
+                                        <th>Status</th>
+                                        <th>Dept Progress</th>
+                                        <th>Overdue</th>
+                                        <th>Created On</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($my_requests as $row) { ?>
+                                        <tr>
+                                            <td>
+                                                <div class="df-ref"><?php echo $row['change_no']; ?></div>
+                                                <small><?php echo str_replace('_', ' ', $row['change_category']); ?></small>
+                                            </td>
+                                            <td><?php echo $row['df_no']; ?><br><small><?php echo ucwords(strtolower($row['df_description'])); ?></small></td>
+                                            <td><?php echo $row['request_type']; ?></td>
+                                            <td><?php echo ucwords(strtolower($row['departments_list'])); ?></td>
+                                            <td><span class="label <?php echo changeControlPriorityClass($row['priority']); ?>"><?php echo $row['priority']; ?></span></td>
+                                            <td><span class="label <?php echo changeControlStatusClass($row['status']); ?>"><?php echo str_replace('_', ' ', $row['status']); ?></span></td>
+                                            <td><?php echo (int)$row['completed_department_count']; ?> / <?php echo (int)$row['department_count']; ?></td>
+                                            <td>
+                                                <?php if ((int)$row['overdue_department_count'] > 0) { ?>
+                                                    <span class="label label-danger"><?php echo (int)$row['overdue_department_count']; ?> delayed</span>
+                                                <?php } else { ?>
+                                                    <span class="label label-success">On track</span>
+                                                <?php } ?>
+                                            </td>
+                                            <td><?php echo date('d-M-Y h:i A', strtotime($row['created_on'])); ?></td>
+                                            <td><a href="<?php echo page_url; ?>Df_change_control/view/<?php echo $row['id']; ?>" class="btn btn-primary btn-xs">Open</a></td>
+                                        </tr>
+                                    <?php } ?>
+                                </tbody>
+                            </table>
+                            <?php if (empty($my_requests)) { ?>
+                                <div class="section-note">You have not raised any ECN / IOM request yet. Use <strong>Raise Change Request</strong> to create the first one.</div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                <?php } elseif ($assigned_only_access) { ?>
                     <div class="section-note">
                         <strong>Focused View:</strong> Only the department actions assigned to you are shown here. Recent requests, department summaries, and broader management panels stay hidden for execution-only users.
                     </div>
@@ -329,7 +440,7 @@ if (!empty($assigned_queue)) {
                             <div class="metric-card metric-navy">
                                 <div class="metric-label">Total Requests</div>
                                 <div class="metric-value"><?php echo $stats['total_requests']; ?></div>
-                                <div class="metric-foot">All ECN / IOM requests raised</div>
+                                <div class="metric-foot">All change-control requests raised</div>
                             </div>
                         </div>
                         <div class="col-md-2 col-sm-6">
@@ -463,7 +574,7 @@ if (!empty($assigned_queue)) {
                     <div class="panel-card" id="recent-requests">
                         <div class="panel-head">
                             <h4>Recent Change Requests</h4>
-                            <p>Cross-functional rework, revision, add-on, and ECN / IOM activity linked with DFs.</p>
+                            <p>Cross-functional rework, revision, add-on, ECN, IOM, and other activity linked with DFs.</p>
                         </div>
                         <div class="panel-body">
                             <table id="recentChangesTable" class="table table-bordered table-striped">
@@ -507,7 +618,7 @@ if (!empty($assigned_queue)) {
                                             <td><?php echo date('d-M-Y h:i A', strtotime($row['created_on'])); ?></td>
                                             <td>
                                                 <a href="<?php echo page_url; ?>Df_change_control/view/<?php echo $row['id']; ?>" class="btn btn-primary btn-xs">View</a>
-                                                <a href="<?php echo page_url; ?>Task/finalgantchartWithDetails/<?php echo $row['df_id']; ?>" target="_blank" class="btn btn-default btn-xs">Gantt</a>
+                                                <a href="<?php echo page_url; ?>gantt/<?php echo $row['df_id']; ?>" target="_blank" class="btn btn-default btn-xs">Gantt</a>
                                             </td>
                                         </tr>
                                     <?php } ?>

@@ -24,6 +24,9 @@ $totalTasks = 0;
 $totalDoneTasks = 0;
 $totalPendingTasks = 0;
 $totalProgress = 0;
+$today = date('Y-m-d');
+$this->load->helper('df_delay');
+$departmentDelayCondition = df_department_overdue_sql($this->db, 't', $today);
 
 $this->db->select('
     a.id,
@@ -73,7 +76,30 @@ if ($df_q->num_rows() > 0) {
 
         $departmentRows = array();
         $dfHasDelay = false;
-        $today = date('Y-m-d');
+
+        $overdueCondition = $departmentDelayCondition;
+        $dfDelayCondition = df_open_overdue_sql($this->db, 't_df_delay', $today, 'df_delay_release');
+        $overdueUsersByDepartment = array();
+        $overdueUserRows = $this->db
+            ->select('t.department_id, t.assigned_user, assignee.title, assignee.first_name, assignee.last_name')
+            ->from('task_department_wise_scheduling t')
+            ->join('system_users assignee', 'assignee.user_id = t.assigned_user', 'left')
+            ->where('t.df_id', $dfId)
+            ->where($overdueCondition, null, false)
+            ->get()->result();
+        foreach ($overdueUserRows as $overdueUser) {
+            $assigneeName = trim((string)$overdueUser->title . ' ' . (string)$overdueUser->first_name . ' ' . (string)$overdueUser->last_name);
+            $assigneeName = preg_replace('/\s+/', ' ', $assigneeName);
+            $assigneeName = ucwords(strtolower($assigneeName));
+            if ($assigneeName === '') {
+                $assigneeName = (int)$overdueUser->assigned_user > 0 ? 'User #' . (int)$overdueUser->assigned_user : 'Not Assigned';
+            }
+            $overdueUsersByDepartment[(int)$overdueUser->department_id][(int)$overdueUser->assigned_user] = $assigneeName;
+        }
+        foreach ($overdueUsersByDepartment as &$departmentUsers) {
+            natcasesort($departmentUsers);
+        }
+        unset($departmentUsers);
 
         $dept_q = $this->db
             ->select('
@@ -82,7 +108,9 @@ if ($df_q->num_rows() > 0) {
                 COUNT(t.id) as total_tasks,
                 SUM(CASE WHEN t.task_status = 1 THEN 1 ELSE 0 END) as done_tasks,
                 SUM(CASE WHEN t.task_status IN (0,2) THEN 1 ELSE 0 END) as pending_tasks,
-                MAX(CASE WHEN t.task_status IN (0,2) THEN t.end_date ELSE NULL END) as max_due_date
+                MAX(CASE WHEN t.task_status IN (0,2) THEN t.end_date ELSE NULL END) as max_due_date,
+                SUM(CASE WHEN ' . $overdueCondition . ' THEN 1 ELSE 0 END) as delayed_tasks,
+                MIN(CASE WHEN ' . $overdueCondition . ' THEN t.end_date ELSE NULL END) as oldest_overdue_date
             ', false)
             ->from('task_department_wise_scheduling t')
             ->join('departments d', 't.department_id = d.department_id', 'left')
@@ -98,10 +126,9 @@ if ($df_q->num_rows() > 0) {
                 $delayDays = 0;
                 $delayStatus = 'On Time';
 
-                if (!empty($maxDueDate) && $maxDueDate != '0000-00-00' && strtotime($maxDueDate) < strtotime($today)) {
-                    $delayDays = round((strtotime($today) - strtotime($maxDueDate)) / 86400);
+                if ((int)$deptRow->delayed_tasks > 0) {
+                    $delayDays = (int) round((strtotime($today) - strtotime($deptRow->oldest_overdue_date)) / 86400);
                     $delayStatus = 'Delayed';
-                    $dfHasDelay = true;
                     $totalDepartmentsDelayed++;
                 }
 
@@ -111,6 +138,8 @@ if ($df_q->num_rows() > 0) {
                     'total_tasks' => (int)$deptRow->total_tasks,
                     'done_tasks' => (int)$deptRow->done_tasks,
                     'pending_tasks' => (int)$deptRow->pending_tasks,
+                    'delayed_tasks' => (int)$deptRow->delayed_tasks,
+                    'delayed_users' => isset($overdueUsersByDepartment[(int)$deptRow->department_id]) ? array_values($overdueUsersByDepartment[(int)$deptRow->department_id]) : array(),
                     'max_due_date' => safeDateShowRunningTaskDelay($maxDueDate),
                     'delay_days' => $delayDays,
                     'delay_status' => $delayStatus,
@@ -139,6 +168,16 @@ if ($df_q->num_rows() > 0) {
         $totalDoneTasks += $dfDoneTasks;
         $totalPendingTasks += $dfPendingTasks;
         $totalProgress += $workDonePercentage;
+
+        $dfHasDelay = $this->db
+            ->select('t_df_delay.id')
+            ->from('task_department_wise_scheduling t_df_delay')
+            ->join('df_release df_delay_release', 'df_delay_release.id = t_df_delay.df_id', 'inner')
+            ->where('t_df_delay.df_id', $dfId)
+            ->where($dfDelayCondition, null, false)
+            ->limit(1)
+            ->get()
+            ->num_rows() > 0;
 
         if ($dfHasDelay) {
             $totalDelayedDf++;
@@ -514,9 +553,15 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf, 2) : 0;
             background: #f8fafc !important;
         }
 
-        .modal-xl {
-            max-width: 98% !important;
+        #taskModal .modal-dialog, #departmentDfDelayModal .modal-dialog {
+            width: calc(100% - 20px);
+            max-width: none !important;
             margin: 10px auto;
+        }
+
+        #taskModal .modal-body, #departmentDfDelayModal .modal-body {
+            max-height: calc(100vh - 110px);
+            overflow: auto;
         }
 
         .modal-content {
@@ -548,6 +593,20 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf, 2) : 0;
             .report-hero {
                 padding: 20px;
             }
+        }
+        .department-delay-chart { margin-bottom: 20px; padding: 22px; background: #fff; border-radius: 16px; }
+        .department-delay-chart h4 { margin: 0 0 8px; font-weight: 700; }
+        .department-delay-bar-row { display: grid; grid-template-columns: minmax(120px, 210px) minmax(60px, 1fr) 85px; gap: 12px; align-items: center; margin: 14px 0; }
+        button.department-delay-bar-row { width: 100%; border: 0; background: transparent; text-align: left; padding: 6px; cursor: pointer; color: inherit; }
+        button.department-delay-bar-row:hover { background: #fff7ed; }
+        button.department-delay-bar-row:focus { outline: 2px solid #2563eb; outline-offset: 2px; }
+        .department-delay-name { font-weight: 600; overflow-wrap: anywhere; }
+        .department-delay-track { height: 22px; background: #f1f5f9; border-radius: 5px; overflow: hidden; }
+        .department-delay-fill { height: 100%; background: #dc633b; border-radius: 5px; }
+        .department-delay-value { text-align: right; font-weight: 700; color: #9a3412; }
+        @media (max-width: 600px) {
+            .department-delay-chart { padding: 14px; }
+            .department-delay-bar-row { grid-template-columns: 105px minmax(40px, 1fr) 65px; gap: 8px; font-size: 12px; }
         }
     </style>
 </head>
@@ -704,6 +763,13 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf, 2) : 0;
             </div>
         </div>
 
+        <section class="department-delay-chart" aria-labelledby="departmentDelayTitle">
+            <h4 id="departmentDelayTitle">Maximum Delay by Department</h4>
+            <p class="summary-hint">Longest overdue pending task in each department, in days. Highest delay first; based on all DFs matching the filters, across every table page. Click a bar to see DF-wise delays.</p>
+            <p id="departmentDelayScope" class="date-muted" aria-live="polite"></p>
+            <div id="departmentDelayBars" role="list" aria-label="Departments ranked by maximum delay in days"></div>
+        </section>
+
         <div class="modern-table-card table-responsive">
             <div class="summary-hint">
                 Click any DF row to open department progress. If you choose a department filter, matching rows open automatically with that department's task summary.
@@ -827,6 +893,7 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf, 2) : 0;
                                     <th>No. of Tasks</th>
                                     <th>Done</th>
                                     <th>Pending</th>
+                                    <th>Delayed</th>
                                     <th>Due Date to Close</th>
                                     <th>Delay Days</th>
                                 </tr>
@@ -840,19 +907,21 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf, 2) : 0;
 
                                             <td><?php echo $deptRow['department']; ?></td>
 
-                                            <td><?php echo $deptRow['total_tasks']; ?></td>
-
+                                            <?php foreach (array('all' => 'total_tasks', 'done' => 'done_tasks', 'pending' => 'pending_tasks', 'delayed' => 'delayed_tasks') as $taskFilter => $countKey) { ?>
                                             <td>
-                                                <span class="status-pill pill-success">
-                                                    <?php echo $deptRow['done_tasks']; ?>
-                                                </span>
+                                                <button type="button"
+                                                    class="view-task-details status-pill <?php echo $taskFilter === 'delayed' ? 'pill-danger' : ($taskFilter === 'pending' ? 'pill-warning' : 'pill-success'); ?>"
+                                                    data-dfid="<?php echo (int)$row['id']; ?>"
+                                                    data-deptid="<?php echo (int)$deptRow['department_id']; ?>"
+                                                    data-dfno="<?php echo htmlspecialchars(strtoupper($row['df_no']), ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-department="<?php echo htmlspecialchars($deptRow['department'], ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-status="<?php echo $taskFilter; ?>"
+                                                    style="cursor:pointer; border:0;"
+                                                    aria-label="Show <?php echo $taskFilter; ?> tasks">
+                                                    <?php echo (int)$deptRow[$countKey]; ?>
+                                                </button>
                                             </td>
-
-                                            <td>
-                                                <span class="status-pill <?php echo ($deptRow['pending_tasks'] > 0) ? 'pill-warning' : 'pill-success'; ?>">
-                                                    <?php echo $deptRow['pending_tasks']; ?>
-                                                </span>
-                                            </td>
+                                            <?php } ?>
 
                                             <td>
                                                 <?php echo !empty($deptRow['max_due_date']) ? $deptRow['max_due_date'] : 'N/A'; ?>
@@ -881,7 +950,7 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf, 2) : 0;
                                     <?php $k++; } ?>
                                 <?php } else { ?>
                                     <tr>
-                                        <td colspan="7">No department-wise task found.</td>
+                                        <td colspan="8">No department-wise task found.</td>
                                     </tr>
                                 <?php } ?>
                             </tbody>
@@ -889,6 +958,26 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf, 2) : 0;
                     </div>
                 </div>
             <?php } ?>
+        </div>
+
+        <div id="departmentDfDelayModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="departmentDfDelayTitle">
+            <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color:#fff; opacity:1;">&times;</button>
+                        <h4 class="modal-title" id="departmentDfDelayTitle">DF-wise Department Delays</h4>
+                    </div>
+                    <div class="modal-body">
+                        <p id="departmentDfDelaySummary"></p>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered">
+                                <thead><tr><th>DF No.</th><th>DF Description</th><th>Company</th><th>Responsible Users (Overdue Tasks)</th><th>Maximum Delay (Days)</th><th>Overdue Pending Tasks</th></tr></thead>
+                                <tbody id="departmentDfDelayRows"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="taskModal" class="modal fade" tabindex="-1" role="dialog">
@@ -899,7 +988,7 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf, 2) : 0;
                         <button type="button" class="close" data-dismiss="modal" style="color:#fff; opacity:1;">&times;</button>
                         <h4 class="modal-title">
                             <strong>DF No:</strong> <span id="modalDfNo"></span> |
-                            <strong>Department:</strong> <span id="modalDepartment"></span>
+                            <strong>Department:</strong> <span id="modalDepartment"></span> | <span id="modalTaskFilter"></span>
                         </h4>
                     </div>
 
@@ -1519,6 +1608,129 @@ function updateVisibleRowSummaries() {
     });
 }
 
+// Aggregate the maximum, never the sum, across all filtered DF records.
+function consolidateDepartmentDelays(summaries, selectedDepartmentId) {
+    var departments = Object.create(null);
+    summaries.forEach(function(summary) {
+        summary.forEach(function(department) {
+            var id = String(department.department_id);
+            if (selectedDepartmentId && id !== String(selectedDepartmentId)) { return; }
+            var days = Math.max(0, parseInt(department.delay_days, 10) || 0);
+            if (days === 0) { return; }
+            if (!departments[id]) {
+                departments[id] = { id: id, name: department.department || 'N/A', days: days };
+            } else {
+                departments[id].days = Math.max(departments[id].days, days);
+            }
+        });
+    });
+    return Object.keys(departments).map(function(id) { return departments[id]; }).sort(function(a, b) {
+        return b.days - a.days || a.name.localeCompare(b.name);
+    });
+}
+
+function departmentDfDelayRecords(records, departmentId) {
+    var result = [];
+    records.forEach(function(record) {
+        record.departments.forEach(function(department) {
+            var days = Math.max(0, parseInt(department.delay_days, 10) || 0);
+            if (String(department.department_id) !== String(departmentId) || days === 0) { return; }
+            result.push({ dfId: record.dfId, dfNo: record.dfNo, description: record.description, company: record.company,
+                days: days, tasks: parseInt(department.delayed_tasks, 10) || 0, users: (department.delayed_users || []).join(', ') });
+        });
+    });
+    return result.sort(function(a, b) { return b.days - a.days || String(a.dfNo).localeCompare(String(b.dfNo)); });
+}
+
+var departmentDetailGeneration = 0;
+
+function loadDepartmentOverdueTasks(job, departmentId, generation) {
+    if (job.loading || job.loaded) { return; }
+    job.loading = true;
+    job.target.text('Loading overdue task remarks and ticket details…');
+    return $.ajax({
+        url: '<?php echo page_url . "Task/get_task_details"; ?>',
+        type: 'POST',
+        data: { df_id: job.dfId, department_id: departmentId, task_status: 'delayed', detail_scope: 'filtered' }
+    }).done(function(html) {
+        if (generation === departmentDetailGeneration) { job.loaded = true; job.target.html(html); }
+    }).fail(function() {
+        if (generation !== departmentDetailGeneration) { return; }
+        job.target.empty().append($('<span>').text('Unable to load task details. '));
+        $('<button>', { type: 'button', 'class': 'btn btn-default btn-sm', text: 'Retry' })
+            .on('click', function() { loadDepartmentOverdueTasks(job, departmentId, generation); }).appendTo(job.target);
+    }).always(function() { job.loading = false; });
+}
+
+function showDepartmentDfDelays(departmentId, departmentName) {
+    var generation = ++departmentDetailGeneration;
+    var records = [];
+    table.rows({ search: 'applied', page: 'all' }).every(function() {
+        var $row = $(this.node());
+        records.push({ dfId: $row.attr('data-dfid'), dfNo: $row.attr('data-df-no') || '', description: $row.attr('data-df-description') || '',
+            company: $row.attr('data-company-name') || '', departments: getDepartmentSummaryList($row) });
+    });
+    var rows = departmentDfDelayRecords(records, departmentId);
+    $('#departmentDfDelayTitle').text(departmentName + ' — DF-wise Delays');
+    $('#departmentDfDelaySummary').text(rows.length + ' delayed running DFs matching the current filters. Maximum overdue pending-task delay per DF, highest first. Click a DF number or row to show or hide its tasks.');
+    var $body = $('#departmentDfDelayRows').empty();
+    rows.forEach(function(row, index) {
+        var detailId = 'department-df-tasks-' + generation + '-' + index;
+        var $tr = $('<tr>', { 'class': 'department-df-toggle-row', style: 'cursor:pointer;' });
+        var $toggle = $('<button>', { type: 'button', 'class': 'btn btn-link btn-sm',
+            'aria-expanded': 'false', 'aria-controls': detailId, text: '+ ' + row.dfNo });
+        $('<td>').append($toggle).appendTo($tr);
+        [row.description, row.company, row.users, row.days, row.tasks].forEach(function(value) {
+            $('<td>').text(value).appendTo($tr);
+        });
+        $tr.appendTo($body);
+        var $details = $('<div>', { id: detailId, 'aria-live': 'polite' });
+        var $detailRow = $('<tr>').hide().append($('<td>', { colspan: 6 }).append($details)).appendTo($body);
+        var job = { dfId: row.dfId, target: $details, loading: false, loaded: false };
+        var expanded = false;
+        function toggleDetails() {
+            expanded = !expanded;
+            $detailRow.toggle(expanded);
+            $toggle.attr('aria-expanded', String(expanded)).text((expanded ? '− ' : '+ ') + row.dfNo);
+            if (expanded) { loadDepartmentOverdueTasks(job, departmentId, generation); }
+        }
+        $toggle.on('click', function(event) { event.stopPropagation(); toggleDetails(); });
+        $tr.on('click', toggleDetails);
+    });
+    if (!rows.length) {
+        $('<tr>').append($('<td>', { colspan: 6, text: 'No delayed DFs match the current filters.' })).appendTo($body);
+    }
+    $('#departmentDfDelayModal').modal('show');
+
+}
+
+$(document).on('hidden.bs.modal', '#departmentDfDelayModal', function() {
+    departmentDetailGeneration++;
+});
+
+function updateDepartmentDelayChart() {
+    var summaries = [];
+    table.rows({ search: 'applied', page: 'all' }).every(function() {
+        summaries.push(getDepartmentSummaryList($(this.node())));
+    });
+    var departments = consolidateDepartmentDelays(summaries, getSelectedDepartmentId());
+    $('#departmentDelayScope').text(summaries.length + ' matching DFs · ' + departments.length + ' delayed departments');
+    var $bars = $('#departmentDelayBars').empty();
+    if (!departments.length) {
+        $('<p>', { 'class': 'summary-hint', text: 'No overdue pending tasks match the current filters.' }).appendTo($bars);
+        return;
+    }
+    var maximum = departments[0].days;
+    departments.forEach(function(department) {
+        var $row = $('<button>', { type: 'button', 'class': 'department-delay-bar-row', 'aria-haspopup': 'dialog', 'aria-controls': 'departmentDfDelayModal', 'aria-label': department.name + ': ' + department.days + ' days. Show DF-wise delays.' }).on('click', function() { showDepartmentDfDelays(department.id, department.name); });
+        $('<span>', { 'class': 'department-delay-name', text: department.name }).appendTo($row);
+        var $track = $('<div>', { 'class': 'department-delay-track', 'aria-hidden': 'true' }).appendTo($row);
+        $('<div>', { 'class': 'department-delay-fill' }).css('width', (department.days / maximum * 100) + '%').appendTo($track);
+        $('<span>', { 'class': 'department-delay-value', text: department.days + ' days' }).appendTo($row);
+        $('<div>', { role: 'listitem' }).append($row).appendTo($bars);
+    });
+}
+
 function updateSerialNumbers() {
     var pageInfo = table.page.info();
 
@@ -1527,7 +1739,8 @@ function updateSerialNumbers() {
     });
 }
 
-$(document).on('click', '.view-task-details', function() {
+$(document).on('click', '.view-task-details', function(event) {
+    event.stopPropagation();
     var df_id = $(this).data('dfid');
     var dept_id = $(this).data('deptid');
     var df_no = $(this).data('dfno');
@@ -1536,6 +1749,7 @@ $(document).on('click', '.view-task-details', function() {
 
     $('#modalDfNo').text(df_no);
     $('#modalDepartment').text(department);
+    $('#modalTaskFilter').text(({all: 'All tasks', done: 'Done tasks', pending: 'Pending tasks', delayed: 'Delayed tasks', 'on-time': 'Pending tasks on time'})[task_status] || 'Tasks');
     $('#taskData').html('<div style="text-align:center; padding:20px;"><i class="fa fa-spinner fa-spin"></i> Loading task details...</div>');
     $('#taskModal').modal('show');
 
@@ -1546,7 +1760,7 @@ $(document).on('click', '.view-task-details', function() {
             df_id: df_id,
             department_id: dept_id,
             task_status: task_status,
-            detail_scope: 'all'
+            detail_scope: task_status === 'all' ? 'all' : 'filtered'
         },
         success: function(response) {
             $('#taskData').html(response);
@@ -1686,11 +1900,13 @@ $(document).ready(function() {
     });
 
     table.on('draw', function() {
+        updateDepartmentDelayChart();
         updateSerialNumbers();
         updateVisibleRowSummaries();
         syncExpandedRows();
     });
 
+    updateDepartmentDelayChart();
     updateSerialNumbers();
     updateVisibleRowSummaries();
     syncExpandedRows();

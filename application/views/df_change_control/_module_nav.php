@@ -6,6 +6,9 @@ $assigned_queue_count = !empty($module_nav['assigned_queue_count']) ? (int)$modu
 $can_view_dashboard = !empty($module_nav['can_view_dashboard']);
 $can_raise_request = !empty($module_nav['can_raise_request']);
 $assigned_only_access = !empty($module_nav['assigned_only_access']);
+$requester_only_access = !empty($module_nav['requester_only_access']);
+// Requesters reach the same overview URL, where it lists only what they raised.
+$can_open_overview = !empty($module_nav['can_open_overview']) || $can_view_dashboard;
 ?>
 <style>
     .module-menu {
@@ -55,10 +58,10 @@ $assigned_only_access = !empty($module_nav['assigned_only_access']);
     }
 </style>
 
-<?php if ($can_view_dashboard || $can_raise_request) { ?>
+<?php if ($can_open_overview || $can_raise_request) { ?>
     <div class="module-menu">
-        <?php if ($can_view_dashboard) { ?>
-            <a class="module-menu-link <?php echo $current_page === 'dashboard' ? 'active' : ''; ?>" href="<?php echo page_url; ?>Df_change_control">Overview</a>
+        <?php if ($can_open_overview) { ?>
+            <a class="module-menu-link <?php echo $current_page === 'dashboard' ? 'active' : ''; ?>" href="<?php echo page_url; ?>Df_change_control"><?php echo $requester_only_access ? 'My Requests' : 'Overview'; ?></a>
         <?php } ?>
         <?php if ($can_raise_request) { ?>
             <a class="module-menu-link <?php echo $current_page === 'create' ? 'active' : ''; ?>" href="<?php echo page_url; ?>Df_change_control/create">Raise Request</a>

@@ -363,12 +363,18 @@
 </head>
 <body>
     <?php
-        $currency_type = (isset($currency) && $currency == 'USD') ? 'USD' : 'INR';
-        $curr_symbol = ($currency_type == 'USD') ? '$' : '₹';
+        $currency_type = strtoupper(trim((string) ($currency ?? 'INR')));
+        if (!in_array($currency_type, ['INR', 'USD', 'EUR'], true)) {
+            $currency_type = 'INR';
+        }
+        $currency_symbols = ['INR' => '₹', 'USD' => '$', 'EUR' => '€'];
+        $curr_symbol = $currency_symbols[$currency_type];
         $packing_charge_mode = strtolower(trim((string) ($packing_charge_mode ?? 'included')));
         $freight_charge_mode = strtolower(trim((string) ($freight_charge_mode ?? 'included')));
         $ex_work_charge_mode = strtolower(trim((string) ($ex_work_charge_mode ?? 'included')));
         $insurance_charge_mode = strtolower(trim((string) ($insurance_charge_mode ?? 'included')));
+        $quotation_type_label = trim((string) ($quotation_type_label ?? 'Consumable'));
+        $dispatch_mode_label = trim((string) ($dispatch_mode_label ?? 'Courier'));
 
         $billing_email = !empty($customer->email) ? $customer->email : '';
         $billing_contact = !empty($customer->contact_person_no) ? $customer->contact_person_no : '';
@@ -421,6 +427,20 @@
                     <div class="quote-meta-box">
                         <div class="quote-meta-label">Date</div>
                         <div class="quote-meta-value"><?php echo date('F j, Y', strtotime($quotation_date)); ?></div>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding-right: 8px; padding-top: 8px;">
+                    <div class="quote-meta-box">
+                        <div class="quote-meta-label">Quotation Type</div>
+                        <div class="quote-meta-value"><?php echo htmlspecialchars($quotation_type_label); ?></div>
+                    </div>
+                </td>
+                <td style="padding-left: 8px; padding-top: 8px;">
+                    <div class="quote-meta-box">
+                        <div class="quote-meta-label">Dispatch Mode</div>
+                        <div class="quote-meta-value"><?php echo htmlspecialchars($dispatch_mode_label); ?></div>
                     </div>
                 </td>
             </tr>

@@ -193,6 +193,50 @@ class User_management extends CI_Controller {
 		return $this->input->post('master_write_access') === '0' ? 0 : 1;
 	}
 
+	/**
+	 * Plant unit  --  system_users.plant_unit, added 23 Sep 2026.
+	 * Guarded the same way as project_coordinator_user_id above, so this
+	 * controller keeps working against a database where the column has not
+	 * been added yet (see Database/system_users_plant_unit_001.sql).
+	 */
+	private function system_users_supports_plant_unit()
+	{
+		return $this->db->field_exists('plant_unit', 'system_users');
+	}
+
+	/**
+	 * The only two plants there are. Keep in step with the matching
+	 * <option> lists in views/master/user_list.php and views/master/edit_user.php.
+	 */
+	private function plant_unit_options()
+	{
+		return array(
+			1 => 'Sector 59',
+			2 => 'Sector 06',
+		);
+	}
+
+	private function plant_unit_label($plant_unit)
+	{
+		$options = $this->plant_unit_options();
+		$plant_unit = (int) $plant_unit;
+
+		return isset($options[$plant_unit]) ? $options[$plant_unit] : '';
+	}
+
+	/**
+	 * The posted plant unit, or 0 when nothing usable was sent. Callers treat
+	 * 0 as "leave the stored value alone" rather than writing it, so a form
+	 * that never had the field cannot blank out a user's plant.
+	 */
+	private function get_requested_plant_unit()
+	{
+		$options = $this->plant_unit_options();
+		$plant_unit = (int) $this->input->post('plant_unit');
+
+		return isset($options[$plant_unit]) ? $plant_unit : 0;
+	}
+
 	private function resolve_project_coordinator_user_id($business_location = null)
 	{
 		if (!$this->system_users_supports_project_coordinator()) {
@@ -894,6 +938,10 @@ $this->db->delete($table1);
 		if ($this->system_users_supports_project_coordinator()) {
 			$data['project_coordinator_user_id'] = $project_coordinator_user_id;
 		}
+		$plant_unit = $this->get_requested_plant_unit();
+		if ($plant_unit > 0 && $this->system_users_supports_plant_unit()) {
+			$data['plant_unit'] = $plant_unit;
+		}
 		//echo "<pre>"; print_r($data); exit;
 		$result  = $this->db->insert($table,$data);	
 		if($result)
@@ -917,7 +965,12 @@ public function all_system_users_list()
 	{
 	$user_data = array();
 	$business_location = $this->session->userdata['logged_in']['business_location'];	
-		$this->db->select('a.start_training,a.fms_process,a.user_id,a.employeecode,a.first_name, a.last_name, a.email , a.password,a.contact_number, a.alternate_number, a.profile_image, a.business_location, a.department_id, a.user_role_id, a.user_status, a.hide_profile,b.business_loc_id,b.company_name,c.department_id,c.department,d.user_role_id,d.user_role')->from('system_users a');
+		$supports_plant_unit = $this->system_users_supports_plant_unit();
+		$select = 'a.start_training,a.fms_process,a.user_id,a.employeecode,a.first_name, a.last_name, a.email , a.password,a.contact_number, a.alternate_number, a.profile_image, a.business_location, a.department_id, a.user_role_id, a.user_status, a.hide_profile,b.business_loc_id,b.company_name,c.department_id,c.department,d.user_role_id,d.user_role';
+		if ($supports_plant_unit) {
+			$select .= ',a.plant_unit';
+		}
+		$this->db->select($select)->from('system_users a');
 		$this->db->join('business_location b','a.business_location=b.business_loc_id','left');
 		$this->db->join('departments c','a.department_id=c.department_id','left');
 		$this->db->join('user_role d','a.user_role_id=d.user_role_id','left');
@@ -1028,6 +1081,7 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 			'company_name'=>strtoupper($row->company_name),
 			'department'=>strtoupper($row->department),
 			'user_role'=>strtoupper($row->user_role),
+			'plant_unit'=>$supports_plant_unit ? $this->plant_unit_label($row->plant_unit) : '',
 			'generatecode'=>$generatecode,
 			'notify'=>$notify,
 			'open_lead'=>$open_lead,
@@ -1411,6 +1465,10 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 			if ($this->system_users_supports_project_coordinator()) {
 				$data['project_coordinator_user_id'] = $project_coordinator_user_id;
 			}
+		$plant_unit = $this->get_requested_plant_unit();
+		if ($plant_unit > 0 && $this->system_users_supports_plant_unit()) {
+			$data['plant_unit'] = $plant_unit;
+		}
 			//echo "<pre>"; print_r($data); exit;
 			$this->db->where('user_id',$this->uri->segment(4));
 		$result  = $this->db->update($table,$data);	
@@ -1449,6 +1507,9 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 	}
 	public function create_team()
 	{
+		$business_loc_id = (int) $this->input->post('business_loc');
+		$department_id = (int) $this->input->post('department');
+		$team_leader_id = (int) $this->input->post('team_leader');
 		
 		$this->form_validation->set_error_delimiters('<div style="color:red;">', '</div>');
 		$this->form_validation->set_rules('business_loc', 'Business Location', 'required|trim');
@@ -1464,14 +1525,18 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 		}
 		else
 		{
+		if (!$this->is_valid_team_leader_mapping($business_loc_id, $department_id, $team_leader_id)) {
+			$this->session->set_flashdata('message','<div class="alert alert-danger">Please select an active team leader from the selected business location and department.</div>');
+			redirect(page_url.'Master/User_management/company_team_list');
+		}
 		date_default_timezone_set("Asia/Kolkata");
 		$date =  date('Y-m-d H:i:s'); 
 		$table = "prestogroup_teams";
 		$query = $this->db->select('team_id')
 			->from('prestogroup_teams')
-			->where('business_loc_id',$this->input->post('business_loc'))
-			->where('department_id',$this->input->post('department'))
-			->where('team_leader',$this->input->post('team_leader'))
+			->where('business_loc_id',$business_loc_id)
+			->where('department_id',$department_id)
+			->where('team_leader',$team_leader_id)
 			->limit(1)
 			->get();
 		if($query->num_rows() > 0){
@@ -1481,9 +1546,9 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 		}else{
 		
 		
-			$data = array('business_loc_id'=>$this->input->post('business_loc'),
-			'department_id'=>$this->input->post('department'),
-			'team_leader'=>$this->input->post('team_leader'),
+			$data = array('business_loc_id'=>$business_loc_id,
+			'department_id'=>$department_id,
+			'team_leader'=>$team_leader_id,
 			'team_name'=>$this->input->post('team_name'),
 			'status'=>$this->input->post('status'),
 			'added_on'=>$date,
@@ -1583,6 +1648,10 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 	
 	public function update_team()
 	{
+		$team_id = (int) $this->uri->segment(4);
+		$business_loc_id = (int) $this->input->post('business_loc');
+		$department_id = (int) $this->input->post('department');
+		$team_leader_id = (int) $this->input->post('team_leader');
 		
 		$this->form_validation->set_error_delimiters('<div style="color:red;">', '</div>');
 		$this->form_validation->set_rules('business_loc', 'Business Location', 'required|trim');
@@ -1598,15 +1667,19 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 		}
 		else
 		{
+		if ($team_id <= 0 || !$this->is_valid_team_leader_mapping($business_loc_id, $department_id, $team_leader_id)) {
+			$this->session->set_flashdata('message','<div class="alert alert-danger">Please select an active team leader from the selected business location and department.</div>');
+			redirect(page_url.'Master/User_management/company_team_list');
+		}
 		date_default_timezone_set("Asia/Kolkata");
 		$date =  date('Y-m-d H:i:s'); 
 		$table = "prestogroup_teams";
 		$query = $this->db->select('team_id')
 			->from('prestogroup_teams')
-			->where('business_loc_id',$this->input->post('business_loc'))
-			->where('department_id',$this->input->post('department'))
-			->where('team_leader',$this->input->post('team_leader'))
-			->where('team_id !=',(int)$this->uri->segment(4))
+			->where('business_loc_id',$business_loc_id)
+			->where('department_id',$department_id)
+			->where('team_leader',$team_leader_id)
+			->where('team_id !=',$team_id)
 			->limit(1)
 			->get();
 		if($query->num_rows() > 0){
@@ -1616,9 +1689,9 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 		}else{
 		
 		
-			$data = array('business_loc_id'=>$this->input->post('business_loc'),
-			'department_id'=>$this->input->post('department'),
-			'team_leader'=>$this->input->post('team_leader'),
+			$data = array('business_loc_id'=>$business_loc_id,
+			'department_id'=>$department_id,
+			'team_leader'=>$team_leader_id,
 			'team_name'=>$this->input->post('team_name'),
 			'status'=>$this->input->post('status'),
 			'by_pass'=>$this->input->post('by_pass'),
@@ -1627,8 +1700,12 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 				$data['show_all_team_tasks'] = $this->input->post('show_all_team_tasks') ? 1 : 0;
 				$data['allow_task_assignment'] = $this->input->post('allow_task_assignment') ? 1 : 0;
 			}
-			$this->db->where('team_id',$this->uri->segment(4));
-		$result  = $this->db->update($table,$data);	
+			$this->db->trans_start();
+			$this->db->where('team_id',$team_id);
+			$this->db->update($table,$data);
+			$this->db->where('team_id',$team_id)->where('employee_id',$team_leader_id)->delete('presto_team_members');
+			$this->db->trans_complete();
+		$result = $this->db->trans_status();
 		if($result)
 		{
 			$this->session->set_flashdata('message','<div class="alert alert-danger" style="color:#000;">Thank you, record successfully updated.</div>');
@@ -1643,6 +1720,42 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 		
 	}
 		
+	}
+
+	private function is_valid_team_leader_mapping($business_loc_id, $department_id, $team_leader_id)
+	{
+		$business_loc_id = (int) $business_loc_id;
+		$department_id = (int) $department_id;
+		$team_leader_id = (int) $team_leader_id;
+		if ($business_loc_id <= 0 || $department_id <= 0 || $team_leader_id <= 0) {
+			return false;
+		}
+
+		$department_exists = $this->db->select('department_id')->from('departments')
+			->where('department_id', $department_id)
+			->where('business_loc_id', $business_loc_id)
+			->where('status', '1')->limit(1)->get()->num_rows() > 0;
+		if (!$department_exists) {
+			return false;
+		}
+
+		$user_matches_team_scope = $this->db->select('user_id')->from('system_users')
+			->where('user_id', $team_leader_id)
+			->where('business_location', $business_loc_id)
+			->where('department_id', $department_id)
+			->where('user_status', '1')->limit(1)->get()->num_rows() > 0;
+		if ($user_matches_team_scope) {
+			return true;
+		}
+
+		// The configured department head remains eligible even when legacy user scope data is incomplete.
+		return $this->db->select('a.department_id')->from('departments a')
+			->join('system_users b', 'b.user_id = a.departmenthead', 'inner')
+			->where('a.department_id', $department_id)
+			->where('a.business_loc_id', $business_loc_id)
+			->where('a.departmenthead', $team_leader_id)
+			->where('a.status', '1')->where('b.user_status', '1')
+			->limit(1)->get()->num_rows() > 0;
 	}
 
 	public function selete_team_leader()
@@ -1695,7 +1808,11 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 			$query = $this->db->select('user_id, first_name, last_name')
 				->from('system_users')
 				->where('user_status','1')
-				->where('department_id',$department)
+				->where('department_id',$department);
+			if($business_loc > 0){
+				$this->db->where('business_location',$business_loc);
+			}
+			$query = $this->db
 				->order_by('first_name','asc')
 				->get();
 			$add_user_option($query->result());
@@ -1705,7 +1822,11 @@ $changepassword.= '<div id="con-close-modal'.$i.'" class="modal fade" tabindex="
 		if(empty($team_leaders) && $department > 0){
 			$query = $this->db->select('user_id, first_name, last_name')
 				->from('system_users')
-				->where('department_id',$department)
+				->where('department_id',$department);
+			if($business_loc > 0){
+				$this->db->where('business_location',$business_loc);
+			}
+			$query = $this->db
 				->order_by('first_name','asc')
 				->get();
 			$add_user_option($query->result());
@@ -2737,19 +2858,22 @@ $user_id=$this->uri->segment('4');
 	{
 		$business_location = (int)$business_location;
 		$service_visit_overview_submodule_id = $this->ensure_service_visit_overview_submodule();
+		// Deliberately a matched pair: the same dashboard, at two scopes.  Without the
+		// (User) / (HOD) suffixes the first row reads like a create-only right and the
+		// second like the only dashboard there is, which is how it was misread before.
 		$df_change_control_map = array(
 			41 => array(
-				'label' => 'Raise ECN / IOM',
-				'description' => 'Allow this user to create a new DF change-control request.',
-				'badge' => 'DF Change Control'
+				'label' => 'DF Change Control Dashboard (User)',
+				'description' => 'Allow this user to raise a new ECN / IOM and to open the DF Change Control Dashboard, where it lists only the requests this user raised.',
+				'badge' => 'User Access'
 			),
 			42 => array(
-				'label' => 'DF Change Control Dashboard',
-				'description' => 'Allow this user to see HOD requests, assignments and the DF request dashboard.',
+				'label' => 'DF Change Control Dashboard (HOD)',
+				'description' => 'Allow this user to see HOD requests, assignments and the company-wide DF request dashboard.',
 				'badge' => 'HOD Access'
 			)
 		);
-		$custom_submodule_map = array();
+		$custom_submodule_map = $this->overtime_permission_submodules();
 		if ($service_visit_overview_submodule_id > 0) {
 			$custom_submodule_map[$service_visit_overview_submodule_id] = array(
 				'label' => 'Engineer Visit Assignment Overview',
@@ -2820,6 +2944,9 @@ $user_id=$this->uri->segment('4');
 				'description' => !empty($special_config['description']) ? $special_config['description'] : '',
 				'badge' => !empty($special_config['badge']) ? $special_config['badge'] : '',
 				'allow' => !empty($capability) && isset($capability['submodule_access']) && (string)$capability['submodule_access'] === '1',
+				// A second toggle is offered only where Edit actually decides something,
+				// so the rest of the screen keeps its single Allow switch.
+				'can_edit' => !empty($special_config['can_edit']),
 				'edit' => !empty($capability) && isset($capability['medit']) && (string)$capability['medit'] === '1',
 				'remove' => !empty($capability) && isset($capability['mremove']) && (string)$capability['mremove'] === '1',
 				'is_df_change_control' => isset($df_change_control_map[$submodule_id])
@@ -2838,6 +2965,71 @@ $user_id=$this->uri->segment('4');
 		}
 
 		return $modules;
+	}
+
+	/**
+	 * Overtime's rows on the permission screen, resolved by NAME because the module and
+	 * submodule ids differ between installations - see Database/overtime_002_permissions.sql.
+	 *
+	 * The three masters carry a "Can edit" toggle. Without it `medit` can never be set from
+	 * this screen, and saving request limits, cost rates or reporting leaders is guarded on
+	 * exactly that flag, so those masters would be permanently read-only for everyone.
+	 */
+	private function overtime_permission_submodules()
+	{
+		static $map = null;
+		if ($map !== null) return $map;
+
+		$map = array();
+		foreach (array('system_modules', 'submodule') as $table) {
+			if (!$this->db->table_exists($table)) return $map;
+		}
+		$wanted = array(
+			'OVERTIME|OVERTIME REQUESTS' => array(
+				'label' => 'Raise overtime requests',
+				'description' => 'Open the Overtime module and raise a request. The person must also be a team leader, department head or administrator to raise one for their team.',
+				'badge' => 'Overtime'
+			),
+			'OVERTIME|OVERTIME APPROVALS' => array(
+				'label' => 'Overtime approval inbox',
+				'description' => 'See the requests waiting for approval. The decision itself stays with Shubham Sharma (user 139).',
+				'badge' => 'Overtime'
+			),
+			'OVERTIME|OVERTIME REPORTS' => array(
+				'label' => 'Overtime reports and cost',
+				'description' => 'Open overtime reports, day-wise cost and the CSV export, and see overtime cost on the DF detail page.',
+				'badge' => 'Overtime'
+			),
+			'MASTER|OVERTIME REQUEST LIMITS' => array(
+				'label' => 'Overtime master: request limits',
+				'description' => 'See the overtime limits master. Tick Can edit to let this user save new limits. Administrator access is required as well.',
+				'badge' => 'Overtime Master',
+				'can_edit' => true
+			),
+			'MASTER|OVERTIME COST RATES' => array(
+				'label' => 'Overtime master: cost rates',
+				'description' => 'See the overtime cost rates. Tick Can edit to let this user add, remove and recalculate rates. Administrator access is required as well.',
+				'badge' => 'Overtime Master',
+				'can_edit' => true
+			),
+			'MASTER|OVERTIME REPORTING LEADERS' => array(
+				'label' => 'Overtime master: reporting leaders (legacy)',
+				'description' => 'Kept for historical records only; new requests go straight to Shubham Sharma. Tick Can edit to let this user change the legacy overrides.',
+				'badge' => 'Overtime Master',
+				'can_edit' => true
+			)
+		);
+
+		$rows = $this->db->select('s.id, s.submodule, m.modulename')
+			->from('submodule s')
+			->join('system_modules m', 'm.id = s.moduleid', 'inner')
+			->where_in('s.submodule', array('OVERTIME REQUESTS', 'OVERTIME APPROVALS', 'OVERTIME REPORTS', 'OVERTIME REQUEST LIMITS', 'OVERTIME COST RATES', 'OVERTIME REPORTING LEADERS'))
+			->get()->result_array();
+		foreach ($rows as $row) {
+			$key = strtoupper(trim($row['modulename'])) . '|' . strtoupper(trim($row['submodule']));
+			if (isset($wanted[$key])) $map[(int)$row['id']] = $wanted[$key];
+		}
+		return $map;
 	}
 
 	private function build_permission_summary($modules)
@@ -6283,6 +6475,27 @@ $this->db->update('customer_detail',$data);
 		
 			$this->load->view('master/delay_table');
 		
+	}
+
+ public function design_department_dashboard(){
+			$user_id = (int) $this->session->userdata['logged_in']['user_id'];
+			$has_access = $this->db->select('acessid')
+				->from('module_capablity')
+				->where('role_id', $user_id)
+				->where('moduleid', '20')
+				->where('submoduleid', '81')
+				->where('submodule_access', '1')
+				->limit(1)
+				->get()
+				->num_rows() > 0;
+
+			if (!$has_access) {
+				show_error('You do not have permission to view the Design Department Dashboard.', 403, 'Access Denied');
+				return;
+			}
+
+			$this->load->view('master/design_department_dashboard');
+
 	}
 
  public function export_delay_table_department_excel()

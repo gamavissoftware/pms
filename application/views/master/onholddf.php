@@ -54,7 +54,6 @@ $this->db->select("
 
     po.company_name,
     po.podate,
-    po.po_attachment,
     CONCAT(u.title, ' ', u.first_name, ' ', u.last_name) as marketing_person,
 
     COUNT(DISTINCT tasks.id) as total_tasks,
@@ -199,17 +198,6 @@ if ($q->num_rows() > 0) {
             ';
         }
 
-        $poAttachment = '';
-
-        if (!empty($row->po_attachment)) {
-            $poAttachment = '
-                <br>
-                <a href="' . sfdocument . 'Taskdocument/' . $row->po_attachment . '" download class="btn btn-info btn-xs btn-action">
-                    <i class="fa fa-download"></i> PO
-                </a>
-            ';
-        }
-
         $companyName = !empty($row->company_name) ? strtoupper($row->company_name) : '-';
         $marketingPerson = safeNameOnHoldDfReport($row->marketing_person);
 
@@ -258,7 +246,6 @@ if ($q->num_rows() > 0) {
             'df_no' => !empty($row->df_no) ? strtoupper($row->df_no) : '-',
             'download' => $dfDownload,
             'po_date' => safeDateOnHoldDfReport($row->podate),
-            'po_attachment' => $poAttachment,
             'company_name' => $companyName,
             'marketing_person' => $marketingPerson,
             'df_release_date' => safeDateOnHoldDfReport($row->added_on),
@@ -801,7 +788,6 @@ $avgProgress = ($totalHoldDf > 0) ? round($totalProgress / $totalHoldDf) : 0;
                                     <div class="date-stack">
                                         <?php echo !empty($row['po_date']) ? $row['po_date'] : '-'; ?>
                                     </div>
-                                    <?php echo $row['po_attachment']; ?>
                                 </td>
 
                                 <td>
@@ -861,7 +847,7 @@ $avgProgress = ($totalHoldDf > 0) ? round($totalProgress / $totalHoldDf) : 0;
                                 </td>
 
                                 <td>
-                                    <a href="<?php echo page_url;?>Task/dfgantchartNew/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
+                                    <a href="<?php echo page_url;?>gantt/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
                                         <i class="fa fa-bar-chart"></i> Gantt Chart
                                     </a>
                                 </td>

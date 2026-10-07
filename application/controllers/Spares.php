@@ -12,9 +12,10 @@ class Spares extends CI_Controller {
 		
 		$this->load->model('User_model','user');
 		$this->load->model('Master_model','master');
-		$this->load->model('Salescrm_model','salescrm');
-		$this->load->model('Dashboard_model','dashboardmodel');
-		$this->load->model('Spare_pi_model', 'spare_pi_model');
+			$this->load->model('Salescrm_model','salescrm');
+			$this->load->model('Dashboard_model','dashboardmodel');
+			$this->load->model('Spare_pi_model', 'spare_pi_model');
+			$this->load->model('Spare_quotation_expiry_model', 'spare_quotation_expiry_model');
 		date_default_timezone_set("Asia/Kolkata"); 
 
 		$config = Array(
@@ -35,14 +36,34 @@ class Spares extends CI_Controller {
 
 // echo "<pre>";print_r($_SESSION);exit;
 	if (!$this->session->userdata('logged_in'))
-        { 
-            $this->session->set_flashdata('message','Session Logged Out. Login to continue', 'refresh');
-            redirect(page_url);
-        }
-		
-	}
+	        {
+	            $this->session->set_flashdata('message','Session Logged Out. Login to continue', 'refresh');
+	            redirect(page_url);
+			}
+		}
 
-	public function leadform(){
+	    private function refresh_expired_spare_quotations()
+    {
+        return $this->spare_quotation_expiry_model->expire_stale_quotations(date('Y-m-d'));
+    }
+
+    private function get_logged_in_spares_user_id()
+    {
+        $logged_in = $this->session->userdata('logged_in');
+        return !empty($logged_in['user_id']) ? (int) $logged_in['user_id'] : 0;
+    }
+
+    private function current_user_can_manage_all_spares_quotations()
+    {
+        $logged_in = $this->session->userdata('logged_in');
+        $user_id = !empty($logged_in['user_id']) ? (int) $logged_in['user_id'] : 0;
+        $role_id = !empty($logged_in['role']) ? (int) $logged_in['role'] : 0;
+
+        return pms_is_super_admin()
+            || in_array($role_id, array(12, 41), true)
+            || in_array($user_id, array(61, 111, 114, 139, 161, 189), true);
+    }
+		public function leadform(){
 		$this->load->view('spares/lead');
 	}
 
@@ -88,13 +109,14 @@ class Spares extends CI_Controller {
     {
         $searchTerm = $this->input->get('searchTerm', TRUE) ? $this->input->get('searchTerm', TRUE) : '';
 
-        $this->db->select('customer_id, company_name, contact_person');
+        $this->db->select('customer_id, company_name, address, contact_person');
         $this->db->from('spares_customers');
         $this->db->where('status', '1');
 
         if (!empty($searchTerm)) {
             $this->db->group_start();
             $this->db->like('company_name', $searchTerm, 'both');
+            $this->db->or_like('address', $searchTerm, 'both');
             $this->db->or_like('contact_person', $searchTerm, 'both');
             $this->db->group_end();
         }
@@ -106,6 +128,10 @@ class Spares extends CI_Controller {
         if ($query->num_rows() > 0) {
             foreach ($query->result() as $customer) {
                 $displayText = $customer->company_name;
+                $customerAddress = trim(preg_replace('/\s+/', ' ', (string) $customer->address));
+                if ($customerAddress !== '') {
+                    $displayText .= " | " . $customerAddress;
+                }
                 if (!empty($customer->contact_person)) {
                     $displayText .= " (" . $customer->contact_person . ")";
                 }
@@ -167,9 +193,28 @@ class Spares extends CI_Controller {
         );
 
         if ($this->db->insert('spares_customers', $data)) {
-            echo "1~" . $this->db->insert_id();
+            $customer_id = $this->db->insert_id();
+            $this->sync_customer_to_sap('spares', $customer_id);
+            echo "1~" . $customer_id;
         } else {
             echo "0~Failed to save customer to the database.";
+        }
+    }
+
+    private function sync_customer_to_sap($source, $customer_id)
+    {
+        $customer_id = (int) $customer_id;
+        if ($customer_id <= 0) {
+            return;
+        }
+
+        $this->load->library('Sap_service');
+        $result = $source === 'spares'
+            ? $this->sap_service->sync_spares_customer($customer_id)
+            : $this->sap_service->sync_marketing_customer($customer_id);
+
+        if (empty($result['success']) && empty($result['skipped'])) {
+            log_message('error', 'SAP customer sync failed for ' . $source . ' customer ' . $customer_id . ': ' . (isset($result['message']) ? $result['message'] : 'Unknown error'));
         }
     }
 
@@ -399,6 +444,11 @@ public function get_products_ajax()
 
 public function opportunity_list()
 {
+    $this->refresh_expired_spare_quotations();
+    $data['cancelled_quotation_stage_id'] = $this->spare_quotation_expiry_model->get_cancelled_stage_id();
+    $data['can_reopen_all_cancelled'] = $this->current_user_can_manage_all_spares_quotations();
+    $data['current_user_id'] = $this->get_logged_in_spares_user_id();
+
     // --- 1. Fetch data for filter dropdowns ---
     $this->db->select('user_id, first_name, last_name');
     $this->db->from('system_users');
@@ -426,11 +476,14 @@ public function opportunity_list()
         op.op_type,
         op.status,
         op.probability,
+        op.marketing_person_id,
         cm.company_name, 
         ls.lead_source,
         CONCAT(u.first_name, ' ', u.last_name) as marketing_person_name,
         sls.lead_name as current_stage_name,
-        {$latest_quotation_subquery} as latest_quotation_id 
+        spr.lead_stage as current_stage_id,
+        {$latest_quotation_subquery} as latest_quotation_id,
+        (SELECT quotation_date FROM quotations WHERE opportunity_id = op.opportunity_id ORDER BY quotation_id DESC LIMIT 1) as latest_quotation_date
     ");
     $this->db->from('opportunities op');
     $this->db->join('spares_customers cm', 'cm.customer_id = op.customer_id', 'left');
@@ -477,6 +530,7 @@ public function opportunity_list()
 
 public function opportunity_stage_wise($stage_id = NULL)
 {
+    $this->refresh_expired_spare_quotations();
     // --- 0. Validate input and get stage info for the title ---
     if (!$stage_id || !is_numeric($stage_id)) {
         // Redirect or show an error if the stage ID is missing or invalid
@@ -485,6 +539,9 @@ public function opportunity_stage_wise($stage_id = NULL)
 
     $this->ensure_spare_pi_dependencies();
     $data['stage_info'] = $this->db->get_where('spare_lead_stage', ['lead_id' => $stage_id])->row();
+    $data['cancelled_quotation_stage_id'] = $this->spare_quotation_expiry_model->get_cancelled_stage_id();
+    $data['can_reopen_all_cancelled'] = $this->current_user_can_manage_all_spares_quotations();
+    $data['current_user_id'] = $this->get_logged_in_spares_user_id();
 
     // If no stage is found for the given ID, redirect back
     if (!$data['stage_info']) {
@@ -520,11 +577,14 @@ public function opportunity_stage_wise($stage_id = NULL)
         op.op_type,
         op.status,
         op.probability,
+        op.marketing_person_id,
         cm.company_name, 
         ls.lead_source,
         CONCAT(u.first_name, ' ', u.last_name) as marketing_person_name,
         sls.lead_name as current_stage_name,
-        {$latest_quotation_subquery} as latest_quotation_id 
+        spr.lead_stage as current_stage_id,
+        {$latest_quotation_subquery} as latest_quotation_id,
+        (SELECT quotation_date FROM quotations WHERE opportunity_id = op.opportunity_id ORDER BY quotation_id DESC LIMIT 1) as latest_quotation_date
     ");
     $this->db->from('opportunities op');
     $this->db->join('spares_customers cm', 'cm.customer_id = op.customer_id', 'left');
@@ -634,7 +694,9 @@ public function get_opportunity_products_ajax($opportunity_id)
 
 public function opportunity_detail($id)
 {
+    $this->refresh_expired_spare_quotations();
     $this->load->model('opportunity_model');
+    $this->ensure_spare_quotation_charge_mode_columns();
 
     $data['opportunity'] = $this->opportunity_model->get_opportunity_details($id);
 
@@ -647,6 +709,12 @@ public function opportunity_detail($id)
     $data['quotations'] = $this->opportunity_model->get_opportunity_quotations($id);
     $this->ensure_spare_pi_dependencies();
     $data['spare_pi'] = $this->spare_pi_model->get_by_opportunity($id);
+    $data['quotation_cancellation'] = $this->spare_quotation_expiry_model->get_active_cancellation($id);
+    $data['is_cancelled_quotation'] = !empty($data['quotation_cancellation']);
+    $data['can_reopen_quotation'] = $data['is_cancelled_quotation'] && (
+        $this->current_user_can_manage_all_spares_quotations()
+        || (int) $data['opportunity']->marketing_person_id === $this->get_logged_in_spares_user_id()
+    );
 
     // Fetch received Purchase Orders with the uploaded file name
     $this->db->select('po_id, po_no, po_date, grand_total, po_copy');
@@ -662,7 +730,9 @@ public function opportunity_detail($id)
     $this->db->order_by('order_id', 'DESC');
     $data['sales_orders'] = $this->db->get()->result();
 
-    $next_stages_raw = $this->opportunity_model->get_next_stages($data['opportunity']->current_stage_id);
+    $next_stages_raw = $data['is_cancelled_quotation']
+        ? array()
+        : $this->opportunity_model->get_next_stages($data['opportunity']->current_stage_id);
     $data['next_stages'] = [];
     if (!empty($next_stages_raw)) {
         $this->db->select('lead_id');
@@ -683,6 +753,15 @@ public function opportunity_detail($id)
 public function update_opportunity_progress($id)
 {
     $this->output->set_content_type('application/json');
+
+    if ($this->spare_quotation_expiry_model->get_active_cancellation($id)) {
+        $this->output->set_status_header(409);
+        echo json_encode(array(
+            'status' => 'error',
+            'message' => 'Reopen this cancelled quotation before moving its pipeline stage.'
+        ));
+        return;
+    }
 
     $logged_in = $this->session->userdata('logged_in');
     if (empty($logged_in['user_id'])) {
@@ -773,8 +852,55 @@ public function update_opportunity_progress($id)
     }
 }
 
+public function reopen_cancelled_quotation($opportunity_id)
+{
+    if (strtoupper((string) $this->input->method()) !== 'POST') {
+        show_error('Method not allowed.', 405);
+        return;
+    }
+
+    $opportunity_id = (int) $opportunity_id;
+    $opportunity = $this->db->select('opportunity_id, marketing_person_id')
+        ->from('opportunities')
+        ->where('opportunity_id', $opportunity_id)
+        ->limit(1)
+        ->get()
+        ->row();
+
+    if (empty($opportunity)) {
+        show_404();
+        return;
+    }
+
+    $current_user_id = $this->get_logged_in_spares_user_id();
+    $can_reopen = $this->current_user_can_manage_all_spares_quotations()
+        || (int) $opportunity->marketing_person_id === $current_user_id;
+
+    if (!$can_reopen) {
+        $this->session->set_flashdata('error', 'You are not allowed to reopen this quotation.');
+        redirect(page_url . 'Spares/opportunity_detail/' . $opportunity_id);
+        return;
+    }
+
+    $result = $this->spare_quotation_expiry_model->reopen($opportunity_id, $current_user_id);
+    $this->session->set_flashdata($result['success'] ? 'success' : 'error', $result['message']);
+
+    $return_url = trim((string) $this->input->post('return_url'));
+    if ($return_url === '' || strpos($return_url, page_url . 'Spares/') !== 0) {
+        $return_url = page_url . 'Spares/opportunity_detail/' . $opportunity_id;
+    }
+
+    redirect($return_url);
+}
+
 public function create_quotation($opportunity_id)
 {
+    if ($this->spare_quotation_expiry_model->get_active_cancellation($opportunity_id)) {
+        $this->session->set_flashdata('error', 'Reopen this cancelled quotation before creating or revising it.');
+        redirect(page_url . 'Spares/opportunity_detail/' . (int) $opportunity_id);
+        return;
+    }
+
     $this->ensure_spare_quotation_charge_mode_columns();
     $this->load->model('opportunity_model');
     $data['opportunity'] = $this->opportunity_model->get_opportunity_details($opportunity_id);
@@ -786,6 +912,12 @@ public function create_quotation($opportunity_id)
     $data['opportunity_products'] = $this->opportunity_model->get_opportunity_products($opportunity_id);
     $data['products'] = $data['opportunity_products'];
     $data['recent_price_history_map'] = $this->build_recent_price_history_map($data['products']);
+    $data['quotation_type_options'] = $this->get_spare_quotation_type_options();
+    $data['dispatch_mode_options'] = $this->get_spare_dispatch_mode_options();
+    $data['custom_engg_type_options'] = $this->get_spare_custom_engg_type_options();
+    $data['selected_quotation_type'] = 'CONSUMABLE';
+    $data['selected_dispatch_mode'] = 'COURIER';
+    $data['selected_custom_engg_type'] = '';
 
     // Generate a new, unique quotation number (you can customize this logic)
     $this->db->select('quotation_id');
@@ -873,6 +1005,132 @@ private function ensure_spare_quotation_charge_mode_columns()
              AFTER `discount_percent`"
         );
     }
+
+    if (!$this->db->field_exists('currency', 'quotations')) {
+        $this->db->query(
+            "ALTER TABLE `quotations`
+             ADD `currency` VARCHAR(5) NOT NULL DEFAULT 'INR'
+             AFTER `attention`"
+        );
+        $this->db->query(
+            "UPDATE `quotations` q
+             JOIN `spares_customers` c ON c.`customer_id` = q.`customer_id`
+             SET q.`currency` = 'USD'
+             WHERE c.`country_id` <> 101"
+        );
+    }
+
+    $sf_columns = [
+        'quotation_type' => "ALTER TABLE `quotations` ADD `quotation_type` VARCHAR(30) NOT NULL DEFAULT 'CONSUMABLE' AFTER `currency`",
+        'custom_engg_type' => "ALTER TABLE `quotations` ADD `custom_engg_type` VARCHAR(30) DEFAULT NULL AFTER `quotation_type`",
+        'dispatch_mode' => "ALTER TABLE `quotations` ADD `dispatch_mode` VARCHAR(30) NOT NULL DEFAULT 'COURIER' AFTER `custom_engg_type`",
+        'execution_workflow_type' => "ALTER TABLE `quotations` ADD `execution_workflow_type` VARCHAR(40) NOT NULL DEFAULT 'CONSUMABLE' AFTER `dispatch_mode`",
+    ];
+
+    foreach ($sf_columns as $field => $sql) {
+        if (!$this->db->field_exists($field, 'quotations')) {
+            $this->db->query($sql);
+        }
+    }
+}
+
+private function get_spare_quotation_type_options()
+{
+    return [
+        'CONSUMABLE' => 'Consumable',
+        'CRITICAL' => 'Critical',
+        'CONS_CRITICAL' => 'Consumable + Critical',
+        'CUSTOM_ENGG' => 'Custom Engg.',
+    ];
+}
+
+private function get_spare_dispatch_mode_options()
+{
+    return [
+        'SELF_PICKUP' => 'Self Pickup',
+        'COURIER' => 'Courier',
+    ];
+}
+
+private function get_spare_custom_engg_type_options()
+{
+    return [
+        'CHANGEOVER' => 'Changeover',
+        'SPEED_UPGRADATION' => 'Speed Upgradation',
+    ];
+}
+
+private function normalize_spare_quotation_type($quotation_type)
+{
+    $quotation_type = strtoupper(trim((string) $quotation_type));
+    $options = $this->get_spare_quotation_type_options();
+
+    return isset($options[$quotation_type]) ? $quotation_type : '';
+}
+
+private function normalize_spare_dispatch_mode($dispatch_mode)
+{
+    $dispatch_mode = strtoupper(trim((string) $dispatch_mode));
+    $options = $this->get_spare_dispatch_mode_options();
+
+    return isset($options[$dispatch_mode]) ? $dispatch_mode : '';
+}
+
+private function normalize_spare_custom_engg_type($custom_engg_type)
+{
+    $custom_engg_type = strtoupper(trim((string) $custom_engg_type));
+    $options = $this->get_spare_custom_engg_type_options();
+
+    return isset($options[$custom_engg_type]) ? $custom_engg_type : '';
+}
+
+private function map_spare_quotation_to_execution_workflow($quotation_type, $custom_engg_type = '')
+{
+    $quotation_type = $this->normalize_spare_quotation_type($quotation_type);
+
+    if ($quotation_type === 'CUSTOM_ENGG') {
+        $custom_engg_type = $this->normalize_spare_custom_engg_type($custom_engg_type);
+        return $custom_engg_type === 'SPEED_UPGRADATION' ? 'CUSTOM_SPEED_UPGRADATION' : 'CUSTOM_CHANGEOVER';
+    }
+
+    return $quotation_type !== '' ? $quotation_type : 'CONSUMABLE';
+}
+
+private function get_spare_quotation_type_label($quotation_type, $custom_engg_type = '')
+{
+    $quotation_type = $this->normalize_spare_quotation_type($quotation_type);
+    $quotation_options = $this->get_spare_quotation_type_options();
+
+    if ($quotation_type !== 'CUSTOM_ENGG') {
+        return isset($quotation_options[$quotation_type]) ? $quotation_options[$quotation_type] : 'Consumable';
+    }
+
+    $custom_engg_type = $this->normalize_spare_custom_engg_type($custom_engg_type);
+    $custom_options = $this->get_spare_custom_engg_type_options();
+    $custom_label = isset($custom_options[$custom_engg_type]) ? $custom_options[$custom_engg_type] : '';
+
+    return $custom_label !== '' ? 'Custom Engg. - ' . $custom_label : 'Custom Engg.';
+}
+
+private function get_spare_dispatch_mode_label($dispatch_mode)
+{
+    $dispatch_mode = $this->normalize_spare_dispatch_mode($dispatch_mode);
+    $options = $this->get_spare_dispatch_mode_options();
+
+    return isset($options[$dispatch_mode]) ? $options[$dispatch_mode] : 'Courier';
+}
+
+private function normalize_spare_currency($currency)
+{
+    $currency = strtoupper(trim((string) $currency));
+    return in_array($currency, ['INR', 'USD', 'EUR'], true) ? $currency : 'INR';
+}
+
+private function get_spare_currency_symbol($currency)
+{
+    $symbols = ['INR' => '₹', 'USD' => '$', 'EUR' => '€'];
+    $currency = $this->normalize_spare_currency($currency);
+    return $symbols[$currency];
 }
 
 private function normalize_spare_quote_charge_mode($mode)
@@ -887,7 +1145,7 @@ private function is_spare_quote_charge_extra($mode)
 
 private function get_spare_quote_default_item_gst_percent($currency)
 {
-    return strtoupper(trim((string) $currency)) === 'USD' ? 0.00 : 18.00;
+    return $this->normalize_spare_currency($currency) === 'INR' ? 18.00 : 0.00;
 }
 
 private function normalize_spare_quote_item_gst_percent($gst_percent, $default_gst_percent = 18.00)
@@ -1412,7 +1670,35 @@ public function search_products_ajax()
 
         // --- 1. GATHER DATA FROM FORM ---
         $post = $this->input->post();
+        $opportunity_id = (int) ($post['opportunity_id'] ?? 0);
+        if ($this->spare_quotation_expiry_model->get_active_cancellation($opportunity_id)) {
+            show_error('Reopen this cancelled quotation before creating or revising it.', 409);
+            return;
+        }
         $user_id = $this->session->userdata('logged_in')['user_id'];
+        $currency = $this->normalize_spare_currency($post['currency'] ?? 'INR');
+        $quotation_type = $this->normalize_spare_quotation_type($post['quotation_type'] ?? '');
+        $dispatch_mode = $this->normalize_spare_dispatch_mode($post['dispatch_mode'] ?? '');
+        $custom_engg_type = $this->normalize_spare_custom_engg_type($post['custom_engg_type'] ?? '');
+
+        if ($quotation_type === '') {
+            show_error('Please select a valid quotation type.');
+            return;
+        }
+
+        if ($dispatch_mode === '') {
+            show_error('Please select a valid dispatch mode.');
+            return;
+        }
+
+        if ($quotation_type === 'CUSTOM_ENGG' && $custom_engg_type === '') {
+            show_error('Please select Changeover or Speed Upgradation for Custom Engg. quotations.');
+            return;
+        }
+
+        if ($quotation_type !== 'CUSTOM_ENGG') {
+            $custom_engg_type = null;
+        }
 
         if (empty($post['product_id']) || !is_array($post['product_id'])) {
             show_error('Cannot generate a quotation with no products.');
@@ -1426,6 +1712,11 @@ public function search_products_ajax()
             'quotation_date'           => $post['quotation_date'],
             'customer_id'              => $post['customer_id'],
             'attention'                => $post['attention'],
+            'currency'                 => $currency,
+            'quotation_type'           => $quotation_type,
+            'custom_engg_type'         => $custom_engg_type,
+            'dispatch_mode'            => $dispatch_mode,
+            'execution_workflow_type'  => $this->map_spare_quotation_to_execution_workflow($quotation_type, $custom_engg_type),
             'packing_percent'          => (float)($post['packing_percent'] ?? 0),
             'packing_charge_mode'      => $this->normalize_spare_quote_charge_mode($post['packing_charge_mode'] ?? 'included'),
             'freight_charge'           => (float)($post['freight_charge'] ?? 0),
@@ -1451,7 +1742,7 @@ public function search_products_ajax()
         $products_data = [];
         $basicValue = 0;
         $has_line_item_discount = false;
-        $default_item_gst_percent = $this->get_spare_quote_default_item_gst_percent($post['currency'] ?? 'INR');
+        $default_item_gst_percent = $this->get_spare_quote_default_item_gst_percent($currency);
 
         foreach ($post['product_id'] as $key => $pid) {
             $pid = trim((string) $pid);
@@ -1557,9 +1848,11 @@ public function search_products_ajax()
         $pdf_data['sub_total'] = $totals['sub_total'];
         $pdf_data['gst_percent'] = $totals['effective_gst_percent'];
         $pdf_data['gst_summary_label'] = $totals['gst_summary_label'];
-        $pdf_data['currency'] = strtoupper(trim((string) ($post['currency'] ?? 'INR'))) === 'USD' ? 'USD' : 'INR';
+        $pdf_data['currency'] = $currency;
         $pdf_data['currency_type'] = $pdf_data['currency'];
-        $pdf_data['curr_symbol'] = $pdf_data['currency'] === 'USD' ? '$' : '₹';
+        $pdf_data['curr_symbol'] = $this->get_spare_currency_symbol($currency);
+        $pdf_data['quotation_type_label'] = $this->get_spare_quotation_type_label($quotation_type, $custom_engg_type);
+        $pdf_data['dispatch_mode_label'] = $this->get_spare_dispatch_mode_label($dispatch_mode);
         $pdf_data['shipping_customer'] = $pdf_data['customer'];
         $pdf_data['amount_in_words'] = get_amount_in_words($totals['grand_total'], $pdf_data['currency']);
         
@@ -1633,14 +1926,19 @@ file_put_contents(
         $pdf_data = $quote_data;
         $pdf_data['customer'] = $this->db->get_where('spares_customers', array('customer_id' => $pdf_data['customer_id']))->row();
 
-        // --- CRITICAL FIX: Intelligence for Currency & Export Mode ---
-        // Detect if this is an Export order
-        $is_export = ($pdf_data['customer']->country_id != 101);
-        
-        // Set the currency variable for the template
-        $pdf_data['currency'] = $is_export ? 'USD' : 'INR';
-        $pdf_data['currency_type'] = $pdf_data['currency']; // For the Grand Total label
-        $pdf_data['curr_symbol'] = ($pdf_data['currency'] == 'USD') ? '$' : '₹';
+        // Use the currency saved with the quotation. The migration backfills
+        // legacy export rows using their former country-based USD behavior.
+        $legacy_currency = ((int) ($pdf_data['customer']->country_id ?? 101) === 101) ? 'INR' : 'USD';
+        $pdf_data['currency'] = $this->normalize_spare_currency($pdf_data['currency'] ?? $legacy_currency);
+        $pdf_data['currency_type'] = $pdf_data['currency'];
+        $pdf_data['curr_symbol'] = $this->get_spare_currency_symbol($pdf_data['currency']);
+        $pdf_data['quotation_type'] = $this->normalize_spare_quotation_type($pdf_data['quotation_type'] ?? 'CONSUMABLE') ?: 'CONSUMABLE';
+        $pdf_data['custom_engg_type'] = $pdf_data['quotation_type'] === 'CUSTOM_ENGG'
+            ? $this->normalize_spare_custom_engg_type($pdf_data['custom_engg_type'] ?? '')
+            : null;
+        $pdf_data['dispatch_mode'] = $this->normalize_spare_dispatch_mode($pdf_data['dispatch_mode'] ?? 'COURIER') ?: 'COURIER';
+        $pdf_data['quotation_type_label'] = $this->get_spare_quotation_type_label($pdf_data['quotation_type'], $pdf_data['custom_engg_type']);
+        $pdf_data['dispatch_mode_label'] = $this->get_spare_dispatch_mode_label($pdf_data['dispatch_mode']);
 
         // ** NEW: Fetch Shipping Info **
         if (isset($pdf_data['shipping_customer_id']) && $pdf_data['shipping_customer_id'] > 0 && $pdf_data['shipping_customer_id'] != $pdf_data['customer_id']) {
@@ -1742,6 +2040,12 @@ file_put_contents(
 
 public function revise_quotation($opportunity_id)
     {
+        if ($this->spare_quotation_expiry_model->get_active_cancellation($opportunity_id)) {
+            $this->session->set_flashdata('error', 'Reopen this cancelled quotation before creating a revision.');
+            redirect(page_url . 'Spares/opportunity_detail/' . (int) $opportunity_id);
+            return;
+        }
+
         $this->ensure_spare_quotation_charge_mode_columns();
         $this->load->model('opportunity_model');
         
@@ -1759,6 +2063,14 @@ public function revise_quotation($opportunity_id)
         $data['products'] = $this->opportunity_model->get_quotation_products($latest_quote->quotation_id);
         $data['opportunity'] = $this->opportunity_model->get_opportunity_details($opportunity_id);
         $data['recent_price_history_map'] = $this->build_recent_price_history_map($data['products']);
+        $data['quotation_type_options'] = $this->get_spare_quotation_type_options();
+        $data['dispatch_mode_options'] = $this->get_spare_dispatch_mode_options();
+        $data['custom_engg_type_options'] = $this->get_spare_custom_engg_type_options();
+        $data['selected_quotation_type'] = $this->normalize_spare_quotation_type($latest_quote->quotation_type ?? 'CONSUMABLE') ?: 'CONSUMABLE';
+        $data['selected_dispatch_mode'] = $this->normalize_spare_dispatch_mode($latest_quote->dispatch_mode ?? 'COURIER') ?: 'COURIER';
+        $data['selected_custom_engg_type'] = $data['selected_quotation_type'] === 'CUSTOM_ENGG'
+            ? $this->normalize_spare_custom_engg_type($latest_quote->custom_engg_type ?? '')
+            : '';
         
         // This is only needed for the hidden template row, which is no longer used with AJAX Select2
         // $data['all_products'] = $this->db->get('products')->result();
@@ -1888,6 +2200,12 @@ public function update_opportunity()
 
 public function create_pi($opportunity_id)
 {
+    if ($this->spare_quotation_expiry_model->get_active_cancellation($opportunity_id)) {
+        $this->session->set_flashdata('error', 'Reopen this cancelled quotation before creating a PI.');
+        redirect(page_url . 'Spares/opportunity_detail/' . (int) $opportunity_id);
+        return;
+    }
+
     $this->load->model('opportunity_model');
     $this->load->helper('number');
     $this->ensure_spare_pi_dependencies();
@@ -1914,7 +2232,9 @@ public function create_pi($opportunity_id)
         $pi = $existing_pi;
         $pi_items = $this->spare_pi_model->get_items($existing_pi->id);
     } else {
-        $currency = $this->get_spare_pi_default_currency($customer);
+        $currency = $this->normalize_spare_currency(
+            $latest_quote->currency ?? $this->get_spare_pi_default_currency($customer)
+        );
         $default_gst_percent = isset($latest_quote->gst_percent)
             ? (float) $latest_quote->gst_percent
             : ($currency === 'INR' ? 18 : 0);
@@ -2010,6 +2330,11 @@ public function save_pi_details()
 
     $post = $this->input->post();
     $opportunity_id = (int) ($post['opportunity_id'] ?? 0);
+    if ($this->spare_quotation_expiry_model->get_active_cancellation($opportunity_id)) {
+        $this->session->set_flashdata('error', 'Reopen this cancelled quotation before saving a PI.');
+        redirect(page_url . 'Spares/opportunity_detail/' . $opportunity_id);
+        return;
+    }
     $pi_id = (int) ($post['pi_id'] ?? 0);
     $action_type = trim((string) ($post['action_type'] ?? 'save'));
     $user_id = $this->session->userdata['logged_in']['user_id'] ?? null;
@@ -2030,9 +2355,7 @@ public function save_pi_details()
     }
 
     $currency = strtoupper(trim((string) ($post['currency'] ?? $this->get_spare_pi_default_currency($customer))));
-    if ($currency !== 'USD') {
-        $currency = 'INR';
-    }
+    $currency = $this->normalize_spare_currency($currency);
 
     $pi_no = trim((string) ($post['pi_no'] ?? ''));
     if ($pi_no === '') {
@@ -2181,7 +2504,7 @@ public function view_pi_pdf($pi_id = null)
         'opportunity' => $opportunity,
         'customer' => $this->get_spares_customer_snapshot($opportunity),
         'company_profile' => $this->get_spares_company_profile(),
-        'currency_symbol' => $currency === 'USD' ? '$' : '₹',
+        'currency_symbol' => $this->get_spare_currency_symbol($currency),
         'amount_in_words' => !empty($pi->amount_in_words)
             ? $this->normalize_spare_pi_amount_in_words($pi->amount_in_words, $currency)
             : $this->get_spare_pi_amount_in_words((float) $pi->grand_total, $currency),
@@ -2219,6 +2542,12 @@ public function view_pi_pdf($pi_id = null)
 
 public function create_po($opportunity_id)
 {
+    if ($this->spare_quotation_expiry_model->get_active_cancellation($opportunity_id)) {
+        $this->session->set_flashdata('error', 'Reopen this cancelled quotation before recording a PO.');
+        redirect(page_url . 'Spares/opportunity_detail/' . (int) $opportunity_id);
+        return;
+    }
+
     $this->load->model('opportunity_model');
     $data = $this->opportunity_model->get_data_for_po($opportunity_id);
 
@@ -2234,6 +2563,15 @@ public function save_po()
     // Ensure this is an AJAX request
     if (!$this->input->is_ajax_request()) {
         exit('No direct script access allowed');
+    }
+
+    $opportunity_id = (int) $this->input->post('opportunity_id');
+    if ($this->spare_quotation_expiry_model->get_active_cancellation($opportunity_id)) {
+        echo json_encode(array(
+            'status' => 'error',
+            'message' => 'Reopen this cancelled quotation before recording a PO.'
+        ));
+        return;
     }
 
     // 1. Server-side Validation
@@ -2402,6 +2740,7 @@ public function view_po_pdf($po_id)
 
 public function followup_list($type, $user_id = NULL)
 {
+    $this->refresh_expired_spare_quotations();
     $this->load->model('Dashboard_model');
     $data = [];
 

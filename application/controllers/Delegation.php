@@ -315,54 +315,7 @@ Complete it by: *".$completiondate."*.
 Assigned By : *".$assignedbypersonname."*
 *$businessname* 🚀";
 
-if($user_id==139){
- /**WHATSAPP INTEGRATION**/
-					
-					$ch = curl_init();
-					curl_setopt($ch, CURLOPT_URL, 'https://app.messageautosender.com/api/v1/message/create');
-					curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-					curl_setopt($ch, CURLOPT_POST, 1);
-					$post = array(
-					// 'receiverMobileNo' => $phone_no,
-					'receiverMobileNo' => '91'.$contactnumber,
-					'username' => whatsappuser2,
-					'password' => whatsapppass2,
-					'message'=>strip_tags($smsmessage1));
-
-					//echo "<pre>";print_r($post);exit;
-
-					curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
-					$result = curl_exec($ch);
-						//echo $result; exit;
-					if (curl_errno($ch)) {
-					echo 'Error:' . curl_error($ch);
-					}
-					curl_close($ch);
-					/* end */
-}else{
-	 /**WHATSAPP INTEGRATION**/
-					
-					$ch = curl_init();
-					curl_setopt($ch, CURLOPT_URL, 'https://app.messageautosender.com/api/v1/message/create');
-					curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-					curl_setopt($ch, CURLOPT_POST, 1);
-					$post = array(
-					// 'receiverMobileNo' => $phone_no,
-					'receiverMobileNo' => '91'.$contactnumber,
-					'username' => whatsappuser1,
-					'password' => whatsapppass1,
-					'message'=>strip_tags($smsmessage1));
-
-					//echo "<pre>";print_r($post);exit;
-
-					curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
-					$result = curl_exec($ch);
-						//echo $result; exit;
-					if (curl_errno($ch)) {
-					echo 'Error:' . curl_error($ch);
-					}
-					curl_close($ch);
-}
+$this->send_delegation_whatsapp($contactnumber, $smsmessage1, $user_id, $last_id, 'assigned');
 	    
 
 $q1 = $this->db->select('*')->from('email_sms_whatsapp_template')->where('sms_id','2')->get();
@@ -379,7 +332,7 @@ $q1 = $this->db->select('*')->from('email_sms_whatsapp_template')->where('sms_id
 $Message = '<table width="600" border="0" align="center" cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px;">
     <tr>
         <td style="background-color: #4872b8; padding: 10px; text-align: center;">
-            <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Packs" style="display: block; margin: 0 auto;" />
+            <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Pack" style="display: block; margin: 0 auto;" />
         </td>
     </tr>
     <tr>
@@ -410,7 +363,7 @@ $Message = '<table width="600" border="0" align="center" cellpadding="0" cellspa
     </tr>
     <tr>
         <td style="background-color: #4872b8; color: #ffffff; padding: 10px; text-align: center; font-size: 12px;">
-            &copy; '.date("Y").' Shubham Packs. All rights reserved.
+            &copy; '.date("Y").' Shubham Pack. All rights reserved.
         </td>
     </tr>
 </table>';
@@ -1713,7 +1666,7 @@ public function update_second_followupdate() {
         $emailMessage = '<table width="600" border="0" align="center" cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px;">
             <tr>
                 <td style="background-color: #4872b8; padding: 10px; text-align: center;">
-                    <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Packs" style="display: block; margin: 0 auto;" />
+                    <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Pack" style="display: block; margin: 0 auto;" />
                 </td>
             </tr>
             <tr>
@@ -1742,7 +1695,7 @@ public function update_second_followupdate() {
             </tr>
             <tr>
                 <td style="background-color: #4872b8; color: #ffffff; padding: 10px; text-align: center; font-size: 12px;">
-                    &copy; ' . date("Y") . ' Shubham Packs. All rights reserved.
+                    &copy; ' . date("Y") . ' Shubham Pack. All rights reserved.
                 </td>
             </tr>
         </table>';
@@ -1789,7 +1742,7 @@ public function update_third_followupdate() {
         $emailMessage = '<table width="600" border="0" align="center" cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px;">
             <tr>
                 <td style="background-color: #4872b8; padding: 10px; text-align: center;">
-                    <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Packs" style="display: block; margin: 0 auto;" />
+                    <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Pack" style="display: block; margin: 0 auto;" />
                 </td>
             </tr>
             <tr>
@@ -1818,7 +1771,7 @@ public function update_third_followupdate() {
             </tr>
             <tr>
                 <td style="background-color: #4872b8; color: #ffffff; padding: 10px; text-align: center; font-size: 12px;">
-                    &copy; ' . date("Y") . ' Shubham Packs. All rights reserved.
+                    &copy; ' . date("Y") . ' Shubham Pack. All rights reserved.
                 </td>
             </tr>
         </table>';
@@ -1926,7 +1879,7 @@ This task has been completed under the supervision of {$rows->delegated_by}.
 Thank you for your cooperation.
 
 Best Regards,
-Team Shubham Packs 🚀";
+Team Shubham Pack 🚀";
 
     // WhatsApp Integration
     $ch = curl_init();
@@ -1948,6 +1901,9 @@ Team Shubham Packs 🚀";
         log_message('info', 'WhatsApp Message Sent: ' . $result);
     }
     curl_close($ch);
+
+    // MOBILE PUSH
+    $this->mobile_push_delegation((int) $rows->user_id, 'Task marked completed', $rows->task, (int) $recordid);
 
     echo "refresh"; // Send the correct response for page reload
     exit;
@@ -3459,7 +3415,7 @@ public function responebyuser()
             <table width="600" border="0" align="center" cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px;">
                 <tr>
                     <td style="background-color: #4872b8; padding: 10px; text-align: center;">
-                        <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Packs" style="display: block; margin: 0 auto;" />
+                        <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Pack" style="display: block; margin: 0 auto;" />
                     </td>
                 </tr>
                 <tr>
@@ -3490,7 +3446,7 @@ public function responebyuser()
                 </tr>
                 <tr>
                     <td style="background-color: #4872b8; color: #ffffff; padding: 10px; text-align: center; font-size: 12px;">
-                        &copy; ' . date("Y") . ' Shubham Packs. All rights reserved.
+                        &copy; ' . date("Y") . ' Shubham Pack. All rights reserved.
                     </td>
                 </tr>
             </table>';
@@ -3500,13 +3456,13 @@ public function responebyuser()
             $this->email->set_mailtype("html");
             $this->email->to($delegatorEmail);
             $this->email->cc('mangleshup@gmail.com');
-            $this->email->from('taskmanagement@shubhampack.com', 'Shubham Packs');
+            $this->email->from('taskmanagement@shubhampack.com', 'Shubham Pack');
             $this->email->subject('Task Response Notification');
             $this->email->message($emailMessage);
             $this->email->send();
 
             // WhatsApp Notification
-            $whatsappMessage = "Dear {$delegatorName},\n\nThe following task assigned to {$assigneeName} has received a response:\n\nTask: {$task}\nRemarks: {$remarks}\nWork Status: {$sta}\n\nPlease review the response and take necessary action.\n\nBest Regards,\nTeam Shubham Packs 🚀";
+            $whatsappMessage = "Dear {$delegatorName},\n\nThe following task assigned to {$assigneeName} has received a response:\n\nTask: {$task}\nRemarks: {$remarks}\nWork Status: {$sta}\n\nPlease review the response and take necessary action.\n\nBest Regards,\nTeam Shubham Pack 🚀";
 
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, 'https://app.messageautosender.com/api/v1/message/create');
@@ -4177,43 +4133,10 @@ Complete it by: *".$targetdat."*.
 Assigned By : *".$assignedbypersonname."*
 *$businessname* 🚀";
 
-				// WHATSAPP (UNCHANGED)
-				if($user_id==139){
+				$this->send_delegation_whatsapp($contactnumber, $smsmessage1, $user_id, $last_id, 'assigned');
 
-					$ch = curl_init();
-					curl_setopt($ch, CURLOPT_URL, 'https://app.messageautosender.com/api/v1/message/create');
-					curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-					curl_setopt($ch, CURLOPT_POST, 1);
-
-					$post = array(
-						 'receiverMobileNo' => '91'.$contactnumber,
-						'username' => whatsappuser2,
-						'password' => whatsapppass2,
-						'message'=>strip_tags($smsmessage1)
-					);
-
-					curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
-					curl_exec($ch);
-					curl_close($ch);
-
-				}else{
-
-					$ch = curl_init();
-					curl_setopt($ch, CURLOPT_URL, 'https://app.messageautosender.com/api/v1/message/create');
-					curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-					curl_setopt($ch, CURLOPT_POST, 1);
-
-					$post = array(
-						 'receiverMobileNo' => '91'.$contactnumber,
-						'username' => whatsappuser1,
-						'password' => whatsapppass1,
-						'message'=>strip_tags($smsmessage1)
-					);
-
-					curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
-					curl_exec($ch);
-					curl_close($ch);
-				}
+				// MOBILE PUSH
+				$this->mobile_push_delegation((int) $rows->user_id, 'New task delegated to you', $task, (int) $last_id);
 
 				// EMAIL (UNCHANGED)
 				$taskdetail = ucwords(strtolower($task));
@@ -4358,17 +4281,132 @@ public function update_delegation_task(){
         $this->db->insert('delegation_task', $insert_data);
     }
 
+    $delegator = $this->db->select('first_name, last_name')
+        ->from('system_users_view')
+        ->where('user_id', (int)$this->input->post('your_name'))
+        ->get()->row();
+    $delegator_name = $delegator ? ucwords(strtolower(trim($delegator->first_name . ' ' . $delegator->last_name))) : 'Task Management';
+    $task_text = trim((string)$this->input->post('task'));
+    $due_date = date('d-m-Y', strtotime($this->input->post('work_completion_date')));
+    foreach (array_unique(array_map('intval', $new_users)) as $recipient_id) {
+        $recipient = $this->db->select('user_id, first_name, last_name, contact_number')
+            ->from('system_users_view')->where('user_id', $recipient_id)->get()->row();
+        if (!$recipient) continue;
+        $message = "Dear " . ucwords(strtolower(trim($recipient->first_name))) . ",\n\n"
+            . "Your delegated task has been updated. 🔄\n\n"
+            . "TASK: *" . $task_text . "*\n"
+            . "Complete it by: *" . $due_date . "*\n"
+            . "Assigned By: *" . $delegator_name . "*\n\n"
+            . "*Shubham Flexible Packaging* 🚀";
+        $this->send_delegation_whatsapp($recipient->contact_number, $message, $user_id, $case_no, 'updated');
+
+        // MOBILE PUSH - resolve this recipient's own row under the case
+        $push_row = $this->db->select('id')->from('delegation_task')
+            ->where('case_no', $case_no)
+            ->where('delegate_to', (int) $recipient->user_id)
+            ->limit(1)->get()->row();
+        $this->mobile_push_delegation((int) $recipient->user_id, 'Delegated task updated', $task_text, $push_row ? (int) $push_row->id : 0);
+    }
+
     $this->session->set_flashdata('message','<div class="alert alert-success">Updated Successfully</div>');
     redirect(page_url.'Delegation/new_delegation_task');
 }
 
+/**
+ * MOBILE PUSH (added for the app). One row per user in user_devices, so
+ * this is one send per recipient. Never allowed to break the web flow.
+ */
+private function mobile_push_delegation($user_id, $title, $body, $task_id)
+{
+    try {
+        if ((int) $user_id <= 0 || !function_exists('sendFCMData')) return;
+
+        $devices = $this->db->select('fcm_token')
+            ->from('user_devices')
+            ->where('user_id', (int) $user_id)
+            ->where('fcm_token !=', '')
+            ->get()->result();
+
+        if (empty($devices)) return;
+
+        $preview = mb_substr(ucfirst(strtolower(trim(strip_tags((string) $body)))), 0, 140);
+
+        foreach ($devices as $d) {
+            if (empty($d->fcm_token)) continue;
+            sendFCMData($d->fcm_token, $title, $preview, array(
+                'type'      => 'delegation_task',
+                'task_id'   => (string) (int) $task_id,
+                'screen'    => 'delegation_detail',
+                'timestamp' => date('Y-m-d H:i:s'),
+            ));
+        }
+    } catch (Throwable $e) {
+        log_message('error', 'Delegation web push failed: ' . $e->getMessage());
+    }
+}
+private function send_delegation_whatsapp($contact_number, $message, $sender_user_id, $reference, $event)
+{
+    $digits = preg_replace('/\D+/', '', (string)$contact_number);
+    if (strlen($digits) > 10 && substr($digits, 0, 2) === '91') $digits = substr($digits, 2);
+    $digits = ltrim($digits, '0');
+    if (strlen($digits) !== 10) {
+        log_message('error', 'Delegation WhatsApp skipped: invalid mobile for ' . $event . ' reference ' . $reference);
+        return false;
+    }
+
+    $plain_message = html_entity_decode(str_ireplace(array('<br>', '<br/>', '<br />'), "\n", (string)$message), ENT_QUOTES, 'UTF-8');
+    $plain_message = trim(strip_tags($plain_message));
+    $special_account = ((int)$sender_user_id === 139);
+    $post = array(
+        'receiverMobileNo' => '91' . $digits,
+        'username' => $special_account ? whatsappuser2 : whatsappuser1,
+        'password' => $special_account ? whatsapppass2 : whatsapppass1,
+        'message' => $plain_message
+    );
+
+    $ch = curl_init('https://app.messageautosender.com/api/v1/message/create');
+    curl_setopt_array($ch, array(
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $post,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 25
+    ));
+    $response = curl_exec($ch);
+    $curl_error = curl_error($ch);
+    $http_code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false || $curl_error !== '' || $http_code < 200 || $http_code >= 300) {
+        log_message('error', 'Delegation WhatsApp failed: event=' . $event . ', reference=' . $reference . ', HTTP=' . $http_code . ', curl=' . $curl_error . ', response=' . substr((string)$response, 0, 500));
+        return false;
+    }
+    log_message('info', 'Delegation WhatsApp accepted: event=' . $event . ', reference=' . $reference . ', HTTP=' . $http_code . ', response=' . substr((string)$response, 0, 300));
+    return true;
+}
+
 
 public function add_remarks(){
-	$this->load->view('delegation/add_remarks');
+	$this->require_delegation_participant((int) $this->uri->segment(3), 'assignee');
+	$this->load->view('delegation/add_remarks', array('is_delegator_view' => false));
 }
 
 public function view_add_remarks(){
-	$this->load->view('delegation/view_add_remarks');
+	$this->require_delegation_participant((int) $this->uri->segment(3), 'delegator');
+	// Use the same workspace as the assignee, with role-specific labels and permissions.
+	$this->load->view('delegation/add_remarks', array('is_delegator_view' => true));
+}
+
+private function require_delegation_participant($task_id, $role)
+{
+    $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+    $column = ($role === 'delegator') ? 'yourname' : 'delegate_to';
+    $allowed = $this->db->select('id')->from('delegation_task')
+        ->where('id', (int) $task_id)->where($column, $user_id)->get()->row();
+
+    if (!$allowed) {
+        show_error('You are not allowed to access remarks for this delegated task.', 403, 'Access denied');
+    }
 }
 
 
@@ -4537,6 +4575,7 @@ public function user_wise_delegated_task_list()
 
 public function save_response_ajax()
 {
+    $this->output->set_content_type('application/json');
     $this->form_validation->set_error_delimiters('<div style="color:red;">', '</div>');
     $this->form_validation->set_rules('task_id', 'Task ID', 'required');
     // $this->form_validation->set_rules('status', 'Status', 'required|trim');
@@ -4550,16 +4589,35 @@ public function save_response_ajax()
         exit;
     }
 
-    $task_id = $this->input->post('task_id');
-    // $status  = $this->input->post('status');
-	$status = ($this->input->post('status') == 1) ? 1 : 2;
+    $task_id = (int) $this->input->post('task_id');
     $remarks = strtoupper($this->input->post('remarks'));
-    $user_id = $this->session->userdata['logged_in']['user_id'];
+    $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+
+    $taskDetails = $this->db->select('yourname, task, delegate_to')
+        ->from('delegation_task')
+        ->where('id', $task_id)
+        ->get()->row();
+
+    if (!$taskDetails || ($user_id !== (int) $taskDetails->yourname && $user_id !== (int) $taskDetails->delegate_to)) {
+        $this->output->set_status_header(403);
+        echo json_encode(array('status' => 'error', 'message' => 'You are not allowed to comment on this task.'));
+        return;
+    }
+
+    $is_delegator = ($user_id === (int) $taskDetails->yourname);
+    // Only the assignee's update can change work status. A delegator reply keeps the latest status.
+    if ($is_delegator) {
+        $latestStatus = $this->db->select('status')->from('delegation_task_response')
+            ->where('task_id', $task_id)->order_by('id', 'DESC')->limit(1)->get()->row();
+        $status = $latestStatus ? (int) $latestStatus->status : 2;
+    } else {
+        $status = ($this->input->post('status') == 1) ? 1 : 2;
+    }
 
     // =========================
     // ✅ FILE UPLOAD (same logic)
     // =========================
-    $photo = $_FILES['attachment']['name'];
+    $photo = isset($_FILES['attachment']['name']) ? $_FILES['attachment']['name'] : '';
     $screenshot = '';
 
     if ($photo <> '') {
@@ -4606,12 +4664,6 @@ public function save_response_ajax()
     // =========================
     // ✅ SAME FETCH LOGIC
     // =========================
-    $taskDetailsQuery = $this->db->select('yourname, task, delegate_to')
-        ->from('delegation_task')
-        ->where('id', $task_id)
-        ->get();
-    $taskDetails = $taskDetailsQuery->row();
-
     $task = $taskDetails->task;
 
     // Delegator
@@ -4622,7 +4674,7 @@ public function save_response_ajax()
     $delegator = $delegatorQuery->row();
 
     // Assignee
-    $assigneeQuery = $this->db->select('first_name, last_name, email')
+    $assigneeQuery = $this->db->select('first_name, last_name, email, contact_number')
         ->from('system_users')
         ->where('user_id', $taskDetails->delegate_to)
         ->get();
@@ -4632,6 +4684,10 @@ public function save_response_ajax()
     $assigneeName = ucwords(strtolower($assignee->first_name . " " . $assignee->last_name));
     $delegatorEmail = $delegator->email;
     $delegatorContact = $delegator->contact_number;
+    $senderName = $is_delegator ? $delegatorName : $assigneeName;
+    $recipientName = $is_delegator ? $assigneeName : $delegatorName;
+    $recipientEmail = $is_delegator ? $assignee->email : $delegatorEmail;
+    $recipientContact = $is_delegator ? $assignee->contact_number : $delegatorContact;
 
     // =========================
     // ✅ SAME EMAIL TEMPLATE (UNCHANGED)
@@ -4640,7 +4696,7 @@ public function save_response_ajax()
     <table width="600" border="0" align="center" cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px;">
         <tr>
             <td style="background-color: #4872b8; padding: 10px; text-align: center;">
-                <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Packs" style="display: block; margin: 0 auto;" />
+                <img src="https://shubhampack.com/wp-content/uploads/2021/05/Logo.png" width="160" alt="Shubham Pack" style="display: block; margin: 0 auto;" />
             </td>
         </tr>
         <tr>
@@ -4648,9 +4704,9 @@ public function save_response_ajax()
                 <h2 style="color: #333333; font-size: 20px; margin: 0; text-align: center;">TASK RESPONSE NOTIFICATION</h2>
                 <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 15px 0;">
                 <p style="color: #555555; font-size: 14px; margin: 0; line-height: 1.6;">
-                    <strong>Dear ' . strtoupper($delegatorName) . ',</strong>
+                    <strong>Dear ' . strtoupper($recipientName) . ',</strong>
                     <br>
-                    The following task assigned to <strong>' . strtoupper($assigneeName) . '</strong> has received a response:
+                    The following delegated task has received a new comment:
                 </p>
                 <p style="color: #555555; font-size: 14px; margin: 15px 0; line-height: 1.6;">
                     <strong>Task:</strong> ' . strtoupper($task) . '<br>
@@ -4658,20 +4714,20 @@ public function save_response_ajax()
                     <strong>Remarks:</strong> ' . strtoupper($remarks) . '<br>
                 </p>
                 <p style="color: #555555; font-size: 14px; margin: 15px 0; line-height: 1.6;">
-                    <strong>Submitted By:</strong> ' . strtoupper($assigneeName) . '
+                    <strong>Submitted By:</strong> ' . strtoupper($senderName) . '
                 </p>
                 <p style="color: #555555; font-size: 14px; margin: 15px 0; line-height: 1.6;">
                     Kindly review the response and take appropriate action.
                 </p>
                 <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 15px 0;">
                 <p style="color: #555555; font-size: 13px; text-align: center; margin: 0; line-height: 1.6;">
-                    If you have any questions, contact us at <a href="mailto:' . $delegatorEmail . '" style="color: #4872b8; text-decoration: none;">' . $delegatorEmail . '</a>.
+                    Open the task remarks page to reply and continue the conversation.
                 </p>
             </td>
         </tr>
         <tr>
             <td style="background-color: #4872b8; color: #ffffff; padding: 10px; text-align: center; font-size: 12px;">
-                &copy; ' . date("Y") . ' Shubham Packs. All rights reserved.
+                &copy; ' . date("Y") . ' Shubham Pack. All rights reserved.
             </td>
         </tr>
     </table>';
@@ -4679,10 +4735,10 @@ public function save_response_ajax()
     // EMAIL SEND
     $this->load->library('email');
     $this->email->set_mailtype("html");
-    $this->email->to($delegatorEmail);
+    $this->email->to($recipientEmail);
 	// $this->email->to('akashajaysharma1509@gmail.com');
     $this->email->cc('mangleshup@gmail.com');
-    $this->email->from('taskmanagement@shubhampack.com', 'Shubham Packs');
+    $this->email->from('taskmanagement@shubhampack.com', 'Shubham Pack');
     $this->email->subject('Task Response Notification');
     $this->email->message($emailMessage);
     $this->email->send();
@@ -4690,7 +4746,7 @@ public function save_response_ajax()
     // =========================
     // ✅ SAME WHATSAPP MESSAGE
     // =========================
-    $whatsappMessage = "Dear {$delegatorName},\n\nThe following task assigned to {$assigneeName} has received a response:\n\nTask: {$task}\nRemarks: {$remarks}\nWork Status: {$sta}\n\nPlease review the response and take necessary action.\n\nBest Regards,\nTeam Shubham Packs 🚀";
+    $whatsappMessage = "Dear {$recipientName},\n\n{$senderName} added a comment on a delegated task:\n\nTask: {$task}\nRemarks: {$remarks}\nWork Status: {$sta}\n\nPlease open the task remarks page to review and reply.\n\nBest Regards,\nTeam Shubham Pack 🚀";
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, 'https://app.messageautosender.com/api/v1/message/create');
@@ -4698,7 +4754,7 @@ public function save_response_ajax()
     curl_setopt($ch, CURLOPT_POST, 1);
 
     $post = array(
-        'receiverMobileNo' => '91' . $delegatorContact,
+        'receiverMobileNo' => '91' . $recipientContact,
 		    //  'receiverMobileNo' => '8588052104',
         'username' => whatsappuser1,
         'password' => whatsapppass1,
@@ -4709,24 +4765,37 @@ public function save_response_ajax()
     curl_exec($ch);
     curl_close($ch);
 
+    // MOBILE PUSH - to whichever side did not write this response
+    $push_to = $is_delegator ? (int) $taskDetails->delegate_to : (int) $taskDetails->yourname;
+    $this->mobile_push_delegation($push_to, $senderName . ' responded', $remarks, (int) $task_id);
+
     // =========================
     // ✅ FINAL JSON RESPONSE
     // =========================
     echo json_encode([
         'status' => 'success',
-        'message' => 'Your response has been successfully submitted, and notifications have been sent to the delegator.'
+        'message' => 'Your comment has been submitted and the other participant has been notified.'
     ]);
 }
 
 public function get_task_remarks()
 {
-    $task_id = $this->input->post('task_id');
+    $task_id = (int) $this->input->post('task_id');
+    $current_user_id = (int) $this->session->userdata['logged_in']['user_id'];
+    $task = $this->db->select('id, yourname, delegate_to')->from('delegation_task')
+        ->where('id', $task_id)->get()->row();
+
+    if (!$task || ($current_user_id !== (int) $task->yourname && $current_user_id !== (int) $task->delegate_to)) {
+        $this->output->set_status_header(403);
+        echo '<p>You are not allowed to view remarks for this task.</p>';
+        return;
+    }
 
     $this->db->select('r.*, u.first_name, u.last_name, u.profile_image');
     $this->db->from('delegation_task_response r');
-    $this->db->join('system_users u', 'u.user_id = r.user_id');
+    $this->db->join('system_users u', 'u.user_id = r.user_id', 'left');
     $this->db->where('r.task_id', $task_id);
-    $this->db->order_by('r.id', 'DESC');
+    $this->db->order_by('r.id', 'ASC');
 
     $data = $this->db->get()->result();
 
@@ -4734,8 +4803,6 @@ public function get_task_remarks()
         echo "<p>No remarks found</p>";
         return;
     }
-
-	$current_user_id = $this->session->userdata('user_id');
 
 foreach ($data as $row) {
 
@@ -4765,7 +4832,7 @@ foreach ($data as $row) {
                 . strtoupper($row->first_name.' '.$row->last_name) .
             '</div>
 
-            <div>'.$row->remarks.'</div>';
+            <div>'.nl2br(htmlspecialchars($row->remarks, ENT_QUOTES, 'UTF-8')).'</div>';
 
     if($row->attachment != ''){
         echo '<div class="chat-attach">

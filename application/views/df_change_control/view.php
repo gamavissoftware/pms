@@ -99,6 +99,8 @@ if (!function_exists('changeDetailHistoryTitle')) {
                 return 'Assignee Update';
             case 'REQUEST_STATUS_UPDATED':
                 return 'Request Status Updated';
+            case 'ATTACHMENT_UPDATED':
+                return 'Attachment Updated';
             default:
                 return changeDetailReadable($action_type);
         }
@@ -123,6 +125,8 @@ if (!function_exists('changeDetailHistoryTone')) {
                 return 'tone-warning';
             case 'REQUEST_STATUS_UPDATED':
                 return 'tone-neutral';
+            case 'ATTACHMENT_UPDATED':
+                return 'tone-sky';
             default:
                 return 'tone-neutral';
         }
@@ -132,6 +136,33 @@ if (!function_exists('changeDetailHistoryTone')) {
 $attachment_url = '';
 if (!empty($change['attachment'])) {
     $attachment_url = site_http_root . 'image_bank/df_change_control/' . rawurlencode($change['attachment']);
+}
+
+$attachment_history = isset($attachment_history) && is_array($attachment_history) ? $attachment_history : array();
+$can_update_attachment = !empty($can_update_attachment);
+$current_attachment_row = array();
+foreach ($attachment_history as $attachment_row) {
+    if (!empty($attachment_row['is_current'])) {
+        $current_attachment_row = $attachment_row;
+        break;
+    }
+}
+
+if (!function_exists('changeDetailFileSize')) {
+    function changeDetailFileSize($bytes)
+    {
+        $bytes = (int)$bytes;
+        if ($bytes <= 0) {
+            return '';
+        }
+        if ($bytes < 1024) {
+            return $bytes . ' B';
+        }
+        if ($bytes < 1048576) {
+            return round($bytes / 1024) . ' KB';
+        }
+        return round($bytes / 1048576, 1) . ' MB';
+    }
 }
 
 $request_title = trim((string)$change['title']);
@@ -722,6 +753,143 @@ if (!empty($completed_departments) && !$only_completed_view) {
             padding: 20px;
         }
 
+        .attachment-panel {
+            margin-bottom: 18px;
+        }
+
+        .attachment-current {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 14px 16px;
+            border: 1px solid var(--cc-line);
+            border-radius: 16px;
+            background: var(--cc-surface-soft);
+        }
+
+        .attachment-current-main {
+            min-width: 0;
+        }
+
+        .attachment-current-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            color: var(--cc-muted);
+        }
+
+        .attachment-current-name {
+            display: inline-block;
+            margin-top: 4px;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--cc-brand);
+            word-break: break-word;
+        }
+
+        .attachment-current-meta,
+        .attachment-current-none {
+            margin-top: 4px;
+            font-size: 13px;
+            color: var(--cc-muted);
+        }
+
+        .attachment-form {
+            margin-top: 16px;
+            padding: 16px;
+            border: 1px solid var(--cc-line);
+            border-radius: 16px;
+        }
+
+        .attachment-form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            align-items: flex-end;
+        }
+
+        .attachment-field {
+            flex: 1 1 240px;
+            min-width: 0;
+        }
+
+        .attachment-field-action {
+            flex: 0 0 auto;
+        }
+
+        .attachment-field label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--cc-brand);
+        }
+
+        .attachment-optional {
+            font-weight: 400;
+            color: var(--cc-muted);
+        }
+
+        .attachment-hint {
+            display: block;
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--cc-muted);
+        }
+
+        .attachment-note {
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--cc-muted);
+            line-height: 1.5;
+        }
+
+        .attachment-log {
+            margin-top: 18px;
+        }
+
+        .attachment-log-head {
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--cc-brand);
+        }
+
+        .attachment-log-table {
+            margin-bottom: 0;
+        }
+
+        .attachment-log-table th {
+            font-size: 12px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            color: var(--cc-muted);
+        }
+
+        .attachment-log-table td {
+            font-size: 13px;
+            vertical-align: middle;
+        }
+
+        .attachment-log-current td {
+            background: #f0f9ff;
+        }
+
+        .attachment-log-size {
+            display: block;
+            color: var(--cc-muted);
+        }
+
+        @media (max-width: 767px) {
+            .attachment-field-action,
+            .attachment-field-action .btn {
+                width: 100%;
+            }
+        }
+
         .timeline-panel {
             position: static;
         }
@@ -1274,6 +1442,36 @@ if (!empty($completed_departments) && !$only_completed_view) {
 
     <div class="wrapper">
         <div class="container-fluid detail-page">
+            <?php if ($change['status'] === 'PENDING_APPROVAL') { ?>
+                <div class="alert alert-warning" style="margin-top:20px;">
+                    <strong>Awaiting Shubham Sir approval</strong>
+                    <p>Department heads will receive this request only after approval.</p>
+                    <?php if ((int)$current_user_id === 139) {
+                        $approval_token = $this->session->userdata('change_approval_token');
+                        if (empty($approval_token)) {
+                            $approval_token = bin2hex(random_bytes(32));
+                            $this->session->set_userdata('change_approval_token', $approval_token);
+                        }
+                    ?>
+                    <form method="post" action="<?php echo page_url; ?>Df_change_control/decide_approval/<?php echo (int)$change['id']; ?>">
+                        <input type="hidden" name="approval_token" value="<?php echo htmlspecialchars($approval_token, ENT_QUOTES, 'UTF-8'); ?>">
+                        <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>">
+                        <label for="approval-remarks">Decision remarks (required when rejecting)</label>
+                        <textarea id="approval-remarks" class="form-control" name="approval_remarks" rows="3" maxlength="5000"></textarea>
+                        <div style="margin-top:12px;">
+                            <button type="submit" name="decision" value="APPROVE" class="btn btn-success">Approve and Send to HODs</button>
+                            <button type="submit" name="decision" value="REJECT" class="btn btn-danger">Reject Request</button>
+                        </div>
+                    </form>
+                    <?php } ?>
+                </div>
+            <?php } elseif ($change['status'] === 'REJECTED') { ?>
+                <div class="alert alert-danger" style="margin-top:20px;">
+                    <strong>Rejected by Shubham Sir</strong>
+                    <p>This request has not been released to department heads. The rejection reason is recorded in the activity history below.</p>
+                </div>
+            <?php } ?>
+
             <div class="row">
                 <div class="col-sm-12">
                     <div class="page-title-box">
@@ -1286,7 +1484,7 @@ if (!empty($completed_departments) && !$only_completed_view) {
 
             <div class="page-header-card">
                 <div class="page-header-copy">
-                    <div class="page-kicker">ECM / IOM Request</div>
+                    <div class="page-kicker">Change Control Request</div>
                     <div class="header-code"><?php echo htmlspecialchars((string)$change['change_no']); ?></div>
                     <h3><?php echo htmlspecialchars($request_title); ?></h3>
                     <div class="page-header-subline">
@@ -1307,7 +1505,12 @@ if (!empty($completed_departments) && !$only_completed_view) {
                 <div class="page-header-side">
                     <div class="page-actions">
                         <a href="<?php echo page_url; ?>Df_change_control" class="btn btn-default btn-sm">Dashboard</a>
-                        <a href="<?php echo page_url; ?>Task/finalgantchartWithDetails/<?php echo (int)$change['df_id']; ?>" target="_blank" class="btn btn-warning btn-sm">Gantt</a>
+                        <?php if (strtoupper((string)$change['request_type']) === 'IOM' && !empty($module_nav['can_raise_request'])) { ?>
+                            <a href="<?php echo page_url; ?>Df_change_control/create?clone=<?php echo (int)$change['id']; ?>" class="btn btn-success btn-sm">Clone IOM</a>
+                        <?php } ?>
+                        <?php if ((int)$change['df_id'] > 0) { ?>
+                        <a href="<?php echo page_url; ?>gantt/<?php echo (int)$change['df_id']; ?>" target="_blank" class="btn btn-warning btn-sm">Gantt</a>
+                        <?php } ?>
                         <?php if ($attachment_url !== '') { ?>
                             <a href="<?php echo $attachment_url; ?>" target="_blank" class="btn btn-primary btn-sm">Attachment</a>
                         <?php } ?>
@@ -1354,6 +1557,133 @@ if (!empty($completed_departments) && !$only_completed_view) {
                 </div>
             </div>
 
+            <div class="workspace-panel attachment-panel" id="attachment-panel">
+                <div class="panel-head">
+                    <div>
+                        <h4>Supporting Document</h4>
+                        <p>The file every department is working to. Replacing it emails the new version to the departments on this request.</p>
+                    </div>
+                    <div class="panel-inline-pills">
+                        <span class="detail-pill tone-neutral"><span class="counter-pill-value"><?php echo count($attachment_history); ?></span> Version<?php echo count($attachment_history) === 1 ? '' : 's'; ?></span>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="attachment-current">
+                        <?php if ($attachment_url !== '') { ?>
+                            <div class="attachment-current-main">
+                                <div class="attachment-current-label">Current document</div>
+                                <a href="<?php echo $attachment_url; ?>" target="_blank" class="attachment-current-name">
+                                    <?php
+                                    $current_display_name = !empty($current_attachment_row['original_name'])
+                                        ? $current_attachment_row['original_name']
+                                        : $change['attachment'];
+                                    echo htmlspecialchars((string)$current_display_name, ENT_QUOTES, 'UTF-8');
+                                    ?>
+                                </a>
+                                <div class="attachment-current-meta">
+                                    <?php if (!empty($current_attachment_row['uploaded_on'])) { ?>
+                                        Updated <?php echo changeDetailDate($current_attachment_row['uploaded_on'], true); ?>
+                                        <?php if (!empty($current_attachment_row['uploaded_by_name'])) { ?>
+                                            by <?php echo htmlspecialchars((string)$current_attachment_row['uploaded_by_name'], ENT_QUOTES, 'UTF-8'); ?>
+                                        <?php } ?>
+                                        <?php $current_size = changeDetailFileSize(isset($current_attachment_row['file_size']) ? $current_attachment_row['file_size'] : 0); ?>
+                                        <?php if ($current_size !== '') { ?>
+                                            &bull; <?php echo $current_size; ?>
+                                        <?php } ?>
+                                    <?php } else { ?>
+                                        Uploaded when the request was raised.
+                                    <?php } ?>
+                                </div>
+                            </div>
+                            <a href="<?php echo $attachment_url; ?>" target="_blank" class="btn btn-primary btn-sm">Open Document</a>
+                        <?php } else { ?>
+                            <div class="attachment-current-main">
+                                <div class="attachment-current-label">Current document</div>
+                                <div class="attachment-current-none">No supporting document has been attached to this request yet.</div>
+                            </div>
+                        <?php } ?>
+                    </div>
+
+                    <?php if ($can_update_attachment) { ?>
+                        <form action="<?php echo page_url; ?>Df_change_control/update_attachment/<?php echo (int)$change['id']; ?>" method="post" enctype="multipart/form-data" class="attachment-form" id="attachmentForm">
+                            <div class="attachment-form-row">
+                                <div class="attachment-field">
+                                    <label for="attachmentFile"><?php echo $attachment_url !== '' ? 'Replace document' : 'Add document'; ?></label>
+                                    <input type="file" name="attachment" id="attachmentFile" class="form-control" required>
+                                    <span class="attachment-hint">PDF, Office file, image, drawing or ZIP. Up to 20 MB.</span>
+                                </div>
+                                <div class="attachment-field">
+                                    <label for="attachmentReason">Reason for the change <span class="attachment-optional">(optional)</span></label>
+                                    <input type="text" name="change_reason" id="attachmentReason" class="form-control" maxlength="255" placeholder="e.g. Revised drawing after customer feedback">
+                                </div>
+                                <div class="attachment-field attachment-field-action">
+                                    <button type="submit" class="btn btn-success" id="attachmentSubmit">Update &amp; Email Departments</button>
+                                </div>
+                            </div>
+                            <div class="attachment-note">
+                                The new file is emailed, as an attachment, to every department head and assignee on this request, and the change is recorded below.
+                            </div>
+                        </form>
+                    <?php } ?>
+
+                    <?php if (!empty($attachment_history)) { ?>
+                        <div class="attachment-log">
+                            <div class="attachment-log-head">Attachment change log</div>
+                            <div class="table-responsive">
+                                <table class="table attachment-log-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Version</th>
+                                            <th>Document</th>
+                                            <th>Changed By</th>
+                                            <th>Changed On</th>
+                                            <th>Reason</th>
+                                            <th>Emailed</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($attachment_history as $attachment_row) { ?>
+                                            <?php $row_url = site_http_root . 'image_bank/df_change_control/' . rawurlencode((string)$attachment_row['attachment']); ?>
+                                            <tr<?php echo !empty($attachment_row['is_current']) ? ' class="attachment-log-current"' : ''; ?>>
+                                                <td>
+                                                    V<?php echo (int)$attachment_row['version_no']; ?>
+                                                    <?php if (!empty($attachment_row['is_current'])) { ?>
+                                                        <span class="detail-pill tone-success">Current</span>
+                                                    <?php } ?>
+                                                </td>
+                                                <td>
+                                                    <a href="<?php echo $row_url; ?>" target="_blank">
+                                                        <?php echo htmlspecialchars((string)(!empty($attachment_row['original_name']) ? $attachment_row['original_name'] : $attachment_row['attachment']), ENT_QUOTES, 'UTF-8'); ?>
+                                                    </a>
+                                                    <?php $row_size = changeDetailFileSize(isset($attachment_row['file_size']) ? $attachment_row['file_size'] : 0); ?>
+                                                    <?php if ($row_size !== '') { ?>
+                                                        <small class="attachment-log-size"><?php echo $row_size; ?></small>
+                                                    <?php } ?>
+                                                </td>
+                                                <td><?php echo htmlspecialchars((string)$attachment_row['uploaded_by_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                                <td><?php echo changeDetailDate($attachment_row['uploaded_on'], true); ?></td>
+                                                <td><?php echo trim((string)$attachment_row['change_reason']) !== '' ? htmlspecialchars((string)$attachment_row['change_reason'], ENT_QUOTES, 'UTF-8') : '-'; ?></td>
+                                                <td>
+                                                    <?php if ((int)$attachment_row['notified_count'] > 0) { ?>
+                                                        <?php echo (int)$attachment_row['notified_count']; ?> contact<?php echo (int)$attachment_row['notified_count'] === 1 ? '' : 's'; ?>
+                                                    <?php } else { ?>
+                                                        -
+                                                    <?php } ?>
+                                                </td>
+                                            </tr>
+                                        <?php } ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    <?php } elseif ($attachment_url !== '') { ?>
+                        <div class="attachment-note">
+                            No change log yet for this document. It will start recording from the next update.
+                        </div>
+                    <?php } ?>
+                </div>
+            </div>
+
             <div class="workspace-grid">
                 <div class="workspace-panel progress-panel">
                     <div class="panel-head">
@@ -1388,8 +1718,8 @@ if (!empty($completed_departments) && !$only_completed_view) {
                                     </thead>
                                     <?php foreach ($display_action_cards as $action) { ?>
                                         <?php
-                                        $can_head_act = $is_admin || ((int)$action['department_head_id'] === (int)$current_user_id);
-                                        $can_assignee_act = $is_admin || ((int)$action['assigned_user_id'] === (int)$current_user_id);
+                                        $can_head_act = in_array($change['status'], array('OPEN', 'IN_PROGRESS', 'COMPLETED'), true) && ($is_admin || ((int)$action['department_head_id'] === (int)$current_user_id));
+                                        $can_assignee_act = in_array($change['status'], array('OPEN', 'IN_PROGRESS', 'COMPLETED'), true) && ($is_admin || ((int)$action['assigned_user_id'] === (int)$current_user_id));
                                         $action_status = strtoupper((string)$action['status']);
                                         $is_active = $action_status !== 'COMPLETED';
                                         $is_completed_card = $action_status === 'COMPLETED';
@@ -1679,6 +2009,16 @@ if (!empty($completed_departments) && !$only_completed_view) {
     <script src="<?php echo assets_url; ?>js/jquery.scrollTo.min.js"></script>
     <script>
         (function ($) {
+            // A large attachment takes a moment to upload; stop the second click that
+            // would otherwise queue a duplicate version and a duplicate round of email.
+            $(function () {
+                $('#attachmentForm').on('submit', function () {
+                    $('#attachmentSubmit')
+                        .prop('disabled', true)
+                        .text('Uploading and emailing...');
+                });
+            });
+
             function normalizeValue(value) {
                 return $.trim((value || '').toString()).toLowerCase();
             }

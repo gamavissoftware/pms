@@ -85,6 +85,8 @@ $res = $query->result();
 foreach($res as $row){
 }
 $projectCoordinatorFieldExists = $this->db->field_exists('project_coordinator_user_id', 'system_users');
+$plantUnitFieldExists = $this->db->field_exists('plant_unit', 'system_users');
+$selectedPlantUnit = ($plantUnitFieldExists && isset($row->plant_unit)) ? (int)$row->plant_unit : 0;
 $selectedProjectCoordinatorId = ($projectCoordinatorFieldExists && isset($row->project_coordinator_user_id)) ? (int)$row->project_coordinator_user_id : 0;
 ?>
 
@@ -335,6 +337,18 @@ $selectedProjectCoordinatorId = ($projectCoordinatorFieldExists && isset($row->p
 <input type="hidden" name="old_relieving_letter" value="<?php echo $row->relieving_letter;?>">
 <a href="<?php echo user_profile;?><?php echo $row->relieving_letter;?>" download><span class="btn btn-success btn-xs">Click here to download</span></a>
 
+</div>
+</div>
+
+<div class="col-md-2">
+<div class="form-group">
+<label>Plant Unit</label>
+<span id="error_plant_unit" style="color:red;">*</span>
+<select class="form-control" id="plant_unit" name="plant_unit">
+<option value="">--Select Plant Unit--</option>
+<option value="1" <?php if($selectedPlantUnit==1){echo "selected";}?>>Sector 59</option>
+<option value="2" <?php if($selectedPlantUnit==2){echo "selected";}?>>Sector 06</option>
+</select>
 </div>
 </div>
 
@@ -860,9 +874,15 @@ if(status=='')
 
 $("#error_status").html('Required!');
 }
+var plant_unit = $("#plant_unit").val();
+if(plant_unit=='')
+{
+
+$("#error_plant_unit").html('Required!');
+}
 
 
-if(first_name=='' || last_name==''|| email=='' || contact_number=='' || father_name=='' || mother_name=='' || date_of_birth=='' || date_of_joining=='' || qualification=='' || adharcards=='' || pancard=='' || business_loc=='' || department==''|| user_role=='' || address=='' || status=='')
+if(first_name=='' || last_name==''|| email=='' || contact_number=='' || father_name=='' || mother_name=='' || date_of_birth=='' || date_of_joining=='' || qualification=='' || adharcards=='' || pancard=='' || business_loc=='' || department==''|| user_role=='' || address=='' || status=='' || plant_unit=='')
 {
 
 return false;

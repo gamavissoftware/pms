@@ -19,7 +19,7 @@
         <link href="<?php echo assets_url;?>plugins/datatables/fixedHeader.bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="<?php echo assets_url;?>plugins/datatables/scroller.bootstrap.min.css" rel="stylesheet" type="text/css" />
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
+		<script src="<?php echo assets_url;?>js/jquery.min.js"></script>
 
         <link href="<?php echo assets_url;?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="<?php echo assets_url;?>css/core.css" rel="stylesheet" type="text/css" />
@@ -279,7 +279,6 @@
 
 
          <!-- jQuery  -->
-        <script src="<?php echo assets_url;?>js/jquery.min.js"></script>
         <script src="<?php echo assets_url;?>js/bootstrap.min.js"></script>
         <script src="<?php echo assets_url;?>js/detect.js"></script>
         <script src="<?php echo assets_url;?>js/fastclick.js"></script>
@@ -312,7 +311,6 @@
         <!-- App js -->
         <script src="<?php echo assets_url;?>js/jquery.core.js"></script>
         <script src="<?php echo assets_url;?>js/jquery.app.js"></script>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
 <script>
 $(document).ready(function(){
 	   $("#teamupdate").attr('disabled',false);
@@ -326,7 +324,6 @@ $(document).ready(function(){
 </script>
 
 <script language="javascript" type="text/javascript">   
-jQuery.noConflict();
 $(document).ready(function() {
 $("#teamupdate").click(function() {
 var business_loc = $("#business_loc").val();

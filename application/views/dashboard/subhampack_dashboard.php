@@ -413,7 +413,7 @@ if($user_id==162 || $user_id==139){}else{
 
 <div class="wrapper">
 <?php 
-if($this->session->userdata['logged_in']['role']==12 || $this->session->userdata['logged_in']['user_id']==139){
+if(pms_is_super_admin() || $this->session->userdata['logged_in']['user_id']==139){
 
 
         $this->load->view('dashboard/graphicaldata');
@@ -1211,7 +1211,7 @@ foreach($q->result() as $rowss);
 
  
 <?php 
-if($this->session->userdata['logged_in']['role']==12 || $user_id==139){
+if(pms_is_super_admin() || $user_id==139){
 ?>
 
 
@@ -1241,7 +1241,7 @@ if($this->session->userdata['logged_in']['role']==12 || $user_id==139){
 ?>
 
 <?php 
-if($this->session->userdata['logged_in']['role']==12){
+if(pms_is_super_admin()){
 
 ?>
 <div class="row card-box">
@@ -2255,7 +2255,7 @@ getcolors()
 
             
 <?php 
-if($this->session->userdata['logged_in']['role']==12){
+if(pms_is_super_admin()){
 ?>
 $('#example5').dataTable({
 "bProcessing": true,

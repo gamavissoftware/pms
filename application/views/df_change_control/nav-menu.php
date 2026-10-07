@@ -4,7 +4,7 @@ $businesslocation =$this->session->userdata['logged_in']['business_location'];
 $department_id =$this->session->userdata['logged_in']['department_id'];
 if($businesslocation==2){
 $user_id = $this->session->userdata['logged_in']['user_id'];
-$st = date('Y-m-d',strtotime('-30 days'));
+$st = date('Y-m-d',strtotime('-1 year +1 day'));
 $et = date('Y-m-d');
 $dfid = "ALL";
 $assigned_module=array();
@@ -27,8 +27,8 @@ if($totalassigned>0)
 }
 
 
-$totalassigned = $CI->mis_model->allassignedtask($user_id,$et,$dfid);
-$totaldonetask =  $CI->mis_model->totalassignedworkdone($user_id,$et,$dfid);
+$totalassigned = $CI->mis_model->allassignedtask($user_id,$st,$et,$dfid);
+$totaldonetask =  $CI->mis_model->totalassignedworkdone($user_id,$st,$et,$dfid);
 $diff = $totalassigned-$totaldonetask;
 $per2=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -46,8 +46,8 @@ if($totaldonecount>0)
     }
 
 /** help ticket **/
-$totalassigned = $CI->mis_model->allassigneTickets($user_id,$dfid);
-$totaldonetask =  $CI->mis_model->allassigneTicketsDone($user_id,$dfid);
+$totalassigned = $CI->mis_model->allassigneTickets($user_id,$dfid,$st,$et);
+$totaldonetask =  $CI->mis_model->allassigneTicketsDone($user_id,$dfid,$st,$et);
 $diff = $totalassigned-$totaldonetask;
 $per4=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -56,8 +56,8 @@ if($totalassigned>0)
     }
 
 /** CREATED HELP TICKET **/
-$totalassigned = $CI->mis_model->allCreatedTickets($user_id,$dfid);
- $totaldonetask =  $CI->mis_model->allcreatedTicketsDone($user_id,$dfid);
+$totalassigned = $CI->mis_model->allCreatedTickets($user_id,$dfid,$st,$et);
+ $totaldonetask =  $CI->mis_model->allcreatedTicketsDone($user_id,$dfid,$st,$et);
  $diff = $totalassigned-$totaldonetask;
 $per5=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -153,7 +153,7 @@ if($mom_done_this_week>0)
 
 if(array_sum($assigned_module)>0)
     {
-    $total=round(ceil($per2+$per3+$per4+$per5+$per6+$per7+$per8+$per9+$per10)/array_sum($assigned_module));
+    $total=round(($per2+$per3+$per4+$per5+$per6+$per7+$per8+$per9+$per10)/array_sum($assigned_module));
     }else
     {
         $total=0;
@@ -655,7 +655,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
 
                         <div class="dash">
 
-                            <a href="<?php echo page_url;?>MIS/index/ALL/<?php echo $st;?>/<?php echo $et;?>/ALL">
+                            <a href="<?php echo page_url;?>MIS/index/ALL/<?php echo date('Y-m-d', strtotime('-1 year +1 day'));?>/<?php echo date('Y-m-d');?>/ALL/ALL">
 
                                 <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
                                         viewBox="0 0 24 24">
@@ -1275,7 +1275,7 @@ if($qry->num_rows()>0){
                         <div class="col-md-4 col-sm-12 col-xs-12 hidden-xs" id="blink_text">
                             <div style="margin-top: 13px;">
                                 <a style="background-color: #fdf5dd; padding: 10px 10px 10px 10px; font-size:14px; color:#635221;"
-                                    href='<?php echo page_url;?>MIS/index/ALL/<?php echo $st;?>/<?php echo $et;?>/<?php echo $_SESSION['logged_in']['user_id'];?>'
+                                    href='<?php echo page_url;?>MIS/index/ALL/<?php echo date('Y-m-d', strtotime('-1 year +1 day'));?>/<?php echo date('Y-m-d');?>/<?php echo $_SESSION['logged_in']['user_id'];?>/ALL'
                                     target="_blank">Your Work
                                     Pending/Delayed MIS: <span style="color:#635221;font-weight: 600;font-size:17px"
                                         id="blink_text1"><?php echo $total;?>% &nbsp;<span style="font-size:17px;"><?php echo $icon;?></span></span></a>

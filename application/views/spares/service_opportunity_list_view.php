@@ -36,6 +36,10 @@
         .table thead th { background-color: #f8fafc; color: #334155; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; border-bottom: 2px solid #edf2f7; }
         .table tbody tr td { vertical-align: middle; padding: 15px 10px; }
         .action-form-inline { display: inline-block; margin: 0; }
+        .badge-stage-cancelled { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+        .cancelled-quotation-row td { background: #fffafb; }
+        .cancelled-quotation-row td:first-child { box-shadow: inset 4px 0 0 #e11d48; }
+        .quote-age-note { display: block; margin-top: 4px; color: #64748b; font-size: 10px; }
     </style>
 </head>
 <body>
@@ -76,13 +80,13 @@
                             <h3 class="text-primary"><?php echo $kpi['new']; ?></h3>
                         </a>
                     </div>
-                    <div class="col-md-3 widget-box">
+                    <div class="col-md-2 widget-box">
                         <a href="<?php echo page_url; ?>ServiceLeads/opportunity_list/3" style="text-decoration:none;">
                             <p>Drafting/Approvals</p>
                             <h3 class="text-warning"><?php echo $kpi['quote_pending']; ?></h3>
                         </a>
                     </div>
-                    <div class="col-md-3 widget-box">
+                    <div class="col-md-2 widget-box">
                         <a href="<?php echo page_url; ?>ServiceLeads/opportunity_list/5" style="text-decoration:none;">
                             <p>Active Quotes</p>
                             <h3 class="text-info"><?php echo $kpi['quote_shared']; ?></h3>
@@ -92,6 +96,12 @@
                         <a href="<?php echo page_url; ?>ServiceLeads/opportunity_list/7" style="text-decoration:none;">
                             <p>Orders Won</p>
                             <h3 class="text-success"><?php echo $kpi['won']; ?></h3>
+                        </a>
+                    </div>
+                    <div class="col-md-2 widget-box">
+                        <a href="<?php echo page_url; ?>ServiceLeads/opportunity_list/<?php echo (int) $cancelled_quotation_stage_id; ?>" style="text-decoration:none;">
+                            <p>Cancelled Quotes</p>
+                            <h3 class="text-danger"><?php echo $kpi['cancelled']; ?></h3>
                         </a>
                     </div>
                 </div>
@@ -117,6 +127,9 @@
             <div class="collapse m-b-20 <?php echo ($this->input->get('marketing_person') || $this->input->get('from_date')) ? 'show' : ''; ?>" id="filterCollapse">
                 <div class="card-box" style="background: #fdfdfd;">
                     <form method="get" action="<?php echo page_url; ?>ServiceLeads/opportunity_list">
+                        <?php if (!empty($current_followup_filter)): ?>
+                            <input type="hidden" name="filter" value="<?php echo htmlspecialchars($current_followup_filter); ?>">
+                        <?php endif; ?>
                         <div class="row">
                             <div class="col-md-3 form-group">
                                 <label class="small font-600">Start Date</label>
@@ -176,8 +189,13 @@
                                 $bar_color = "progress-bar-danger"; 
                                 if($prob >= 40 && $prob < 80) { $bar_color = "progress-bar-warning"; }
                                 if($prob >= 80) { $bar_color = "progress-bar-success"; }
+                                $is_cancelled_quotation = ((int) $row->current_stage_id === (int) $cancelled_quotation_stage_id);
+                                $can_reopen_quotation = $is_cancelled_quotation && (
+                                    !empty($can_reopen_all_cancelled)
+                                    || (int) $row->marketing_person_id === (int) $current_user_id
+                                );
                             ?>
-                            <tr>
+                            <tr class="<?php echo $is_cancelled_quotation ? 'cancelled-quotation-row' : ''; ?>">
                                 <td>
                                     <strong class="text-dark"><?php echo $row->op_no; ?></strong><br>
                                     <small class="text-muted"><i class="fa fa-calendar-o"></i> <?php echo date('d M, Y', strtotime($row->op_date)); ?></small>
@@ -190,7 +208,7 @@
                                     <div class="text-muted small"><i class="fa fa-user-circle-o"></i> <?php echo strtoupper($row->marketing_person_name); ?></div>
                                 </td>
                                 <td>
-                                    <span class="badge-stage"><?php echo $row->current_stage_name; ?></span>
+                                    <span class="badge-stage <?php echo $is_cancelled_quotation ? 'badge-stage-cancelled' : ''; ?>"><?php echo $row->current_stage_name; ?></span>
                                 </td>
                                 <td>
                                     <div class="progress">
@@ -203,6 +221,9 @@
                                         <a href="<?php echo page_url; ?>ServiceLeads/view_quotation_pdf/<?php echo $row->latest_quote_id; ?>" target="_blank" class="btn btn-xs btn-link p-0 text-danger">
                                             <i class="fa fa-file-pdf-o"></i> <?php echo $row->op_no; ?>
                                         </a>
+                                        <?php if (!empty($row->latest_quote_date)): ?>
+                                            <span class="quote-age-note">Quoted <?php echo date('d M Y', strtotime($row->latest_quote_date)); ?></span>
+                                        <?php endif; ?>
                                     <?php else: ?>
                                         <span class="text-muted small">No Quote Active</span>
                                     <?php endif; ?>
@@ -220,6 +241,14 @@
                                                 <i class="fa fa-clone"></i> Clone
                                             </button>
                                         </form>
+                                        <?php if ($can_reopen_quotation): ?>
+                                            <form method="post" action="<?php echo page_url; ?>ServiceLeads/reopen_cancelled_quotation/<?php echo (int) $row->opportunity_id; ?>" class="action-form-inline" onsubmit="return confirm('Reopen this quotation at its previous pipeline stage?');">
+                                                <input type="hidden" name="return_url" value="<?php echo page_url; ?>ServiceLeads/opportunity_list/<?php echo (int) $cancelled_quotation_stage_id; ?>">
+                                                <button type="submit" class="btn btn-xs btn-info" title="Reopen at previous stage">
+                                                    <i class="fa fa-undo"></i> Reopen
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

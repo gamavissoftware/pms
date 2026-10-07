@@ -457,6 +457,224 @@ public function get_monthly_sales() {
         return $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->row_array();
     }
 
+    public function get_marketing_df_income_breakdown_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $current_financial_year = $this->build_financial_year_meta('');
+        $is_current_financial_year = $financial_year['value'] === $current_financial_year['value'];
+        $date_expression = $this->get_order_dashboard_date_expression('a');
+        $running_scope_condition = $is_current_financial_year
+            ? '1 = 1'
+            : 'COALESCE(' . $date_expression . ', DATE(df.added_on)) >= ? AND COALESCE(' . $date_expression . ', DATE(df.added_on)) <= ?';
+        $sql = "SELECT
+                    SUM(CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND (" . $running_scope_condition . ") THEN COALESCE(a.order_value, 0) ELSE 0 END) as running_total_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND (" . $running_scope_condition . ") THEN df.id END) as running_total_orders,
+                    SUM(CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND (" . $running_scope_condition . ") AND UPPER(TRIM(COALESCE(a.customer_currency, 'INR'))) = 'INR' THEN COALESCE(a.order_value, 0) ELSE 0 END) as running_domestic_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND (" . $running_scope_condition . ") AND UPPER(TRIM(COALESCE(a.customer_currency, 'INR'))) = 'INR' THEN df.id END) as running_domestic_orders,
+                    SUM(CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND (" . $running_scope_condition . ") AND UPPER(TRIM(COALESCE(a.customer_currency, 'INR'))) <> 'INR' THEN COALESCE(a.order_value, 0) ELSE 0 END) as running_international_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND (" . $running_scope_condition . ") AND UPPER(TRIM(COALESCE(a.customer_currency, 'INR'))) <> 'INR' THEN df.id END) as running_international_orders,
+                    SUM(CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) >= ? AND COALESCE(" . $date_expression . ", DATE(df.added_on)) <= ? THEN COALESCE(a.order_value, 0) ELSE 0 END) as running_current_fy_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) >= ? AND COALESCE(" . $date_expression . ", DATE(df.added_on)) <= ? THEN df.id END) as running_current_fy_orders,
+                    SUM(CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) < ? THEN COALESCE(a.order_value, 0) ELSE 0 END) as running_carry_forward_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 0 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) < ? THEN df.id END) as running_carry_forward_orders,
+                    SUM(CASE WHEN df.df_status = 1 AND DATE(df.completed_on) >= ? AND DATE(df.completed_on) <= ? THEN COALESCE(a.order_value, 0) ELSE 0 END) as dispatched_total_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 1 AND DATE(df.completed_on) >= ? AND DATE(df.completed_on) <= ? THEN df.id END) as dispatched_total_orders,
+                    SUM(CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 1 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) >= ? AND COALESCE(" . $date_expression . ", DATE(df.added_on)) <= ? THEN COALESCE(a.order_value, 0) ELSE 0 END) as hold_total_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 1 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) >= ? AND COALESCE(" . $date_expression . ", DATE(df.added_on)) <= ? THEN df.id END) as hold_total_orders,
+                    SUM(CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 1 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) >= ? AND COALESCE(" . $date_expression . ", DATE(df.added_on)) <= ? AND UPPER(TRIM(COALESCE(a.customer_currency, 'INR'))) = 'INR' THEN COALESCE(a.order_value, 0) ELSE 0 END) as hold_domestic_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 1 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) >= ? AND COALESCE(" . $date_expression . ", DATE(df.added_on)) <= ? AND UPPER(TRIM(COALESCE(a.customer_currency, 'INR'))) = 'INR' THEN df.id END) as hold_domestic_orders,
+                    SUM(CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 1 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) >= ? AND COALESCE(" . $date_expression . ", DATE(df.added_on)) <= ? AND UPPER(TRIM(COALESCE(a.customer_currency, 'INR'))) <> 'INR' THEN COALESCE(a.order_value, 0) ELSE 0 END) as hold_international_value,
+                    COUNT(DISTINCT CASE WHEN df.df_status = 0 AND IFNULL(df.on_hold, 0) = 1 AND COALESCE(" . $date_expression . ", DATE(df.added_on)) >= ? AND COALESCE(" . $date_expression . ", DATE(df.added_on)) <= ? AND UPPER(TRIM(COALESCE(a.customer_currency, 'INR'))) <> 'INR' THEN df.id END) as hold_international_orders
+                FROM df_release df
+                LEFT JOIN poreceived a ON a.df_id = df.id";
+
+        $parameters = array();
+        if (!$is_current_financial_year) {
+            for ($scope_index = 0; $scope_index < 6; $scope_index++) {
+                $parameters[] = $financial_year['start_date'];
+                $parameters[] = $financial_year['end_date'];
+            }
+        }
+        $parameters = array_merge($parameters, array(
+            $financial_year['start_date'], $financial_year['end_date'],
+            $financial_year['start_date'], $financial_year['end_date'],
+            $financial_year['start_date'], $financial_year['start_date'],
+            $financial_year['start_date'], $financial_year['end_date'],
+            $financial_year['start_date'], $financial_year['end_date']
+        ));
+        for ($hold_scope_index = 0; $hold_scope_index < 6; $hold_scope_index++) {
+            $parameters[] = $financial_year['start_date'];
+            $parameters[] = $financial_year['end_date'];
+        }
+        $result = $this->db->query($sql, $parameters)->row_array();
+        if (!$is_current_financial_year) {
+            $result['running_carry_forward_value'] = 0;
+            $result['running_carry_forward_orders'] = 0;
+        }
+        $result['is_current_financial_year'] = $is_current_financial_year ? 1 : 0;
+        return $result;
+    }
+
+    public function get_spares_sales_data_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $sql = "SELECT
+                    so.marketing_person_id as agent_id,
+                    COALESCE(NULLIF(CONCAT_WS(' ', u.title, u.first_name, u.last_name), ''), 'Unassigned') as agent_name,
+                    SUM(COALESCE(so.order_value, 0)) as total_sales,
+                    COUNT(so.order_id) as order_count,
+                    AVG(COALESCE(so.order_value, 0)) as avg_order_value
+                FROM spares_orders so
+                LEFT JOIN system_users u ON u.user_id = so.marketing_person_id
+                WHERE so.order_date >= ? AND so.order_date <= ?
+                GROUP BY so.marketing_person_id, u.title, u.first_name, u.last_name
+                ORDER BY total_sales DESC, agent_name ASC";
+
+        return $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->result();
+    }
+
+    public function get_spares_order_summary_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $sql = "SELECT
+                    COUNT(so.order_id) as total_orders,
+                    SUM(COALESCE(so.order_value, 0)) as total_order_value,
+                    AVG(COALESCE(so.order_value, 0)) as avg_order_value,
+                    COUNT(DISTINCT CASE WHEN so.marketing_person_id IS NOT NULL AND so.marketing_person_id <> 0 THEN so.marketing_person_id END) as active_agents,
+                    MAX(so.order_date) as latest_order_date
+                FROM spares_orders so
+                WHERE so.order_date >= ? AND so.order_date <= ?";
+
+        return $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->row_array();
+    }
+
+    public function get_spares_income_breakdown_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $sql = "SELECT
+                    SUM(CASE WHEN op.op_type = 1 THEN COALESCE(so.order_value, 0) ELSE 0 END) as domestic_value,
+                    COUNT(CASE WHEN op.op_type = 1 THEN so.order_id END) as domestic_orders,
+                    SUM(CASE WHEN op.op_type <> 1 THEN COALESCE(so.order_value, 0) ELSE 0 END) as international_value,
+                    COUNT(CASE WHEN op.op_type <> 1 THEN so.order_id END) as international_orders
+                FROM spares_orders so
+                INNER JOIN opportunities op ON op.opportunity_id = so.opportunity_id
+                WHERE so.order_date >= ? AND so.order_date <= ?";
+
+        return $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->row_array();
+    }
+
+    public function get_spares_top_brand_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $sql = "SELECT
+                    COALESCE(NULLIF(b.name, ''), 'Unmapped Brand') as brand_name,
+                    SUM(COALESCE(so.order_value, 0)) as total_sales,
+                    COUNT(so.order_id) as order_count
+                FROM spares_orders so
+                LEFT JOIN opportunities op ON op.opportunity_id = so.opportunity_id
+                LEFT JOIN spare_company_brand b ON b.id = op.brand_id
+                WHERE so.order_date >= ? AND so.order_date <= ?
+                GROUP BY op.brand_id, b.name
+                ORDER BY total_sales DESC, brand_name ASC
+                LIMIT 1";
+
+        return $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->row_array();
+    }
+
+    public function get_service_sales_data_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $currency_expression = "COALESCE(NULLIF((SELECT sq.currency FROM service_quotations sq WHERE sq.opportunity_id = so.opportunity_id ORDER BY sq.id DESC LIMIT 1), ''), 'INR')";
+        $sql = "SELECT
+                    so.marketing_person_id as agent_id,
+                    COALESCE(NULLIF(CONCAT_WS(' ', u.title, u.first_name, u.last_name), ''), 'Unassigned') as agent_name,
+                    " . $currency_expression . " as currency,
+                    SUM(COALESCE(spo.po_amount, 0)) as total_sales,
+                    COUNT(spo.id) as order_count,
+                    AVG(COALESCE(spo.po_amount, 0)) as avg_order_value
+                FROM service_purchase_orders spo
+                INNER JOIN service_opportunities so ON so.opportunity_id = spo.opportunity_id
+                LEFT JOIN system_users u ON u.user_id = so.marketing_person_id
+                WHERE so.current_stage_id = 7
+                  AND spo.po_date >= ? AND spo.po_date <= ?
+                GROUP BY so.marketing_person_id, u.title, u.first_name, u.last_name, currency
+                ORDER BY currency ASC, total_sales DESC, agent_name ASC";
+
+        return $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->result();
+    }
+
+    public function get_service_order_summary_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $currency_expression = "COALESCE(NULLIF((SELECT sq.currency FROM service_quotations sq WHERE sq.opportunity_id = so.opportunity_id ORDER BY sq.id DESC LIMIT 1), ''), 'INR')";
+        $sql = "SELECT
+                    " . $currency_expression . " as currency,
+                    COUNT(spo.id) as total_orders,
+                    SUM(COALESCE(spo.po_amount, 0)) as total_order_value,
+                    AVG(COALESCE(spo.po_amount, 0)) as avg_order_value,
+                    COUNT(DISTINCT CASE WHEN so.marketing_person_id IS NOT NULL AND so.marketing_person_id <> 0 THEN so.marketing_person_id END) as active_agents,
+                    MAX(spo.po_date) as latest_order_date
+                FROM service_purchase_orders spo
+                INNER JOIN service_opportunities so ON so.opportunity_id = spo.opportunity_id
+                WHERE so.current_stage_id = 7
+                  AND spo.po_date >= ? AND spo.po_date <= ?
+                GROUP BY currency
+                ORDER BY currency ASC";
+
+        return $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->result_array();
+    }
+
+    public function get_service_income_breakdown_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $sql = "SELECT
+                    SUM(CASE WHEN so.op_type = 1 THEN COALESCE(spo.po_amount, 0) ELSE 0 END) as domestic_value,
+                    COUNT(CASE WHEN so.op_type = 1 THEN spo.id END) as domestic_orders,
+                    SUM(CASE WHEN so.op_type <> 1 THEN COALESCE(spo.po_amount, 0) ELSE 0 END) as international_value,
+                    COUNT(CASE WHEN so.op_type <> 1 THEN spo.id END) as international_orders
+                FROM service_purchase_orders spo
+                INNER JOIN service_opportunities so ON so.opportunity_id = spo.opportunity_id
+                WHERE so.current_stage_id = 7
+                  AND spo.po_date >= ? AND spo.po_date <= ?";
+
+        return $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->row_array();
+    }
+
+    public function get_service_top_brands_by_financial_year($financial_year_value = '')
+    {
+        $financial_year = $this->build_financial_year_meta($financial_year_value);
+        $currency_expression = "COALESCE(NULLIF((SELECT sq.currency FROM service_quotations sq WHERE sq.opportunity_id = so.opportunity_id ORDER BY sq.id DESC LIMIT 1), ''), 'INR')";
+        $brand_expression = "COALESCE(NULLIF(scb.name, ''), NULLIF(cb.name, ''), NULLIF(cm.company_brand, ''), 'Unmapped Brand')";
+        $sql = "SELECT
+                    " . $currency_expression . " as currency,
+                    " . $brand_expression . " as brand_name,
+                    SUM(COALESCE(spo.po_amount, 0)) as total_sales,
+                    COUNT(spo.id) as order_count
+                FROM service_purchase_orders spo
+                INNER JOIN service_opportunities so ON so.opportunity_id = spo.opportunity_id
+                LEFT JOIN spares_customers sc ON sc.customer_id = so.customer_id
+                    AND so.customer_table_origin IN ('spare', 'spares')
+                LEFT JOIN spare_company_brand scb ON scb.id = sc.brand_id
+                LEFT JOIN customer_detail cm ON cm.id = so.customer_id
+                    AND (so.customer_table_origin IS NULL OR so.customer_table_origin NOT IN ('spare', 'spares'))
+                LEFT JOIN company_brand cb ON cb.id = cm.company_brand
+                WHERE so.current_stage_id = 7
+                  AND spo.po_date >= ? AND spo.po_date <= ?
+                GROUP BY currency, brand_name
+                ORDER BY currency ASC, total_sales DESC, brand_name ASC";
+
+        $rows = $this->db->query($sql, array($financial_year['start_date'], $financial_year['end_date']))->result_array();
+        $top_brands = array();
+        foreach ($rows as $row) {
+            $currency = strtoupper(trim((string) $row['currency']));
+            if (!isset($top_brands[$currency])) {
+                $top_brands[$currency] = $row;
+            }
+        }
+
+        return $top_brands;
+    }
+
 
 public function get_ticket_by_id($ticket_id)
 {

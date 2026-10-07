@@ -1,3 +1,4 @@
+<?php $is_delegator_view = !empty($is_delegator_view); ?>
 <!DOCTYPE html>
 <html>
 
@@ -556,13 +557,13 @@
         <div class="row">
             <div class="col-sm-12">
                 <div class="page-hero">
-                    <h3><i class="fa fa-tasks"></i> Task Progress Workspace</h3>
-                    <p>Review assigned task details, submit progress updates, attach proof, and track previous remarks in one professional view.</p>
+                    <h3><i class="fa fa-tasks"></i> <?php echo $is_delegator_view ? 'Delegated Task Conversation' : 'Task Progress Workspace'; ?></h3>
+                    <p><?php echo $is_delegator_view ? 'Review the delegated task, reply to the assignee, share attachments, and follow the complete conversation.' : 'Review assigned task details, submit progress updates, attach proof, and track previous remarks in one professional view.'; ?></p>
 
                     <div class="hero-meta">
                         <span class="hero-chip"><i class="fa fa-hashtag"></i> Task ID: <?php echo $this->uri->segment(3); ?></span>
                         <span class="hero-chip"><i class="fa fa-clock-o"></i> Last Refreshed: <?php echo date('d-M-Y h:i A'); ?></span>
-                        <span class="hero-chip"><i class="fa fa-user"></i> User Dashboard</span>
+                        <span class="hero-chip"><i class="fa fa-user"></i> <?php echo $is_delegator_view ? 'Delegator Dashboard' : 'User Dashboard'; ?></span>
                     </div>
                 </div>
             </div>
@@ -605,7 +606,7 @@
         </div>
 
         <div class="summary-alert">
-            <strong>Tip:</strong> Write clear progress remarks with actual status, dependency, completion percentage, and proof attachment wherever required. This will help management track the task without repeated follow-ups.
+            <strong>Tip:</strong> <?php echo $is_delegator_view ? 'Use this conversation to ask questions, provide guidance, and respond directly to the person handling the task.' : 'Write clear progress remarks with actual status, dependency, completion percentage, and proof attachment wherever required. This will help management track the task without repeated follow-ups.'; ?>
         </div>
 
         <div class="modern-card">
@@ -644,15 +645,15 @@
 
             <div class="col-md-5">
                 <div class="task-form-panel">
-                    <div class="section-title"><i class="fa fa-pencil-square-o"></i> Submit Progress Update</div>
+                    <div class="section-title"><i class="fa fa-pencil-square-o"></i> <?php echo $is_delegator_view ? 'Reply to Assignee' : 'Submit Progress Update'; ?></div>
 
                     <form id="add_task" enctype="multipart/form-data">
                         <input type="hidden" name="task_id" id="task_id" value="<?php echo $this->uri->segment(3); ?>">
 
                         <div class="form-group">
-                            <label class="form-label">Progress Update / Remarks <span class="required-star">*</span></label>
-                            <textarea name="remarks" id="remarks" class="form-control remarks-textarea" placeholder="Example: Work is 70% completed. Pending dependency is approval from purchase team. Expected completion by tomorrow."></textarea>
-                            <small class="text-muted">Please write meaningful remarks so task progress is clearly visible.</small>
+                            <label class="form-label"><?php echo $is_delegator_view ? 'Reply / Comment' : 'Progress Update / Remarks'; ?> <span class="required-star">*</span></label>
+                            <textarea name="remarks" id="remarks" class="form-control remarks-textarea" placeholder="<?php echo $is_delegator_view ? 'Write your reply, question, instruction, or feedback for the assignee.' : 'Example: Work is 70% completed. Pending dependency is approval from purchase team. Expected completion by tomorrow.'; ?>"></textarea>
+                            <small class="text-muted"><?php echo $is_delegator_view ? 'Your reply will appear in the same conversation and notify the assignee.' : 'Please write meaningful remarks so task progress is clearly visible.'; ?></small>
                         </div>
 
                         <div class="form-group">
@@ -663,6 +664,7 @@
                             </div>
                         </div>
 
+                        <?php if (!$is_delegator_view) { ?>
                         <div class="form-group">
                             <label class="form-label">Task Status</label>
 
@@ -678,6 +680,7 @@
                                 </div>
                             </div>
                         </div>
+                        <?php } ?>
 
                         <div class="form-group text-right">
                             <button type="button" class="btn btn-reset-form" onclick="resetProgressForm()">
@@ -685,7 +688,7 @@
                             </button>
 
                             <button class="btn btn-submit-update" type="submit" id="submitBtn">
-                                <i class="fa fa-paper-plane"></i> Submit Update
+                                <i class="fa fa-paper-plane"></i> <?php echo $is_delegator_view ? 'Send Reply' : 'Submit Update'; ?>
                             </button>
                         </div>
                     </form>
@@ -775,7 +778,7 @@
             pageLength: 10,
             lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
             ajax: {
-                url: "<?php echo page_url; ?>Delegation/user_wise_delegated_task_list/<?php echo $this->uri->segment(3); ?>",
+                url: "<?php echo page_url; ?>Delegation/<?php echo $is_delegator_view ? 'user_wise_by_delegated_task_list' : 'user_wise_delegated_task_list'; ?>/<?php echo $this->uri->segment(3); ?>",
                 dataSrc: "aaData"
             },
             columns: [
@@ -863,8 +866,10 @@
                         toastr.success(res.message);
 
                         $("#add_task")[0].reset();
+                        <?php if (!$is_delegator_view) { ?>
                         $("#status_label").text("Still Pending");
                         $("#kpi_status_text").text("Open");
+                        <?php } ?>
 
                         if (taskTable) {
                             taskTable.ajax.reload(function(json) {
@@ -884,7 +889,7 @@
                 },
 
                 complete: function() {
-                    $("#submitBtn").prop("disabled", false).html('<i class="fa fa-paper-plane"></i> Submit Update');
+                    $("#submitBtn").prop("disabled", false).html('<i class="fa fa-paper-plane"></i> <?php echo $is_delegator_view ? 'Send Reply' : 'Submit Update'; ?>');
                 }
             });
         });
@@ -961,8 +966,10 @@
 
     function resetProgressForm() {
         $("#add_task")[0].reset();
+        <?php if (!$is_delegator_view) { ?>
         $("#status_label").text("Still Pending");
         $("#kpi_status_text").text("Open");
+        <?php } ?>
         toastr.info("Form reset successfully.");
     }
 

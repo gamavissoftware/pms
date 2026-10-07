@@ -3682,6 +3682,27 @@ function formatIndianNumber($number) {
 
 // In application/models/Dashboard_model.php
 
+private function apply_spares_followup_stage_exclusion($opportunity_alias = 'op')
+{
+    $latest_stage_name = "(
+        SELECT stage.lead_name
+        FROM spare_progress_remarks progress
+        INNER JOIN spare_lead_stage stage ON stage.lead_id = progress.lead_stage
+        WHERE progress.lead_id = {$opportunity_alias}.opportunity_id
+        ORDER BY progress.id DESC
+        LIMIT 1
+    )";
+
+    $this->db->where(
+        "LOWER(TRIM({$latest_stage_name})) NOT IN (
+            'cancelled quotation', 'order won', 'lead lost',
+            'pending for po', 'po created', 'create pi'
+        )",
+        null,
+        false
+    );
+}
+
 public function SparesFollowupCounts($type)
 {
     // --- 1. Use the correct 'opportunities' table for the spares module ---
@@ -3689,6 +3710,7 @@ public function SparesFollowupCounts($type)
 
     // --- 2. We only care about opportunities that are still 'Open' ---
     $this->db->where('op.status', 'Open');
+    $this->apply_spares_followup_stage_exclusion('op');
     
     // --- 3. Apply role-based filtering ---
     // If the user is not a manager/admin, only show their own followups.
@@ -3997,6 +4019,7 @@ public function SparesFollowupCountsUsers($type, $user_id)
 
     // We only care about opportunities that are still 'Open'
     $this->db->where('op.status', 1);
+    $this->apply_spares_followup_stage_exclusion('op');
     
     // Filter by the specific user
     $this->db->where('op.marketing_person_id', $user_id);
@@ -4030,19 +4053,30 @@ public function SparesFollowupCountsUsers($type, $user_id)
     return $this->db->count_all_results();
 }
 public function get_active_dfs() {
-    $this->db->select('a.id, a.df_no, a.df_description, a.added_on, a.df_upload, MAX(b.po_attachment) AS po_attachment', false);
+    $this->load->helper('df_delay');
+    $today = date('Y-m-d');
+    $dfDelaySql = df_open_overdue_sql($this->db, 't_delay', $today, 'a');
+    $dfDelayDaysSql = df_open_overdue_sql($this->db, 't_oldest', $today, 'a');
+
+    $this->db->select('a.id, a.df_no, a.df_description, a.added_on, a.df_upload, a.on_hold, MAX(b.po_attachment) AS po_attachment,
+        (SELECT COUNT(*) FROM task_department_wise_scheduling t_open WHERE t_open.df_id=a.id AND t_open.task_status IN (0,2)) AS open_task_count,
+        (SELECT COUNT(*) FROM task_department_wise_scheduling t_delay WHERE t_delay.df_id=a.id AND ' . $dfDelaySql . ') AS overdue_task_count,
+        (SELECT COUNT(*) FROM task_department_wise_scheduling t_approval WHERE t_approval.df_id=a.id AND t_approval.task_status=2) AS pending_approval_count,
+        (SELECT GREATEST(0, DATEDIFF(CURDATE(), MIN(t_oldest.end_date))) FROM task_department_wise_scheduling t_oldest WHERE t_oldest.df_id=a.id AND ' . $dfDelayDaysSql . ') AS max_delay_days,
+        (SELECT MIN(t_next.end_date) FROM task_department_wise_scheduling t_next WHERE t_next.df_id=a.id AND t_next.task_status IN (0,2) AND t_next.end_date>=CURDATE()) AS next_due_date', false);
     $this->db->from('df_release a');
     $this->db->join('poreceived b', 'a.id = b.df_id', 'left');
 
-    // Keep only DFs that still have at least one open task without introducing duplicate rows.
-    $this->db->where('EXISTS (SELECT 1 FROM task_department_wise_scheduling tasks WHERE tasks.df_id = a.id AND tasks.task_status = 0)', null, false);
-
-    // Preserve the existing "active DF" filter used by this dashboard block.
+    // Use the same portfolio scope as "All Running DFs": every non-hold running DF.
+    // DFs without open tasks remain visible as 0 open / 0 delayed and On Track.
     $this->db->where('a.df_status', 0);
+    $this->db->where('IFNULL(a.on_hold, 0) = 0', null, false);
 
     // Explicit grouping keeps the query compatible with ONLY_FULL_GROUP_BY SQL mode.
-    $this->db->group_by(array('a.id', 'a.df_no', 'a.df_description', 'a.added_on', 'a.df_upload'));
-    $this->db->order_by('a.df_no', 'asc');
+    $this->db->group_by(array('a.id', 'a.df_no', 'a.df_description', 'a.added_on', 'a.df_upload', 'a.on_hold'));
+    $this->db->order_by('max_delay_days', 'DESC');
+    $this->db->order_by('overdue_task_count', 'DESC');
+    $this->db->order_by('a.df_no', 'ASC');
 
     $query = $this->db->get();
     return $query->result_array();
@@ -4066,7 +4100,17 @@ public function get_active_dfs() {
 
          public function get_tasks_only_df_wise($df_id) {
 
-     	$query = $this->db->select('a.id, a.end_date, a.task_completed_on, a.task_status, b.task_name, c.first_name, c.last_name, a.remarks, e.taskupdatedontime, f.department as department_name')->from('task_department_wise_scheduling a')->join('task_management b','a.taskid=b.task_id')->join('system_users c','a.assigned_user=c.user_id')->join('task_pending_status e','a.id=e.recordid','left')->join('departments f','a.department_id=f.department_id','left')->where('a.df_id',$df_id)->order_by('a.end_date','asc')->get();
+		$query = $this->db
+			->select('a.id, a.taskid, a.end_date, a.task_completed_on, a.task_status, b.task_name, b.sortorder AS task_order, c.first_name, c.last_name, a.remarks, e.taskupdatedontime, f.department as department_name')
+			->from('task_department_wise_scheduling a')
+			->join('task_management b', 'a.taskid=b.task_id')
+			->join('system_users c', 'a.assigned_user=c.user_id', 'left')
+			->join('task_pending_status e', 'a.id=e.recordid', 'left')
+			->join('departments f', 'a.department_id=f.department_id', 'left')
+			->where('a.df_id', (int) $df_id)
+			->order_by('b.sortorder', 'asc')
+			->order_by('a.end_date', 'asc')
+			->get();
 
 
 
@@ -4330,6 +4374,7 @@ public function get_followup_opportunities($type, $user_id_filter = NULL)
     $this->db->join('system_users u', 'u.user_id = op.marketing_person_id', 'left');
     
     $this->db->where('op.status', 'Open');
+    $this->apply_spares_followup_stage_exclusion('op');
 
     // User Filtering remains the same
     if ($user_id_filter) {
@@ -4454,28 +4499,43 @@ public function getServiceStageCounts($stage_id) {
 public function getServiceFollowupCounts($type, $user_id = NULL) {
     // 1: Today, 2: Missed, 3: Upcoming
     $today = date('Y-m-d');
-    $this->db->from('service_opportunities'); // Simplified for count logic
-    if ($user_id) { $this->db->where('marketing_person_id', $user_id); }
-    
-    if ($type == 1) $this->db->where('op_date', $today);
-    elseif ($type == 2) $this->db->where('op_date <', $today);
-    elseif ($type == 3) $this->db->where('op_date >', $today);
-    
+    $this->db->from('service_opportunities so');
+    $this->db->join(
+        'service_progress_history followup_history',
+        'followup_history.history_id = (
+            SELECT MAX(latest_followup.history_id)
+            FROM service_progress_history latest_followup
+            WHERE latest_followup.opportunity_id = so.opportunity_id
+        )',
+        'inner',
+        false
+    );
+    $this->db->join('service_lead_stages current_stage', 'current_stage.stage_id = so.current_stage_id', 'left');
+    $this->db->where('followup_history.next_follow_date IS NOT NULL', null, false);
+    $this->db->where(
+        "LOWER(TRIM(current_stage.stage_name)) NOT IN ('cancelled quotation', 'po received', 'order won', 'create pi')",
+        null,
+        false
+    );
+
+    if ($user_id) {
+        $this->db->where('so.marketing_person_id', $user_id);
+    }
+
+    if ($type == 1) {
+        $this->db->where('followup_history.next_follow_date', $today);
+    } elseif ($type == 2) {
+        $this->db->where('followup_history.next_follow_date <', $today);
+    } elseif ($type == 3) {
+        $this->db->where('followup_history.next_follow_date >', $today);
+    }
+
     return $this->db->count_all_results();
 }
 
 
 public function getServiceFollowupCountsNew($type, $user_id = NULL) {
-    // 1: Today, 2: Missed, 3: Upcoming
-    $today = date('Y-m-d');
-    $this->db->from('service_opportunities'); // Simplified for count logic
-    if ($user_id) { $this->db->where('marketing_person_id', $user_id); }
-    
-    if ($type == 1) $this->db->where('op_date', $today);
-    elseif ($type == 2) $this->db->where('op_date <', $today);
-    elseif ($type == 3) $this->db->where('op_date >', $today);
-    
-    return $this->db->count_all_results();
+    return $this->getServiceFollowupCounts($type, $user_id);
 }
 
 
@@ -4538,6 +4598,15 @@ public function get_spare_followup_countsNew($user_role,$user_id,$department_id)
         LIMIT 1
     )";
 
+    $latest_stage = "(
+        SELECT LOWER(TRIM(sls.lead_name))
+        FROM spare_progress_remarks spr_stage
+        INNER JOIN spare_lead_stage sls ON sls.lead_id = spr_stage.lead_stage
+        WHERE spr_stage.lead_id = op.opportunity_id
+        ORDER BY spr_stage.id DESC
+        LIMIT 1
+    )";
+
     $sql = "
         SELECT 
             SUM(CASE 
@@ -4560,6 +4629,10 @@ public function get_spare_followup_countsNew($user_role,$user_id,$department_id)
 
         FROM opportunities op
         WHERE op.status = 'Open'
+        AND $latest_stage NOT IN (
+            'cancelled quotation', 'order won', 'lead lost',
+            'pending for po', 'po created', 'create pi'
+        )
         $user_filter
     ";
 

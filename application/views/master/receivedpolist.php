@@ -8,6 +8,10 @@ $filter2 = $this->uri->segment(4);
 $report_title = isset($report_title) ? $report_title : 'Received PO Report';
 $received_po_data_action = isset($received_po_data_action) ? $received_po_data_action : 'receivedpodata';
 $own_orders_only = !empty($own_orders_only);
+$current_year = (int) date('Y');
+$current_month = (int) date('n');
+$current_financial_year_start = ($current_month >= 4) ? $current_year : ($current_year - 1);
+$current_financial_year = $current_financial_year_start . '-' . substr((string) ($current_financial_year_start + 1), -2);
 ?>
 <!DOCTYPE html>
 <html>
@@ -73,6 +77,7 @@ $own_orders_only = !empty($own_orders_only);
             font-weight: 900;
             margin: 0;
             letter-spacing: .2px;
+            color: #fff !important;
         }
 
         .report-subtitle {
@@ -365,7 +370,7 @@ $own_orders_only = !empty($own_orders_only);
                     <input type="text" id="customSearch" class="form-control" placeholder="Search company, PO no, DF no...">
                 </div>
 
-                <div class="col-md-2 col-sm-6"<?php if ($own_orders_only) { ?> style="display:none;"<?php } ?>>
+                <div class="col-md-2 col-sm-6">
                     <label>Financial Year</label>
                     <select id="financialYearFilter" class="form-control">
                         <option value="">All Financial Year</option>
@@ -409,6 +414,7 @@ $own_orders_only = !empty($own_orders_only);
                         <th>PO No.</th>
                         <th>PO Date</th>
                         <th>Order Value</th>
+                        <th>Export Value</th>
                         <th>Marketing Person</th>
                         <th>PO Attachment</th>
                         <th>Brand</th>
@@ -561,6 +567,7 @@ function confirmCancel(orderId) {
 }
 
 $(document).ready(function () {
+    var defaultFinancialYear = <?php echo json_encode($own_orders_only ? $current_financial_year : ''); ?>;
 
     $('.brands').select2({
         tags: true,
@@ -617,6 +624,7 @@ $(document).ready(function () {
             { data: 'pono', defaultContent: '' },
             { data: 'podate', defaultContent: '' },
             { data: 'ordervalue', defaultContent: '' },
+            { data: 'exportvalue', defaultContent: '' },
             { data: 'marketingperson', defaultContent: '' },
             { data: 'po_attachment', defaultContent: '' },
             { data: 'brandtag', defaultContent: '' },
@@ -627,7 +635,7 @@ $(document).ready(function () {
         ],
         columnDefs: [
             {
-                targets: [1, 9, 12, 13<?php if ($own_orders_only) { ?>, 14<?php } ?>],
+                targets: [1, 10, 13, 14<?php if ($own_orders_only) { ?>, 15<?php } ?>],
                 orderable: false
             }
         ],
@@ -664,6 +672,7 @@ $(document).ready(function () {
         initComplete: function () {
             var api = this.api();
             populateDropdownFilters(api);
+            applyDefaultFinancialYear(api);
             updateKpisAndFilters(api);
         },
         drawCallback: function () {
@@ -690,9 +699,9 @@ $(document).ready(function () {
         var value = this.value;
 
         if (value !== '') {
-            table.column(8).search('^' + escapeRegexValue(value) + '$', true, false).draw();
+            table.column(9).search('^' + escapeRegexValue(value) + '$', true, false).draw();
         } else {
-            table.column(8).search('').draw();
+            table.column(9).search('').draw();
         }
     });
 
@@ -700,9 +709,9 @@ $(document).ready(function () {
         var value = this.value;
 
         if (value !== '') {
-            table.column(10).search(escapeRegexValue(value), true, false).draw();
+            table.column(11).search(escapeRegexValue(value), true, false).draw();
         } else {
-            table.column(10).search('').draw();
+            table.column(11).search('').draw();
         }
     });
 
@@ -714,6 +723,10 @@ $(document).ready(function () {
 
         table.search('');
         table.columns().search('');
+        if (defaultFinancialYear !== '') {
+            $('#financialYearFilter').val(defaultFinancialYear);
+            table.column(3).search('^' + escapeRegexValue(defaultFinancialYear) + '$', true, false);
+        }
         table.draw();
     });
 
@@ -761,6 +774,19 @@ $(document).ready(function () {
         Object.keys(brands).sort().forEach(function(value) {
             $('#brandFilter').append('<option value="' + value + '">' + value + '</option>');
         });
+    }
+
+    function applyDefaultFinancialYear(api) {
+        if (defaultFinancialYear === '') {
+            return;
+        }
+
+        if ($('#financialYearFilter option[value="' + defaultFinancialYear + '"]').length === 0) {
+            $('#financialYearFilter').append('<option value="' + defaultFinancialYear + '">' + defaultFinancialYear + '</option>');
+        }
+
+        $('#financialYearFilter').val(defaultFinancialYear);
+        api.column(3).search('^' + escapeRegexValue(defaultFinancialYear) + '$', true, false).draw();
     }
 
     function updateKpisAndFilters(api) {

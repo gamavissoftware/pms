@@ -57,7 +57,7 @@ class Task_management_model extends CI_Model
 
     public function get_assignable_users()
     {
-        $this->db->select('u.user_id, u.title, u.first_name, u.last_name, u.email, u.department_id, u.business_location, d.department');
+        $this->db->select('u.user_id, u.title, u.first_name, u.last_name, u.email, u.contact_number, u.department_id, u.business_location, d.department');
         $this->db->from('system_users u');
         $this->db->join('departments d', 'd.department_id = u.department_id', 'left');
         $this->db->where('u.user_status', 1);
@@ -83,7 +83,7 @@ class Task_management_model extends CI_Model
 
     public function get_user($user_id)
     {
-        $row = $this->db->select('u.user_id, u.title, u.first_name, u.last_name, u.email, u.department_id, u.business_location, d.department')
+        $row = $this->db->select('u.user_id, u.title, u.first_name, u.last_name, u.email, u.contact_number, u.department_id, u.business_location, d.department')
             ->from('system_users u')
             ->join('departments d', 'd.department_id = u.department_id', 'left')
             ->where('u.user_id', (int) $user_id)
@@ -100,6 +100,33 @@ class Task_management_model extends CI_Model
         }
 
         return $row;
+    }
+
+    public function get_users($user_ids)
+    {
+        $user_ids = array_values(array_unique(array_filter(array_map('intval', (array) $user_ids))));
+        if (empty($user_ids)) {
+            return array();
+        }
+
+        $rows = $this->db->select('u.user_id, u.title, u.first_name, u.last_name, u.email, u.contact_number, u.department_id, u.business_location, d.department')
+            ->from('system_users u')
+            ->join('departments d', 'd.department_id = u.department_id', 'left')
+            ->where_in('u.user_id', $user_ids)
+            ->get()
+            ->result_array();
+
+        $users = array();
+        foreach ($rows as $row) {
+            $row['name'] = $this->format_user_name(
+                isset($row['title']) ? $row['title'] : '',
+                isset($row['first_name']) ? $row['first_name'] : '',
+                isset($row['last_name']) ? $row['last_name'] : ''
+            );
+            $users[(int) $row['user_id']] = $row;
+        }
+
+        return $users;
     }
 
     public function get_department($department_id)
@@ -469,6 +496,83 @@ class Task_management_model extends CI_Model
             ->limit(15)
             ->get()
             ->result_array();
+    }
+
+    /**
+     * How many task updates this user has not seen yet.
+     *
+     * This is what the Task Management item in the main navigation shows: a
+     * response ON a task the user is involved in - the assignee confirmed a
+     * due date, posted progress, completed the work, or the creator reopened
+     * it. Every one of those writes a row here through add_notifications().
+     *
+     * NOT the same number as get_open_assignment_count(), which is a workload
+     * figure (how much is on my plate) and stays constant until the work
+     * moves. This one is an inbox figure: it appears when somebody responds
+     * and clears when the user has seen it.
+     */
+    public function get_unread_notification_count($user_id)
+    {
+        if (!$this->module_ready()) {
+            return 0;
+        }
+
+        return (int) $this->db->where('user_id', (int) $user_id)
+            ->where('is_read', 0)
+            ->count_all_results($this->notification_table);
+    }
+
+    /**
+     * Unread updates with the task they belong to, for the dashboard inbox.
+     *
+     * Joined to the task so the panel can show the task title and status
+     * rather than only the notification sentence, and so a notification whose
+     * task has since been deleted simply disappears instead of linking into a
+     * 404.
+     */
+    public function get_recent_notifications($user_id, $limit = 8)
+    {
+        if (!$this->module_ready()) {
+            return array();
+        }
+
+        $rows = $this->db->select('n.id, n.task_id, n.message, n.action_url, n.created_on,
+                                   t.task_code, t.title, t.status, t.progress_percent', FALSE)
+            ->from($this->notification_table . ' n')
+            ->join($this->task_table . ' t', 't.id = n.task_id', 'inner')
+            ->where('n.user_id', (int) $user_id)
+            ->where('n.is_read', 0)
+            ->order_by('n.created_on', 'desc')
+            ->order_by('n.id', 'desc')
+            ->limit((int) $limit > 0 ? (int) $limit : 8)
+            ->get()
+            ->result_array();
+
+        return $rows;
+    }
+
+    /**
+     * Clear the notifications for one task once the user has actually opened
+     * it.
+     *
+     * Without this the only way to clear a notification was to press Dismiss
+     * or Open on the toast: somebody who reached the task from the dashboard,
+     * a mail link or the update history left it unread for ever, and the
+     * navigation badge stayed lit for something they had already read.
+     */
+    public function mark_task_notifications_read($task_id, $user_id)
+    {
+        if (!$this->module_ready()) {
+            return false;
+        }
+
+        return $this->db->where('task_id', (int) $task_id)
+            ->where('user_id', (int) $user_id)
+            ->where('is_read', 0)
+            ->update($this->notification_table, array(
+                'is_read' => 1,
+                'read_on' => date('Y-m-d H:i:s')
+            ));
     }
 
     public function mark_notification_read($notification_id, $user_id)

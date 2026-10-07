@@ -25,22 +25,31 @@ class Df_change_control extends CI_Controller
     public function index()
     {
         $user_id = $this->get_current_user_id();
-        if (!$this->can_access_change_dashboard($user_id)) {
-            if ($this->can_raise_change_request($user_id)) {
-                redirect(page_url . 'Df_change_control/create');
-            }
+        $can_view_dashboard = $this->can_access_change_dashboard($user_id);
+        $can_raise_request = $this->can_raise_change_request($user_id);
+
+        if (!$can_view_dashboard && !$can_raise_request) {
             $this->deny_change_control_access();
         }
+
+        // Someone who only holds "Raise ECN / IOM" used to be bounced straight to the
+        // create form and had no way back to their own history.  They now open the same
+        // URL, but the page is narrowed to the requests they raised themselves - no
+        // organisation-wide counts, no HOD queue, no department load.  This mirrors what
+        // the mobile API already does for the same user (mobile/Api.php, scope 'all').
+        $requester_only = !$can_view_dashboard;
 
         $data = array(
             'module_ready' => $this->change_model->module_ready(),
             'migration_file' => 'Database/df_change_control_001.sql',
-            'stats' => $this->change_model->get_dashboard_stats($user_id),
-            'recent_changes' => $this->change_model->get_recent_changes(),
-            'head_queue' => $this->change_model->get_head_queue($user_id),
-            'assigned_queue' => $this->change_model->get_assigned_queue($user_id),
+            'stats' => $requester_only
+                ? $this->change_model->get_my_request_stats($user_id)
+                : $this->change_model->get_dashboard_stats($user_id),
+            'recent_changes' => $requester_only ? array() : $this->change_model->get_recent_changes(200, $user_id),
+            'head_queue' => $requester_only ? array() : $this->change_model->get_head_queue($user_id),
+            'assigned_queue' => $requester_only ? array() : $this->change_model->get_assigned_queue($user_id),
             'my_requests' => $this->change_model->get_my_requests($user_id),
-            'department_load' => $this->change_model->get_department_load_snapshot(),
+            'department_load' => $requester_only ? array() : $this->change_model->get_department_load_snapshot(),
             'current_user_id' => $user_id,
             'is_admin' => $this->is_admin_user($user_id),
             'module_nav' => $this->get_module_navigation($user_id, 'dashboard')
@@ -64,12 +73,36 @@ class Df_change_control extends CI_Controller
             $this->deny_change_control_access();
         }
 
+        // Cloning creates a new, editable request.  The original DF is intentionally
+        // not carried forward because the purpose of this action is to raise the same
+        // IOM against a different DF.
+        $clone_source = array();
+        $clone_department_ids = array();
+        $clone_id = (int)$this->input->get('clone');
+        if ($clone_id > 0) {
+            $candidate = $this->change_model->get_change_request($clone_id);
+            if (empty($candidate) || strtoupper((string)$candidate['request_type']) !== 'IOM'
+                || !$this->can_view_change_request($user_id, $clone_id)) {
+                $this->set_flash_message('danger', 'The IOM selected for cloning is unavailable.');
+                redirect(page_url . 'Df_change_control/create');
+                return;
+            }
+
+            $clone_source = $candidate;
+            foreach ($this->change_model->get_change_request_departments($clone_id) as $department_action) {
+                $clone_department_ids[] = (int)$department_action['department_id'];
+            }
+            $clone_department_ids = array_values(array_unique(array_filter($clone_department_ids)));
+        }
+
         $data = array(
             'module_ready' => $this->change_model->module_ready(),
             'migration_file' => 'Database/df_change_control_001.sql',
             'df_options' => $this->change_model->get_df_options((int)$df_id),
             'department_options' => $this->change_model->get_department_options(),
             'selected_df_id' => (int)$df_id,
+            'clone_source' => $clone_source,
+            'clone_department_ids' => $clone_department_ids,
             'module_nav' => $this->get_module_navigation($user_id, 'create')
         );
 
@@ -90,7 +123,7 @@ class Df_change_control extends CI_Controller
 
         $this->form_validation->set_error_delimiters('<div style="color:red;">', '</div>');
         $this->form_validation->set_rules('df_id', 'DF', 'required|trim|integer');
-        $this->form_validation->set_rules('request_type', 'Request Type', 'required|trim');
+        $this->form_validation->set_rules('request_type', 'Request Type', 'required|trim|in_list[ECN,IOM,OTHERS]');
         $this->form_validation->set_rules('change_category', 'Change Category', 'required|trim');
         $this->form_validation->set_rules('priority', 'Priority', 'required|trim');
         $this->form_validation->set_rules('source_of_change', 'Source Of Change', 'required|trim');
@@ -125,7 +158,7 @@ class Df_change_control extends CI_Controller
             'impact_note' => trim((string)$this->input->post('impact_note')),
             'requested_from_department_id' => $this->get_current_department_id(),
             'attachment' => $attachment,
-            'status' => 'OPEN',
+            'status' => 'PENDING_APPROVAL',
             'created_by' => $user_id,
             'created_on' => $now
         );
@@ -147,8 +180,8 @@ class Df_change_control extends CI_Controller
                 'change_id' => $change_id,
                 'department_id' => (int)$department_id,
                 'department_head_id' => $department_head_id,
-                'status' => 'PENDING_HEAD_ACTION',
-                'notified_on' => $now
+                'status' => 'PENDING_APPROVAL',
+                'notified_on' => null
             );
             $this->db->insert('df_change_control_departments', $action_data);
             $action_id = $this->db->insert_id();
@@ -157,24 +190,24 @@ class Df_change_control extends CI_Controller
                 $head_user_ids[] = $department_head_id;
             }
 
-            $notification_note = 'Department notification created for department ID ' . $department_id . '.';
-            $this->change_model->add_history($change_id, $action_id, $user_id, 'REQUESTER', 'DEPARTMENT_NOTIFIED', $notification_note);
+            $notification_note = 'Department action awaiting Shubham Sir approval for department ID ' . $department_id . '.';
+            $this->change_model->add_history($change_id, $action_id, $user_id, 'REQUESTER', 'DEPARTMENT_APPROVAL_PENDING', $notification_note);
         }
 
         $this->change_model->add_history($change_id, 0, $user_id, 'REQUESTER', 'REQUEST_CREATED', trim((string)$this->input->post('change_summary')));
 
         $change = $this->change_model->get_change_request($change_id);
         $subject = 'New ' . $change['request_type'] . ' Request: ' . $change_no;
-        $notification_message = $change_no . ' is waiting for department head action.';
+        $notification_message = $change_no . ' is waiting for Shubham Sir approval.';
         $email_body = $this->build_change_email(
-            'A new DF change-control request has been created.',
+            'A new DF change-control request requires Shubham Sir approval before department action.',
             $change,
             array(),
-            '<p><strong>Department Heads Notified:</strong> ' . count($department_ids) . '</p>'
+            '<p><strong>Departments awaiting approval:</strong> ' . count($department_ids) . '</p>'
         );
 
-        $this->notify_users($head_user_ids, $subject, $notification_message, $email_body);
-        $this->notify_users(array($user_id), 'Request Recorded: ' . $change_no, 'Your change-control request ' . $change_no . ' has been created.', $email_body);
+        $this->notify_users(array(139), $subject, $notification_message, $email_body);
+        $this->notify_users(array($user_id), 'Request Recorded: ' . $change_no, 'Your change-control request ' . $change_no . ' is awaiting Shubham Sir approval.', $email_body);
 
         $this->db->trans_complete();
 
@@ -183,8 +216,53 @@ class Df_change_control extends CI_Controller
             redirect(page_url . 'Df_change_control/create/' . (int)$this->input->post('df_id'));
         }
 
-        $this->set_flash_message('success', 'DF change-control request created successfully with reference ' . $change_no . '.');
+        $this->set_flash_message('success', 'DF change-control request created successfully with reference ' . $change_no . '. Awaiting Shubham Sir approval.');
         redirect(page_url . 'Df_change_control/view/' . $change_id);
+    }
+
+    public function decide_approval($change_id = 0)
+    {
+        $user_id = $this->get_current_user_id();
+        if ($user_id !== 139 || $this->input->method(TRUE) !== 'POST') {
+            show_error('Only Shubham Sir can approve or reject change requests using this form.', 403);
+            return;
+        }
+        $token = (string)$this->session->userdata('change_approval_token');
+        if ($token === '' || !hash_equals($token, (string)$this->input->post('approval_token'))) {
+            show_error('Approval session expired. Reload the request and try again.', 403);
+            return;
+        }
+        $decision = strtoupper(trim((string)$this->input->post('decision')));
+        $remarks = trim((string)$this->input->post('approval_remarks'));
+        if (!in_array($decision, array('APPROVE', 'REJECT'), true) || ($decision === 'REJECT' && $remarks === '')) {
+            $this->set_flash_message('danger', 'Choose Approve or Reject. A rejection reason is required.');
+            redirect(page_url . 'Df_change_control/view/' . (int)$change_id);
+            return;
+        }
+        $this->db->trans_start();
+        $decided = $this->change_model->record_approval_decision((int)$change_id, $user_id, $decision, $remarks);
+        if ($decided) {
+            $change = $this->change_model->get_change_request((int)$change_id);
+            $message = $change['change_no'] . ($decision === 'APPROVE' ? ' approved by Shubham Sir.' : ' rejected by Shubham Sir.');
+            $body = $this->build_change_email($message, $change, array(), '<p>' . nl2br(htmlspecialchars($remarks, ENT_QUOTES, 'UTF-8')) . '</p>');
+            if ($decision === 'APPROVE') {
+                $heads = array();
+                foreach ($this->change_model->get_change_request_departments((int)$change_id) as $action) {
+                    $heads[] = (int)$action['department_head_id'];
+                }
+                $this->notify_users($heads, $message, $message . ' Department head action is now required.', $body);
+            }
+            $this->notify_users(array((int)$change['created_by']), $message, $message, $body);
+        }
+        $this->db->trans_complete();
+        if ($this->db->trans_status() === FALSE) {
+            $this->set_flash_message('danger', 'Unable to save the approval decision. Please try again.');
+        } elseif (!$decided) {
+            $this->set_flash_message('warning', 'This request is no longer awaiting approval. No changes were made.');
+        } else {
+            $this->set_flash_message('success', $message);
+        }
+        redirect(page_url . 'Df_change_control/view/' . (int)$change_id);
     }
 
     public function view($change_id = 0)
@@ -206,7 +284,7 @@ class Df_change_control extends CI_Controller
                 $this->deny_change_control_access(page_url . 'Df_change_control');
             }
             if ($this->can_raise_change_request($current_user_id)) {
-                $this->deny_change_control_access(page_url . 'Df_change_control/create');
+                $this->deny_change_control_access(page_url . 'Df_change_control');
             }
             $this->deny_change_control_access();
         }
@@ -225,6 +303,8 @@ class Df_change_control extends CI_Controller
             'actions' => $actions,
             'history' => $history,
             'member_map' => $member_map,
+            'attachment_history' => $this->change_model->get_attachment_history((int)$change_id),
+            'can_update_attachment' => $this->can_update_change_attachment($current_user_id, $change),
             'current_user_id' => $current_user_id,
             'is_admin' => $this->is_admin_user($current_user_id),
             'module_nav' => $this->get_module_navigation($current_user_id, 'view')
@@ -244,6 +324,11 @@ class Df_change_control extends CI_Controller
         if (empty($action)) {
             $this->set_flash_message('danger', 'Department action record not found.');
             redirect(page_url . 'Df_change_control');
+        }
+
+        if (!$this->change_model->allows_department_work($action['change_status'])) {
+            $this->deny_change_control_access(page_url . 'Df_change_control', 'This request has not been approved by Shubham Sir.');
+            return;
         }
 
         $current_user_id = $this->get_current_user_id();
@@ -347,6 +432,11 @@ class Df_change_control extends CI_Controller
             redirect(page_url . 'Df_change_control');
         }
 
+        if (!$this->change_model->allows_department_work($action['change_status'])) {
+            $this->deny_change_control_access(page_url . 'Df_change_control', 'This request has not been approved by Shubham Sir.');
+            return;
+        }
+
         $current_user_id = $this->get_current_user_id();
         if (!$this->is_admin_user($current_user_id) && (int)$action['assigned_user_id'] !== $current_user_id) {
             $this->set_flash_message('danger', 'You are not authorized to update this execution task.');
@@ -374,6 +464,11 @@ class Df_change_control extends CI_Controller
         if (empty($action)) {
             $this->set_flash_message('danger', 'Department communication thread was not found.');
             redirect(page_url . 'Df_change_control');
+        }
+
+        if (!$this->change_model->allows_department_work($action['change_status'])) {
+            $this->deny_change_control_access(page_url . 'Df_change_control', 'This request has not been approved by Shubham Sir.');
+            return;
         }
 
         $current_user_id = $this->get_current_user_id();
@@ -661,6 +756,10 @@ class Df_change_control extends CI_Controller
             return array('success' => false, 'message' => 'Department execution record not found.');
         }
 
+        if (!$this->change_model->allows_department_work($action['change_status'])) {
+            return array('success' => false, 'message' => 'This request has not been approved by Shubham Sir.');
+        }
+
         if (!in_array($execution_status, array('IN_PROGRESS', 'COMPLETED'), true) || $assignee_remarks === '') {
             return array('success' => false, 'message' => 'Please select a valid execution status and add remarks.');
         }
@@ -730,9 +829,53 @@ class Df_change_control extends CI_Controller
         return array('success' => true, 'message' => 'Execution status updated successfully.');
     }
 
-    private function upload_change_attachment($field_name)
+    // Documents, drawings and images only.  These files land under image_bank/,
+    // which the web server serves directly, so anything the server would execute
+    // must never be accepted here.
+    private function allowed_attachment_extensions()
     {
+        return array(
+            'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'rtf',
+            'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'tif', 'tiff',
+            'dwg', 'dxf', 'step', 'stp', 'igs', 'iges', 'zip', 'rar', '7z'
+        );
+    }
+
+    private function attachment_size_limit()
+    {
+        return 20 * 1024 * 1024;
+    }
+
+    /**
+     * Moves an uploaded supporting document into image_bank/df_change_control/.
+     * Returns the stored filename, or '' when there was no file or it was refused;
+     * $error is filled in only for a refusal, so callers can tell the two apart.
+     */
+    private function upload_change_attachment($field_name, &$error = null)
+    {
+        $error = '';
+
         if (empty($_FILES[$field_name]['name'])) {
+            return '';
+        }
+
+        $upload_error = isset($_FILES[$field_name]['error']) ? (int)$_FILES[$field_name]['error'] : UPLOAD_ERR_OK;
+        if ($upload_error !== UPLOAD_ERR_OK) {
+            $error = ($upload_error === UPLOAD_ERR_INI_SIZE || $upload_error === UPLOAD_ERR_FORM_SIZE)
+                ? 'That file is larger than this server accepts. Please upload a smaller file.'
+                : 'The file could not be read. Please try the upload again.';
+            return '';
+        }
+
+        if ((int)$_FILES[$field_name]['size'] > $this->attachment_size_limit()) {
+            $error = 'Please keep the document under 20 MB.';
+            return '';
+        }
+
+        $original_name = (string)$_FILES[$field_name]['name'];
+        $extension = strtolower((string)pathinfo($original_name, PATHINFO_EXTENSION));
+        if ($extension === '' || !in_array($extension, $this->allowed_attachment_extensions(), true)) {
+            $error = 'That file type is not accepted. Please upload a PDF, Office document, image, drawing or ZIP.';
             return '';
         }
 
@@ -741,25 +884,244 @@ class Df_change_control extends CI_Controller
             @mkdir($folder, 0775, true);
         }
 
-        $original_name = $_FILES[$field_name]['name'];
-        $extension = pathinfo($original_name, PATHINFO_EXTENSION);
-        $filename = 'df-change-' . time() . '-' . rand(1000, 9999);
-        if ($extension !== '') {
-            $filename .= '.' . strtolower($extension);
-        }
+        $filename = 'df-change-' . time() . '-' . rand(1000, 9999) . '.' . $extension;
 
         if (move_uploaded_file($_FILES[$field_name]['tmp_name'], $folder . $filename)) {
             return $filename;
         }
 
+        $error = 'The file could not be saved on the server. Please try again.';
         return '';
     }
 
-    private function notify_users($user_ids, $subject, $notification_message, $email_message)
+    /**
+     * Replaces the supporting document on a request that has already been raised.
+     * Only the person who raised it (or an admin) may do this; every version is
+     * kept, logged on the detail page, and mailed to the departments on the request
+     * with the new file attached.
+     */
+    public function update_attachment($change_id = 0)
+    {
+        $change_id = (int)$change_id;
+        $redirect_url = page_url . 'Df_change_control/view/' . $change_id;
+
+        if ($this->input->method(TRUE) !== 'POST') {
+            redirect($redirect_url);
+            return;
+        }
+
+        if (!$this->change_model->module_ready()) {
+            $this->set_flash_message('danger', 'DF Change Control tables are not ready. Please run the migration first.');
+            redirect(page_url . 'Df_change_control');
+            return;
+        }
+
+        $change = $this->change_model->get_change_request($change_id);
+        if (empty($change)) {
+            $this->set_flash_message('danger', 'Requested change-control record was not found.');
+            redirect(page_url . 'Df_change_control');
+            return;
+        }
+
+        $user_id = $this->get_current_user_id();
+        if (!$this->can_update_change_attachment($user_id, $change)) {
+            $this->deny_change_control_access($redirect_url, 'Only the person who raised this request can change its attachment.');
+            return;
+        }
+
+        $upload_error = '';
+        $previous_attachment = trim((string)$change['attachment']);
+        $original_name = isset($_FILES['attachment']['name']) ? (string)$_FILES['attachment']['name'] : '';
+        $file_size = isset($_FILES['attachment']['size']) ? (int)$_FILES['attachment']['size'] : 0;
+        $attachment = $this->upload_change_attachment('attachment', $upload_error);
+
+        if ($attachment === '') {
+            $this->set_flash_message('danger', $upload_error !== '' ? $upload_error : 'Please choose the document you want to upload.');
+            redirect($redirect_url);
+            return;
+        }
+
+        $change_reason = trim((string)$this->input->post('change_reason'));
+
+        $this->db->trans_start();
+
+        $this->db->where('id', $change_id)
+            ->update('df_change_control', array('attachment' => $attachment));
+
+        $version_no = $this->change_model->record_attachment_version(
+            $change_id, $attachment, $original_name, $file_size, $user_id, $change_reason
+        );
+
+        $history_note = $previous_attachment !== ''
+            ? 'Supporting document replaced' . ($original_name !== '' ? ' with ' . $original_name : '') . '.'
+            : 'Supporting document added' . ($original_name !== '' ? ': ' . $original_name : '') . '.';
+        if ($change_reason !== '') {
+            $history_note .= ' Reason: ' . $change_reason;
+        }
+        $this->change_model->add_history($change_id, 0, $user_id, 'REQUESTER', 'ATTACHMENT_UPDATED', $history_note);
+
+        $notified_count = $this->notify_attachment_change($change_id, $attachment, $original_name, $change_reason, $user_id, $version_no);
+        if ($version_no > 0) {
+            $this->change_model->set_attachment_notified_count($change_id, $version_no, $notified_count);
+        }
+
+        $this->db->trans_complete();
+
+        if ($this->db->trans_status() === FALSE) {
+            $this->set_flash_message('danger', 'The document was uploaded but could not be recorded. Please try again.');
+            redirect($redirect_url);
+            return;
+        }
+
+        $this->set_flash_message(
+            'success',
+            'Attachment updated' . ($version_no > 0 ? ' (version ' . $version_no . ')' : '') . '. '
+                . ($notified_count > 0
+                    ? $notified_count . ' department contact(s) have been emailed the new document.'
+                    : 'No department contact has an email address on record, so no email was sent.')
+        );
+        redirect($redirect_url);
+    }
+
+    private function can_update_change_attachment($user_id, $change)
+    {
+        $user_id = (int)$user_id;
+        if ($user_id <= 0 || empty($change)) {
+            return false;
+        }
+
+        return (int)$change['created_by'] === $user_id || $this->is_admin_user($user_id);
+    }
+
+    /**
+     * Mails the new document to everyone already carrying this request - each
+     * department head and assignee on it - plus the requester's own copy.  Returns
+     * how many people were queued so the page can say so.
+     */
+    private function notify_attachment_change($change_id, $attachment, $original_name, $change_reason, $user_id, $version_no)
+    {
+        $change = $this->change_model->get_change_request($change_id);
+        if (empty($change)) {
+            return 0;
+        }
+
+        $actions = $this->change_model->get_change_request_departments($change_id);
+        $recipient_ids = array();
+        $department_names = array();
+        foreach ($actions as $action) {
+            if (!empty($action['department_head_id'])) {
+                $recipient_ids[] = (int)$action['department_head_id'];
+            }
+            if (!empty($action['assigned_user_id'])) {
+                $recipient_ids[] = (int)$action['assigned_user_id'];
+            }
+            if (!empty($action['department'])) {
+                $department_names[] = ucwords(strtolower((string)$action['department']));
+            }
+        }
+
+        $recipient_ids = array_values(array_unique(array_filter($recipient_ids)));
+        $department_names = array_values(array_unique($department_names));
+
+        $uploaded_by = $this->get_current_user_name();
+        $extra_html = '<p><strong>Updated by:</strong> ' . htmlspecialchars($uploaded_by, ENT_QUOTES, 'UTF-8')
+            . ' on ' . date('d-M-Y h:i A')
+            . ($version_no > 0 ? ' (version ' . (int)$version_no . ')' : '') . '</p>';
+        if ($original_name !== '') {
+            $extra_html .= '<p><strong>Document:</strong> ' . htmlspecialchars($original_name, ENT_QUOTES, 'UTF-8') . '</p>';
+        }
+        if ($change_reason !== '') {
+            $extra_html .= '<p><strong>Reason for the change:</strong> ' . htmlspecialchars($change_reason, ENT_QUOTES, 'UTF-8') . '</p>';
+        }
+        if (!empty($department_names)) {
+            $extra_html .= '<p><strong>Departments on this request:</strong> ' . htmlspecialchars(implode(', ', $department_names), ENT_QUOTES, 'UTF-8') . '</p>';
+        }
+        $extra_html .= '<p>The new document is attached to this email and is also available on the request page. Please work to this version.</p>';
+
+        // Copied on every attachment notice: the person who uploaded it, so replies
+        // reach them directly, plus the standing management copies.
+        $uploader_email = $this->get_user_email($user_id);
+        $cc = array_merge(
+            $uploader_email !== '' ? array($uploader_email) : array(),
+            $this->attachment_notice_cc_emails()
+        );
+        $bcc = $this->attachment_notice_bcc_emails();
+
+        $subject = 'Updated Attachment: ' . $change['change_no'] . ' (' . $change['request_type'] . ')';
+        $notification_message = $change['change_no'] . ' has a new supporting document. Please review the latest version.';
+        $email_body = $this->build_change_email(
+            'The supporting document on this request has been updated. Please use the attached version.',
+            $change,
+            array(),
+            $extra_html
+        );
+
+        // Relative to UPLOADPATH - EmailProcessor resolves it from there.
+        $queue_attachment = 'df_change_control/' . $attachment;
+
+        $notified_count = $this->notify_users($recipient_ids, $subject, $notification_message, $email_body, $queue_attachment, $cc, $bcc);
+
+        // The requester gets their own confirmation, and is not counted as a
+        // department contact.  notify_users drops their address from the CC list of
+        // this one, since it is already the To.
+        if (!in_array((int)$user_id, $recipient_ids, true)) {
+            $this->notify_users(
+                array((int)$user_id),
+                'Attachment Updated: ' . $change['change_no'],
+                'You updated the supporting document on ' . $change['change_no'] . '.',
+                $email_body,
+                $queue_attachment,
+                $cc,
+                $bcc
+            );
+        }
+
+        return $notified_count;
+    }
+
+    // Standing copies on every attachment-change notice. Change them here and every
+    // attachment email follows; nothing else in the module is affected.
+    private function attachment_notice_cc_emails()
+    {
+        return array('shubham@shubhampack.com');
+    }
+
+    private function attachment_notice_bcc_emails()
+    {
+        return array('mangleshup@gmail.com');
+    }
+
+    private function get_user_email($user_id)
+    {
+        $row = $this->db->select('email')
+            ->from('system_users')
+            ->where('user_id', (int)$user_id)
+            ->limit(1)
+            ->get()
+            ->row_array();
+
+        return !empty($row['email']) ? trim((string)$row['email']) : '';
+    }
+
+    /**
+     * Queues an in-app notification for each user and, where an address is on
+     * record, an email.  $attachment is a path relative to UPLOADPATH (for example
+     * 'df_change_control/df-change-123.pdf'); EmailProcessor resolves it from
+     * there.  Returns how many people were actually emailed.
+     */
+    /**
+     * Queues an in-app notification for each user and, where an address is on
+     * record, an email.  $attachment is a path relative to UPLOADPATH (for example
+     * 'df_change_control/df-change-123.pdf'); EmailProcessor resolves it from
+     * there.  $cc / $bcc are address lists copied on every message queued by this
+     * call, minus whoever is already the To of that particular row.  Returns how
+     * many people were actually emailed.
+     */
+    private function notify_users($user_ids, $subject, $notification_message, $email_message, $attachment = '', $cc = array(), $bcc = array())
     {
         $user_ids = array_values(array_unique(array_filter(array_map('intval', (array)$user_ids))));
         if (empty($user_ids)) {
-            return;
+            return 0;
         }
 
         $users = $this->db->select('user_id, email')
@@ -769,6 +1131,11 @@ class Df_change_control extends CI_Controller
             ->get()
             ->result_array();
 
+        $cc = $this->clean_email_list($cc);
+        $bcc = $this->clean_email_list($bcc);
+        $supports_copies = $this->db->field_exists('cc_email', 'queue_emails');
+
+        $emailed = 0;
         foreach ($users as $user) {
             $this->db->insert('df_support_notifications', array(
                 'user_id' => (int)$user['user_id'],
@@ -777,17 +1144,58 @@ class Df_change_control extends CI_Controller
                 'created_at' => date('Y-m-d H:i:s')
             ));
 
-            if (trim((string)$user['email']) !== '') {
-                $this->db->insert('queue_emails', array(
-                    'to_email' => trim((string)$user['email']),
-                    'subject' => $subject,
-                    'message' => $email_message,
-                    'attachment' => '',
-                    'status' => 0,
-                    'created_at' => date('Y-m-d H:i:s')
-                ));
+            $to_email = trim((string)$user['email']);
+            if ($to_email === '') {
+                continue;
+            }
+
+            $queue_row = array(
+                'to_email' => $to_email,
+                'subject' => $subject,
+                'message' => $email_message,
+                'attachment' => (string)$attachment,
+                'status' => 0,
+                'created_at' => date('Y-m-d H:i:s')
+            );
+
+            // Falls back to a plain To-only row when Database/queue_emails_001_cc_bcc.sql
+            // has not been run yet, so code may be deployed before the migration.
+            if ($supports_copies) {
+                // Never copy someone on a message already addressed to them.
+                $row_cc = array_values(array_filter($cc, function ($address) use ($to_email) {
+                    return strcasecmp($address, $to_email) !== 0;
+                }));
+                $queue_row['cc_email'] = implode(',', $row_cc);
+                $queue_row['bcc_email'] = implode(',', $bcc);
+            }
+
+            $this->db->insert('queue_emails', $queue_row);
+            $emailed++;
+        }
+
+        return $emailed;
+    }
+
+    private function clean_email_list($addresses)
+    {
+        if (!is_array($addresses)) {
+            $addresses = explode(',', (string)$addresses);
+        }
+
+        $clean = array();
+        foreach ($addresses as $address) {
+            $address = trim((string)$address);
+            if ($address === '' || !filter_var($address, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+
+            $key = strtolower($address);
+            if (!isset($clean[$key])) {
+                $clean[$key] = $address;
             }
         }
+
+        return array_values($clean);
     }
 
     private function build_change_email($heading, $change, $action = array(), $extra_html = '')
@@ -928,6 +1336,10 @@ class Df_change_control extends CI_Controller
             'assigned_queue_count' => $assigned_queue_count,
             'can_view_dashboard' => $can_view_dashboard,
             'can_raise_request' => $can_raise_request,
+            // The overview URL is open to requesters as well, but it only lists their own
+            // requests - so the management links on it stay tied to $can_view_dashboard.
+            'can_open_overview' => $can_view_dashboard || $can_raise_request,
+            'requester_only_access' => !$can_view_dashboard && $can_raise_request,
             'assigned_only_access' => !$has_explicit_dashboard_access && !$can_raise_request && !$show_hod_menu && $assigned_queue_count > 0
         );
     }
@@ -1075,6 +1487,14 @@ class Df_change_control extends CI_Controller
         $change_id = (int)$change_id;
         if ($user_id <= 0 || $change_id <= 0) {
             return false;
+        }
+
+        $change = $this->change_model->get_change_request($change_id);
+        if (empty($change)) {
+            return false;
+        }
+        if (!$this->change_model->allows_department_work($change['status'])) {
+            return $user_id === 139 || (int)$change['created_by'] === $user_id;
         }
 
         if ($this->is_admin_user($user_id) || $this->can_access_change_dashboard($user_id) || $this->can_raise_change_request($user_id)) {

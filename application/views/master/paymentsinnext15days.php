@@ -1,4 +1,6 @@
 <?php
+$this->load->helper('df_delay');
+$currentDfDelays = df_current_delay_counts($this->db);
 $CIA =& get_instance();
 $CIA->load->model('Task_model');
 
@@ -146,7 +148,7 @@ if ($main_q->num_rows() > 0) {
 
         $show = 1;
         if ($reportid != '') {
-            $show = ($delayedPercentage > 0) ? 1 : 0;
+            $show = !empty($currentDfDelays[(int)$rows->id]) ? 1 : 0;
         }
 
         if ($show == 1) {
@@ -173,7 +175,7 @@ if ($main_q->num_rows() > 0) {
                 $totalCriticalReports++;
             }
 
-            if ($delayedPercentage > 0) {
+            if (!empty($currentDfDelays[(int)$rows->id])) {
                 $totalDelayedReports++;
             }
 
@@ -186,6 +188,7 @@ if ($main_q->num_rows() > 0) {
 
             $rowsData[] = array(
                 'id' => $rows->id,
+                'has_current_delay' => !empty($currentDfDelays[(int)$rows->id]),
                 'df_no' => $rows->df_no,
                 'df_upload' => $rows->df_upload,
                 'po_date' => (!empty($rows->podate) && $rows->podate != '0000-00-00') ? date('d-m-Y', strtotime($rows->podate)) : '',
@@ -673,7 +676,7 @@ $avgProgress = ($totalReports > 0) ? round($totalProgress / $totalReports) : 0;
                 <tbody>
                     <?php if (!empty($rowsData)) { ?>
                         <?php $m = 1; foreach ($rowsData as $row) { 
-                            $delayStatus = ($row['delayed_percentage'] > 0) ? 'Delayed' : 'On Time';
+                            $delayStatus = (!empty($row['has_current_delay'])) ? 'Delayed' : 'On Time';
 
                             $progressClass = 'progress-bar-success';
                             if ($row['percentage'] < 50) {
@@ -799,7 +802,7 @@ $avgProgress = ($totalReports > 0) ? round($totalProgress / $totalReports) : 0;
                                         </a>
                                     <?php } ?>
 
-                                    <a href="<?php echo page_url;?>Task/dfgantchartNew/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
+                                    <a href="<?php echo page_url;?>gantt/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
                                         <i class="fa fa-bar-chart"></i> Gantt
                                     </a>
                                 </td>

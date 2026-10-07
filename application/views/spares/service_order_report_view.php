@@ -4,7 +4,7 @@ $format_currency = function ($currency, $amount, $decimals = 2) {
     $symbol_map = [
         'INR' => '₹ ',
         'USD' => '$ ',
-        'EUR' => 'EUR ',
+        'EUR' => '€ ',
         'GBP' => 'GBP ',
         'AED' => 'AED ',
     ];

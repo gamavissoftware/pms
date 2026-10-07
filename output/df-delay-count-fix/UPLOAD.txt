@@ -1,0 +1,20 @@
+DF delay count fix
+
+Back up the matching server files before replacement. Upload the application folder contents to the same application paths in your PMS installation. Upload application/helpers/df_delay_helper.php first; the updated views require it. No database migration is needed.
+
+Definition: running, non-hold DFs with at least one status 0 or 2 task whose valid due date is before today. Completed-late task history does not mark a currently running DF delayed. Existing page visibility and report-specific selection remain in place, so scoped page totals may differ.
+
+Files:
+application/helpers/df_delay_helper.php
+application/controllers/Dashboard.php
+application/models/Dashboard_model.php
+application/views/dashboard/newdesigndashboard.php
+application/views/newdesigndashboard.php
+application/views/master/dfreleasedashboard.php
+application/views/master/fatinnext15days.php
+application/views/master/dispatchinnext15days.php
+application/views/master/machinereadyonfloor.php
+application/views/master/penalitydf.php
+application/views/master/paymentsinnext15days.php
+
+After upload, refresh Dashboard and Task/dfreleasedashboard. Check both all-running and delayed-only views. For the same visible scope the delayed KPI and delayed list should agree.

@@ -6,6 +6,7 @@ $engineers = isset($engineers) && is_array($engineers) ? $engineers : [];
 $active_status_slug = !empty($active_status_slug) ? $active_status_slug : '';
 $active_engineer_id = !empty($active_engineer_id) ? (int) $active_engineer_id : 0;
 $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_assignment_overview_events';
+$deployment_types = isset($deployment_types) && is_array($deployment_types) ? $deployment_types : [];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -476,7 +477,10 @@ $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_a
                         <p class="page-copy">Track Service and Automation engineer deployments in one clean calendar. Click any visit to open a compact detail view.</p>
                     </div>
                     <div class="page-tools">
-                        <span class="page-mode-tag"><i class="fa fa-calendar-check-o"></i> Read-only view</span>
+                        <a href="<?php echo page_url; ?>ServiceLeads/engineer_performance_report" class="btn btn-primary">
+                            <i class="fa fa-line-chart"></i> Performance Report
+                        </a>
+                        <span class="page-mode-tag"><i class="fa fa-pencil-square-o"></i> Controlled visit changes</span>
                     </div>
                 </div>
 
@@ -524,6 +528,7 @@ $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_a
                 </div>
 
                 <div class="calendar-note">Click any assignment on the calendar to open visit details.</div>
+                <div id="assignmentNotice" class="alert" style="display:none; margin-bottom:14px;"></div>
                 <div id="assignmentCalendar"></div>
             </div>
         </div>
@@ -547,6 +552,12 @@ $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_a
                             <a href="#" id="assignmentVisitInfoPdfBtn" class="btn btn-danger waves-effect waves-light" target="_blank">
                                 <i class="fa fa-file-pdf-o"></i> View PDF
                             </a>
+                            <a href="#" id="assignmentVisitInfoDetailBtn" class="btn btn-default waves-effect waves-light">
+                                <i class="fa fa-history"></i> Visit History
+                            </a>
+                            <button type="button" id="assignmentVisitModifyBtn" class="btn btn-primary waves-effect waves-light">
+                                <i class="fa fa-pencil"></i> Modify Visit
+                            </button>
                         </div>
                     </div>
 
@@ -566,7 +577,7 @@ $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_a
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <th>Opportunity date</th>
+                                        <th>Order / DF date</th>
                                         <td id="assignmentVisitInfoOpDate">Not available</td>
                                         <th>Visit reference</th>
                                         <td id="assignmentVisitInfoVisitRef">Not available</td>
@@ -625,6 +636,56 @@ $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_a
         </div>
     </div>
 
+    <div id="assignmentModifyVisitModal" class="modal fade visit-info-modal" role="dialog">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form id="assignmentModifyVisitForm">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" style="color: #5e7087; opacity: 0.9;">&times;</button>
+                        <h4 class="modal-title"><i class="fa fa-pencil-square-o"></i> Modify Visit</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div id="assignmentModifyVisitFeedback" class="alert" style="display:none;"></div>
+                        <input type="hidden" name="visit_id" id="assignmentModifyVisitId">
+                        <div class="row">
+                            <div class="col-md-6 form-group">
+                                <label for="assignmentModifyEngineer">Assign Engineer *</label>
+                                <select name="engineer_id" id="assignmentModifyEngineer" class="form-control" required></select>
+                            </div>
+                            <div class="col-md-6 form-group">
+                                <label for="assignmentModifyType">Visit Type *</label>
+                                <select name="visit_type" id="assignmentModifyType" class="form-control" required></select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 form-group">
+                                <label for="assignmentModifyStartDate">Start Date *</label>
+                                <input type="date" name="start_date" id="assignmentModifyStartDate" class="form-control" required>
+                            </div>
+                            <div class="col-md-6 form-group">
+                                <label for="assignmentModifyEndDate">End Date *</label>
+                                <input type="date" name="end_date" id="assignmentModifyEndDate" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="assignmentModifyPlannerRemarks">Planner Notes</label>
+                            <textarea name="planner_remarks" id="assignmentModifyPlannerRemarks" class="form-control" rows="3" maxlength="5000" placeholder="Current planning notes for this visit"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="assignmentModifyChangeRemarks">Modification Remarks <span class="text-danger">*</span></label>
+                            <textarea name="change_remarks" id="assignmentModifyChangeRemarks" class="form-control" rows="3" maxlength="5000" required placeholder="Mandatory: state why this visit is being modified."></textarea>
+                            <p class="help-block">The old and new values, this remark, your name, and the timestamp are saved in the visit history.</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Cancel</button>
+                        <button type="submit" id="assignmentModifyVisitSaveBtn" class="btn btn-primary waves-effect waves-light"><i class="fa fa-save"></i> Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="<?php echo assets_url; ?>js/jquery.min.js"></script>
     <script src="<?php echo assets_url; ?>js/bootstrap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
@@ -632,6 +693,20 @@ $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_a
 
     <script>
         $(document).ready(function() {
+            var assignmentEngineers = <?php echo json_encode(array_map(function ($engineer) {
+                return [
+                    'id' => (int) $engineer->user_id,
+                    'name' => trim((string) $engineer->first_name . ' ' . (string) $engineer->last_name),
+                ];
+            }, $engineers), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+            var assignmentVisitTypes = <?php echo json_encode(array_map(function ($type) {
+                return [
+                    'value' => (string) $type->deployment_type_value,
+                    'label' => (string) $type->deployment_type_label,
+                ];
+            }, $deployment_types), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+            var activeVisitProps = null;
+
             function escapeHtml(value) {
                 return $('<div>').text(value || '').html();
             }
@@ -716,9 +791,48 @@ $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_a
                 $('#assignmentVisitInfoRemarks').html(formatMultiline(props.remarks, 'No internal notes shared.'));
                 $('#assignmentVisitInfoCompletionNotes').html(formatMultiline(props.completion_notes, 'No completion notes yet.'));
                 $('#assignmentVisitInfoPdfBtn').attr('href', props.pdf_url || '#');
+                $('#assignmentVisitInfoDetailBtn').attr('href', props.detail_url || '#');
+                activeVisitProps = props;
+                var isLocked = ['completed', 'cancelled'].indexOf(String(props.status_slug || '').toLowerCase()) !== -1;
+                $('#assignmentVisitModifyBtn').toggle(!isLocked);
 
                 $('#assignmentVisitInfoModal').modal('show');
             }
+
+            function populateModifyVisitOptions(props) {
+                var engineerOptions = '<option value="">Select engineer</option>';
+                $.each(assignmentEngineers, function(_, engineer) {
+                    engineerOptions += '<option value="' + engineer.id + '">' + escapeHtml(engineer.name) + '</option>';
+                });
+                $('#assignmentModifyEngineer').html(engineerOptions).val(String(props.engineer_id || ''));
+
+                var typeOptions = '<option value="">Select visit type</option>';
+                var hasCurrentType = false;
+                $.each(assignmentVisitTypes, function(_, type) {
+                    if (String(type.value).toLowerCase() === String(props.visit_type || '').toLowerCase()) {
+                        hasCurrentType = true;
+                    }
+                    typeOptions += '<option value="' + escapeHtml(type.value) + '">' + escapeHtml(type.label) + '</option>';
+                });
+                if (!hasCurrentType && $.trim(props.visit_type || '') !== '') {
+                    typeOptions += '<option value="' + escapeHtml(props.visit_type) + '">' + escapeHtml(props.visit_type) + '</option>';
+                }
+                $('#assignmentModifyType').html(typeOptions).val(props.visit_type || '');
+            }
+
+            $('#assignmentVisitModifyBtn').on('click', function() {
+                if (!activeVisitProps || !activeVisitProps.visit_id) {
+                    return;
+                }
+                populateModifyVisitOptions(activeVisitProps);
+                $('#assignmentModifyVisitId').val(activeVisitProps.visit_id);
+                $('#assignmentModifyStartDate').val(activeVisitProps.start_date || '');
+                $('#assignmentModifyEndDate').val(activeVisitProps.end_date || '');
+                $('#assignmentModifyPlannerRemarks').val(activeVisitProps.remarks || '');
+                $('#assignmentModifyChangeRemarks').val('');
+                $('#assignmentModifyVisitFeedback').hide().removeClass('alert-danger alert-success').text('');
+                $('#assignmentModifyVisitModal').modal('show');
+            });
 
             $('.overview-select').select2({
                 width: '100%'
@@ -756,6 +870,33 @@ $events_url = !empty($events_url) ? $events_url : page_url . 'ServiceLeads/get_a
                 }
             });
             calendar.render();
+
+            $('#assignmentModifyVisitForm').on('submit', function(event) {
+                event.preventDefault();
+                var $form = $(this);
+                var $saveButton = $('#assignmentModifyVisitSaveBtn');
+                var $feedback = $('#assignmentModifyVisitFeedback');
+                if ($.trim($('#assignmentModifyChangeRemarks').val()) === '') {
+                    $feedback.removeClass('alert-success').addClass('alert-danger').text('Modification remarks are mandatory.').show();
+                    return;
+                }
+                $saveButton.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Saving...');
+                $.post('<?php echo page_url; ?>ServiceLeads/modify_visit_assignment', $form.serialize(), function(response) {
+                    if (!response || !response.status) {
+                        $feedback.removeClass('alert-success').addClass('alert-danger').text(response && response.message ? response.message : 'Unable to modify the visit.').show();
+                        return;
+                    }
+                    $('#assignmentModifyVisitModal').modal('hide');
+                    $('#assignmentVisitInfoModal').modal('hide');
+                    $('#assignmentNotice').removeClass('alert-danger').addClass('alert-success').text(response.message).show();
+                    calendar.refetchEvents();
+                }, 'json').fail(function(xhr) {
+                    var response = xhr.responseJSON || {};
+                    $feedback.removeClass('alert-success').addClass('alert-danger').text(response.message || 'Unable to modify the visit.').show();
+                }).always(function() {
+                    $saveButton.prop('disabled', false).html('<i class="fa fa-save"></i> Save Changes');
+                });
+            });
         });
     </script>
 </body>

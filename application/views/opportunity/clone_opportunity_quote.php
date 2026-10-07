@@ -726,6 +726,7 @@ $kldimage=$this->salescrm->get_quotation_machine_kld_image($record_id);
                                                 <option value="Soenoid Type - Electrical" <?php if ($non_viscous_option == 'Soenoid Type - Electrical' || $non_viscous_option == 'Solenoid Filling') { ?> selected <?php } ?>>Solenoid Filling</option>
                                                 <option value="Pnuematic" <?php if ($non_viscous_option == 'Pnuematic') { ?> selected <?php } ?>>Pnuematic</option>
                                                 <option value="flowmeter" <?php if ($non_viscous_option == 'flowmeter') { ?> selected <?php } ?>>flowmeter</option>
+                                                <option value="Peristaltic Pump" <?php if ($non_viscous_option == 'Peristaltic Pump') { ?> selected <?php } ?>>Peristaltic Pump</option>
                                             </select>
                                         </div>
                                         <!---------Non-Viscous--------->
@@ -2563,7 +2564,6 @@ $instruments=$this->salescrm->getProductName($desc);
     <select class="form-control  moreLineItems" name="techdescriptioninfo[]" id="techdescriptioninfo0">
         <option value="">Select Option</option>
         <?php $q = $this->db->select('id, instruments_name')->from('presto_instruments')->where('status',1)->where('type!=',0)->order_by('instruments_name','asc')->get(); if($q->num_rows()>0){ foreach($q->result() as $row){?>
-
             <option value="<?php echo $row->id;?>"><?php echo $row->instruments_name;?></option>
         <?php } } ?>
         

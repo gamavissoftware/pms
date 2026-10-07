@@ -4,6 +4,8 @@ defined('BASEPATH') or exit('No direct script access allowed');
 class Spares_execution_model extends CI_Model
 {
     const SPARES_EXECUTION_BUSINESS_LOC_ID = 2;
+    const SPARES_MODULE_NAME = 'CRM FOR SPARES DEPARTMENT';
+    const SPARES_EXECUTION_MRP_SUBMODULE = 'SPARES EXECUTION PPC MRP SHORTAGES';
 
     private function apply_scoped_department_filter($department_alias, $entity_department_column = null)
     {
@@ -40,10 +42,56 @@ class Spares_execution_model extends CI_Model
     public function get_workflow_types()
     {
         return array(
-            'IN_STOCK' => 'In Stock',
-            'STANDARD' => 'Standard Procurement',
-            'CUSTOM' => 'Custom Production',
+            'CONSUMABLE' => 'Consumable',
+            'CRITICAL' => 'Critical',
+            'CONS_CRITICAL' => 'Consumable + Critical',
+            'CUSTOM_CHANGEOVER' => 'Custom Engg - Changeover',
+            'CUSTOM_SPEED_UPGRADATION' => 'Custom Engg - Speed Upgradation',
+            'IN_STOCK' => 'Legacy - In Stock',
+            'STANDARD' => 'Legacy - Standard Procurement',
+            'CUSTOM' => 'Legacy - Custom Production',
         );
+    }
+
+    public function is_valid_workflow_type($workflow_type)
+    {
+        $workflows = $this->get_workflow_types();
+        return isset($workflows[$workflow_type]);
+    }
+
+    public function get_quotation_workflow_types()
+    {
+        $workflows = $this->get_workflow_types();
+        return array(
+            'CONSUMABLE' => $workflows['CONSUMABLE'],
+            'CRITICAL' => $workflows['CRITICAL'],
+            'CONS_CRITICAL' => $workflows['CONS_CRITICAL'],
+            'CUSTOM_CHANGEOVER' => $workflows['CUSTOM_CHANGEOVER'],
+            'CUSTOM_SPEED_UPGRADATION' => $workflows['CUSTOM_SPEED_UPGRADATION'],
+        );
+    }
+
+    public function map_quote_fields_to_workflow($quotation_type, $custom_engg_type = '', $execution_workflow_type = '')
+    {
+        $execution_workflow_type = strtoupper(trim((string) $execution_workflow_type));
+        if ($execution_workflow_type !== '' && $this->is_valid_workflow_type($execution_workflow_type)) {
+            return $execution_workflow_type;
+        }
+
+        $quotation_type = strtoupper(trim((string) $quotation_type));
+        $custom_engg_type = strtoupper(trim((string) $custom_engg_type));
+
+        if ($quotation_type === 'CUSTOM_ENGG') {
+            return $custom_engg_type === 'SPEED_UPGRADATION'
+                ? 'CUSTOM_SPEED_UPGRADATION'
+                : 'CUSTOM_CHANGEOVER';
+        }
+
+        if (in_array($quotation_type, array('CONSUMABLE', 'CRITICAL', 'CONS_CRITICAL'), true)) {
+            return $quotation_type;
+        }
+
+        return 'CONSUMABLE';
     }
 
     public function get_departments()
@@ -254,6 +302,24 @@ class Spares_execution_model extends CI_Model
 
     public function get_order_snapshot($order_id)
     {
+        $quote_select = '';
+        if (
+            $this->db->table_exists('quotations')
+            && $this->db->field_exists('quotation_type', 'quotations')
+            && $this->db->field_exists('custom_engg_type', 'quotations')
+            && $this->db->field_exists('dispatch_mode', 'quotations')
+            && $this->db->field_exists('execution_workflow_type', 'quotations')
+        ) {
+            $quote_select = ",
+                q.quotation_id as latest_quotation_id,
+                q.quotation_no as latest_quotation_no,
+                q.quotation_type,
+                q.custom_engg_type,
+                q.dispatch_mode,
+                q.execution_workflow_type
+            ";
+        }
+
         return $this->db
             ->select("
                 so.order_id,
@@ -272,12 +338,14 @@ class Spares_execution_model extends CI_Model
                 m.title as marketing_title,
                 m.first_name as marketing_first_name,
                 m.last_name as marketing_last_name
+                {$quote_select}
             ")
             ->from('spares_orders so')
             ->join('opportunities o', 'o.opportunity_id = so.opportunity_id', 'left')
             ->join('spares_customers c', 'c.customer_id = so.customer_id', 'left')
             ->join('purchase_orders po', 'po.po_id = so.po_id', 'left')
             ->join('system_users m', 'm.user_id = so.marketing_person_id', 'left')
+            ->join('quotations q', 'q.quotation_id = (SELECT q2.quotation_id FROM quotations q2 WHERE q2.opportunity_id = so.opportunity_id ORDER BY q2.quotation_id DESC LIMIT 1)', 'left', false)
             ->where('so.order_id', (int) $order_id)
             ->get()
             ->row();
@@ -297,6 +365,773 @@ class Spares_execution_model extends CI_Model
             ->where('execution_order_id', (int) $execution_order_id)
             ->get('spares_execution_orders')
             ->row();
+    }
+
+    public function get_sf_form_by_order($order_id)
+    {
+        if (!$this->db->table_exists('spares_execution_sf_forms')) {
+            return null;
+        }
+
+        return $this->db
+            ->where('order_id', (int) $order_id)
+            ->get('spares_execution_sf_forms')
+            ->row();
+    }
+
+    public function get_sf_form_items($sf_form_id)
+    {
+        if (!$this->db->table_exists('spares_execution_sf_items')) {
+            return array();
+        }
+
+        return $this->db
+            ->where('sf_form_id', (int) $sf_form_id)
+            ->order_by('line_no', 'ASC')
+            ->get('spares_execution_sf_items')
+            ->result();
+    }
+
+    public function get_mrp_report_orders($limit = 200, $filters = array())
+    {
+        if (!$this->db->table_exists('spares_execution_sf_forms')) {
+            return array();
+        }
+
+        $latest_run_subquery = "
+            SELECT r.*
+            FROM spares_execution_mrp_runs r
+            INNER JOIN (
+                SELECT order_id, MAX(mrp_run_id) as latest_mrp_run_id
+                FROM spares_execution_mrp_runs
+                GROUP BY order_id
+            ) lr ON lr.latest_mrp_run_id = r.mrp_run_id
+        ";
+
+        $this->db
+            ->select("
+                sf.sf_form_id,
+                sf.order_id,
+                sf.execution_order_id,
+                sf.sf_no,
+                sf.release_date,
+                sf.released_at,
+                sf.form_status,
+                eo.workflow_type,
+                eo.commit_date,
+                eo.priority,
+                eo.execution_status,
+                so.order_value,
+                o.op_no,
+                c.company_name,
+                po.po_no
+            ", false)
+            ->from('spares_execution_sf_forms sf')
+            ->join('spares_execution_orders eo', 'eo.execution_order_id = sf.execution_order_id', 'left')
+            ->join('spares_orders so', 'so.order_id = sf.order_id', 'left')
+            ->join('opportunities o', 'o.opportunity_id = so.opportunity_id', 'left')
+            ->join('spares_customers c', 'c.customer_id = so.customer_id', 'left')
+            ->join('purchase_orders po', 'po.po_id = so.po_id', 'left');
+
+        if ($this->db->table_exists('spares_execution_mrp_runs')) {
+            $this->db->select('mr.mrp_run_id, mr.run_at as latest_mrp_run_at, mr.total_items, mr.shortage_items, mr.missing_master_items, mr.total_shortage_qty', false);
+            $this->db->join('(' . $latest_run_subquery . ') mr', 'mr.order_id = sf.order_id', 'left', false);
+        } else {
+            $this->db->select('NULL as mrp_run_id, NULL as latest_mrp_run_at, 0 as total_items, 0 as shortage_items, 0 as missing_master_items, 0 as total_shortage_qty', false);
+        }
+
+        if (!empty($filters['workflow_type']) && $this->is_valid_workflow_type($filters['workflow_type'])) {
+            $this->db->where('eo.workflow_type', $filters['workflow_type']);
+        }
+
+        if (!empty($filters['search'])) {
+            $search = trim((string) $filters['search']);
+            $this->db->group_start()
+                ->like('c.company_name', $search)
+                ->or_like('o.op_no', $search)
+                ->or_like('po.po_no', $search)
+                ->or_like('sf.sf_no', $search)
+                ->or_like('sf.order_id', $search)
+            ->group_end();
+        }
+
+        $mrp_status = !empty($filters['mrp_status']) ? $filters['mrp_status'] : 'all';
+        if ($this->db->table_exists('spares_execution_mrp_runs')) {
+            if ($mrp_status === 'pending') {
+                $this->db->where('mr.mrp_run_id IS NULL', null, false);
+            } elseif ($mrp_status === 'shortage') {
+                $this->db->where('mr.shortage_items >', 0);
+            } elseif ($mrp_status === 'available') {
+                $this->db->where('mr.mrp_run_id IS NOT NULL', null, false);
+                $this->db->where('COALESCE(mr.shortage_items, 0) = 0', null, false);
+                $this->db->where('COALESCE(mr.missing_master_items, 0) = 0', null, false);
+            } elseif ($mrp_status === 'missing_master') {
+                $this->db->where('mr.missing_master_items >', 0);
+            }
+        } elseif ($mrp_status !== 'all' && $mrp_status !== 'pending') {
+            $this->db->where('1 = 0', null, false);
+        }
+
+        $this->db->where('sf.form_status', 'Released');
+
+        if ($this->db->table_exists('spares_execution_mrp_runs')) {
+            $this->db->order_by('mr.mrp_run_id IS NULL', 'DESC', false);
+        }
+
+        return $this->db
+            ->order_by('sf.released_at', 'DESC')
+            ->order_by('sf.release_date', 'DESC')
+            ->limit((int) $limit)
+            ->get()
+            ->result();
+    }
+
+    public function get_department_mrp_queue($department_id, $limit = 25)
+    {
+        if (!$this->db->table_exists('spares_execution_sf_forms')) {
+            return array();
+        }
+
+        $latest_run_subquery = "
+            SELECT r.*
+            FROM spares_execution_mrp_runs r
+            INNER JOIN (
+                SELECT order_id, MAX(mrp_run_id) as latest_mrp_run_id
+                FROM spares_execution_mrp_runs
+                GROUP BY order_id
+            ) lr ON lr.latest_mrp_run_id = r.mrp_run_id
+        ";
+
+        $this->db
+            ->select("
+                sf.sf_form_id,
+                sf.order_id,
+                sf.execution_order_id,
+                sf.sf_no,
+                sf.release_date,
+                sf.released_at,
+                sf.form_status,
+                eo.workflow_type,
+                eo.commit_date,
+                eo.priority,
+                eo.execution_status,
+                so.order_value,
+                o.op_no,
+                c.company_name,
+                po.po_no,
+                run_task.execution_task_id as run_mrp_task_id,
+                run_task.task_status as run_mrp_task_status,
+                run_task.planned_end_date as run_mrp_due_date,
+                shortage_task.execution_task_id as shortage_task_id,
+                shortage_task.task_status as shortage_task_status,
+                shortage_task.planned_end_date as shortage_due_date
+            ", false)
+            ->from('spares_execution_sf_forms sf')
+            ->join('spares_execution_orders eo', 'eo.execution_order_id = sf.execution_order_id', 'inner')
+            ->join('spares_orders so', 'so.order_id = sf.order_id', 'left')
+            ->join('opportunities o', 'o.opportunity_id = so.opportunity_id', 'left')
+            ->join('spares_customers c', 'c.customer_id = so.customer_id', 'left')
+            ->join('purchase_orders po', 'po.po_id = so.po_id', 'left')
+            ->join('spares_execution_tasks run_task', "run_task.execution_order_id = sf.execution_order_id AND run_task.task_code = 'RUN_MRP' AND run_task.department_id = " . (int) $department_id, 'left', false)
+            ->join('spares_execution_tasks shortage_task', "shortage_task.execution_order_id = sf.execution_order_id AND shortage_task.task_code = 'SHORTAGE_REPORT' AND shortage_task.department_id = " . (int) $department_id, 'left', false);
+
+        $has_mrp_runs_table = $this->db->table_exists('spares_execution_mrp_runs');
+
+        if ($has_mrp_runs_table) {
+            $this->db->select('mr.mrp_run_id, mr.run_at as latest_mrp_run_at, mr.total_items, mr.shortage_items, mr.missing_master_items, mr.total_shortage_qty', false);
+            $this->db->join('(' . $latest_run_subquery . ') mr', 'mr.order_id = sf.order_id', 'left', false);
+        } else {
+            $this->db->select('NULL as mrp_run_id, NULL as latest_mrp_run_at, 0 as total_items, 0 as shortage_items, 0 as missing_master_items, 0 as total_shortage_qty', false);
+        }
+
+        $this->db
+            ->where('sf.form_status', 'Released')
+            ->group_start()
+                ->where('run_task.execution_task_id IS NOT NULL', null, false)
+                ->or_where('shortage_task.execution_task_id IS NOT NULL', null, false)
+            ->group_end()
+            ->order_by('run_task.planned_end_date', 'ASC');
+
+        if ($has_mrp_runs_table) {
+            $this->db
+                ->order_by('mr.mrp_run_id IS NULL', 'DESC', false)
+                ->order_by('mr.shortage_items', 'DESC', false);
+        }
+
+        return $this->db
+            ->order_by('sf.released_at', 'DESC')
+            ->limit((int) $limit)
+            ->get()
+            ->result();
+    }
+
+    public function department_has_mrp_tasks($department_id)
+    {
+        return (int) $this->db
+            ->from('spares_execution_tasks')
+            ->where('department_id', (int) $department_id)
+            ->where_in('task_code', array('RUN_MRP', 'SHORTAGE_REPORT'))
+            ->limit(1)
+            ->count_all_results() > 0;
+    }
+
+    public function get_latest_mrp_run($order_id)
+    {
+        if (!$this->db->table_exists('spares_execution_mrp_runs')) {
+            return null;
+        }
+
+        return $this->db
+            ->where('order_id', (int) $order_id)
+            ->order_by('mrp_run_id', 'DESC')
+            ->limit(1)
+            ->get('spares_execution_mrp_runs')
+            ->row();
+    }
+
+    public function get_mrp_run_items($mrp_run_id)
+    {
+        if (!$this->db->table_exists('spares_execution_mrp_items')) {
+            return array();
+        }
+
+        return $this->db
+            ->where('mrp_run_id', (int) $mrp_run_id)
+            ->order_by('line_no', 'ASC')
+            ->get('spares_execution_mrp_items')
+            ->result();
+    }
+
+    public function build_mrp_shortage_preview($order_id)
+    {
+        $sf_form = $this->get_sf_form_by_order((int) $order_id);
+        if (!$sf_form) {
+            return $this->empty_mrp_preview();
+        }
+
+        $sf_items = $this->get_sf_form_items((int) $sf_form->sf_form_id);
+        $part_map = $this->get_spares_inventory_map_for_sf_items($sf_items);
+        $rows = array();
+        $summary = array(
+            'total_items' => 0,
+            'shortage_items' => 0,
+            'missing_master_items' => 0,
+            'total_required_qty' => 0,
+            'total_available_qty' => 0,
+            'total_shortage_qty' => 0,
+        );
+
+        foreach ($sf_items as $item) {
+            $part_no = trim((string) $item->part_no_erp);
+            $part_key = strtolower($part_no);
+            $part = $part_key !== '' && isset($part_map[$part_key]) ? $part_map[$part_key] : null;
+            $required_qty = (float) $item->quantity;
+            $available_qty = $part ? (float) $part->available_qty : 0;
+            $shortage_qty = max(0, $required_qty - $available_qty);
+            $shortage_status = !$part ? 'Not In Master' : ($shortage_qty > 0 ? 'Shortage' : 'Available');
+
+            $summary['total_items']++;
+            $summary['total_required_qty'] += $required_qty;
+            $summary['total_available_qty'] += $available_qty;
+            $summary['total_shortage_qty'] += $shortage_qty;
+            if ($shortage_qty > 0) {
+                $summary['shortage_items']++;
+            }
+            if (!$part) {
+                $summary['missing_master_items']++;
+            }
+
+            $rows[] = (object) array(
+                'sf_item_id' => (int) $item->sf_item_id,
+                'line_no' => (int) $item->line_no,
+                'item_description' => $item->item_description,
+                'part_no_erp' => $part_no,
+                'spare_part_id' => $part ? (int) $part->id : null,
+                'spare_part_code' => $part ? $part->code : '',
+                'required_qty' => $required_qty,
+                'available_qty' => $available_qty,
+                'shortage_qty' => $shortage_qty,
+                'shortage_status' => $shortage_status,
+            );
+        }
+
+        return array(
+            'items' => $rows,
+            'summary' => (object) $summary,
+        );
+    }
+
+    public function save_mrp_run($order_id, $user_id)
+    {
+        if (!$this->db->table_exists('spares_execution_mrp_runs') || !$this->db->table_exists('spares_execution_mrp_items')) {
+            return false;
+        }
+
+        $sf_form = $this->get_sf_form_by_order((int) $order_id);
+        if (!$sf_form || $sf_form->form_status !== 'Released') {
+            return false;
+        }
+
+        $preview = $this->build_mrp_shortage_preview((int) $order_id);
+        $summary = $preview['summary'];
+        $now = date('Y-m-d H:i:s');
+
+        $this->db->trans_start();
+
+        $this->db->insert('spares_execution_mrp_runs', array(
+            'order_id' => (int) $order_id,
+            'execution_order_id' => (int) $sf_form->execution_order_id,
+            'sf_form_id' => (int) $sf_form->sf_form_id,
+            'sf_no' => $sf_form->sf_no,
+            'total_items' => (int) $summary->total_items,
+            'shortage_items' => (int) $summary->shortage_items,
+            'missing_master_items' => (int) $summary->missing_master_items,
+            'total_required_qty' => (float) $summary->total_required_qty,
+            'total_available_qty' => (float) $summary->total_available_qty,
+            'total_shortage_qty' => (float) $summary->total_shortage_qty,
+            'run_by' => (int) $user_id,
+            'run_at' => $now,
+        ));
+        $mrp_run_id = (int) $this->db->insert_id();
+
+        $item_rows = array();
+        foreach ($preview['items'] as $item) {
+            $item_rows[] = array(
+                'mrp_run_id' => $mrp_run_id,
+                'sf_item_id' => (int) $item->sf_item_id,
+                'line_no' => (int) $item->line_no,
+                'item_description' => $item->item_description,
+                'part_no_erp' => $item->part_no_erp,
+                'spare_part_id' => !empty($item->spare_part_id) ? (int) $item->spare_part_id : null,
+                'spare_part_code' => $item->spare_part_code,
+                'required_qty' => (float) $item->required_qty,
+                'available_qty' => (float) $item->available_qty,
+                'shortage_qty' => (float) $item->shortage_qty,
+                'shortage_status' => $item->shortage_status,
+            );
+        }
+
+        if (!empty($item_rows)) {
+            $this->db->insert_batch('spares_execution_mrp_items', $item_rows);
+        }
+
+        $remark = 'MRP run completed. Shortage items: ' . (int) $summary->shortage_items;
+        $this->complete_execution_task_by_code((int) $sf_form->execution_order_id, 'RUN_MRP', (int) $user_id, $remark);
+        $this->complete_execution_task_by_code((int) $sf_form->execution_order_id, 'SHORTAGE_REPORT', (int) $user_id, 'Shortage report generated from MRP run. Shortage items: ' . (int) $summary->shortage_items);
+
+        $this->db->trans_complete();
+
+        if ($this->db->trans_status() === false) {
+            return false;
+        }
+
+        return $mrp_run_id;
+    }
+
+    public function can_user_run_mrp($execution_order_id, $user_id)
+    {
+        if (!empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+            return true;
+        }
+
+        if (!$this->can_user_access_spares_submodule($user_id, self::SPARES_EXECUTION_MRP_SUBMODULE, true)) {
+            return false;
+        }
+
+        return $this->is_user_ppc_department($user_id);
+    }
+
+    public function can_user_run_mrp_queue($user_id)
+    {
+        if (!empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+            return true;
+        }
+
+        if (!$this->can_user_access_spares_submodule($user_id, self::SPARES_EXECUTION_MRP_SUBMODULE, true)) {
+            return false;
+        }
+
+        return $this->is_user_ppc_department($user_id);
+    }
+
+    public function user_has_only_spares_execution_mrp_access($user_id)
+    {
+        if (!empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+            return false;
+        }
+
+        $submodules = $this->get_user_spares_submodule_names($user_id);
+        if (empty($submodules)) {
+            return false;
+        }
+
+        $has_mrp_access = false;
+        $has_other_access = false;
+        foreach ($submodules as $submodule) {
+            if ($submodule === self::SPARES_EXECUTION_MRP_SUBMODULE) {
+                $has_mrp_access = true;
+                continue;
+            }
+
+            $has_other_access = true;
+        }
+
+        return $has_mrp_access && !$has_other_access && $this->is_user_ppc_department($user_id);
+    }
+
+    public function get_user_spares_submodule_names($user_id)
+    {
+        if (
+            !$this->db->table_exists('system_modules')
+            || !$this->db->table_exists('submodule')
+            || !$this->db->table_exists('module_capablity')
+        ) {
+            return array();
+        }
+
+        $module = $this->db
+            ->select('id')
+            ->from('system_modules')
+            ->where('modulename', self::SPARES_MODULE_NAME)
+            ->where('status', 1)
+            ->order_by('id', 'ASC')
+            ->limit(1)
+            ->get()
+            ->row();
+
+        if (!$module) {
+            return array();
+        }
+
+        $rows = $this->db
+            ->select('s.submodule')
+            ->from('module_capablity mc')
+            ->join('submodule s', 's.id = mc.submoduleid', 'inner')
+            ->where('mc.role_id', (int) $user_id)
+            ->where('mc.moduleid', (int) $module->id)
+            ->where('mc.submodule_access', '1')
+            ->where('s.status', 1)
+            ->order_by('s.submodule', 'ASC')
+            ->get()
+            ->result();
+
+        $names = array();
+        foreach ($rows as $row) {
+            if (!empty($row->submodule)) {
+                $names[] = $row->submodule;
+            }
+        }
+
+        return $names;
+    }
+
+    public function is_user_ppc_department($user_id)
+    {
+        $row = $this->db
+            ->select('d.department')
+            ->from('system_users u')
+            ->join('departments d', 'd.department_id = u.department_id', 'left')
+            ->where('u.user_id', (int) $user_id)
+            ->where('u.user_status', 1)
+            ->get()
+            ->row();
+
+        if (!$row || empty($row->department)) {
+            return false;
+        }
+
+        return $this->is_ppc_department_name($row->department);
+    }
+
+    public function can_user_access_spares_submodule($user_id, $submodule_name, $allow_if_missing = true)
+    {
+        if (
+            !$this->db->table_exists('system_modules')
+            || !$this->db->table_exists('submodule')
+            || !$this->db->table_exists('module_access')
+            || !$this->db->table_exists('module_capablity')
+        ) {
+            return (bool) $allow_if_missing;
+        }
+
+        $module = $this->db
+            ->select('id')
+            ->from('system_modules')
+            ->where('modulename', self::SPARES_MODULE_NAME)
+            ->where('status', 1)
+            ->order_by('id', 'ASC')
+            ->limit(1)
+            ->get()
+            ->row();
+
+        if (!$module) {
+            return (bool) $allow_if_missing;
+        }
+
+        $submodule = $this->db
+            ->select('id')
+            ->from('submodule')
+            ->where('moduleid', (int) $module->id)
+            ->where('submodule', $submodule_name)
+            ->where('status', 1)
+            ->order_by('id', 'ASC')
+            ->limit(1)
+            ->get()
+            ->row();
+
+        if (!$submodule) {
+            return (bool) $allow_if_missing;
+        }
+
+        $module_access = $this->db
+            ->select('access')
+            ->from('module_access')
+            ->where('role_id', (int) $user_id)
+            ->where('moduleid', (int) $module->id)
+            ->where('access', '1')
+            ->limit(1)
+            ->get()
+            ->num_rows() > 0;
+
+        if (!$module_access) {
+            return false;
+        }
+
+        return $this->db
+            ->select('submodule_access')
+            ->from('module_capablity')
+            ->where('role_id', (int) $user_id)
+            ->where('moduleid', (int) $module->id)
+            ->where('submoduleid', (int) $submodule->id)
+            ->where('submodule_access', '1')
+            ->limit(1)
+            ->get()
+            ->num_rows() > 0;
+    }
+
+    public function is_ppc_department_name($department_name)
+    {
+        return strpos(strtolower((string) $department_name), 'ppc') !== false;
+    }
+
+    private function empty_mrp_preview()
+    {
+        return array(
+            'items' => array(),
+            'summary' => (object) array(
+                'total_items' => 0,
+                'shortage_items' => 0,
+                'missing_master_items' => 0,
+                'total_required_qty' => 0,
+                'total_available_qty' => 0,
+                'total_shortage_qty' => 0,
+            ),
+        );
+    }
+
+    private function get_spares_inventory_map_for_sf_items($sf_items)
+    {
+        if (
+            empty($sf_items)
+            || !$this->db->table_exists('spare_parts_for_trading')
+            || !$this->db->field_exists('code', 'spare_parts_for_trading')
+            || !$this->db->field_exists('available_qty', 'spare_parts_for_trading')
+        ) {
+            return array();
+        }
+
+        $codes = array();
+        foreach ($sf_items as $item) {
+            $code = strtolower(trim((string) $item->part_no_erp));
+            if ($code !== '') {
+                $codes[$code] = true;
+            }
+        }
+
+        if (empty($codes)) {
+            return array();
+        }
+
+        $escaped_codes = array();
+        foreach (array_keys($codes) as $code) {
+            $escaped_codes[] = $this->db->escape($code);
+        }
+
+        $rows = $this->db
+            ->select('id, code, description, available_qty')
+            ->from('spare_parts_for_trading')
+            ->where('LOWER(TRIM(code)) IN (' . implode(',', $escaped_codes) . ')', null, false)
+            ->get()
+            ->result();
+
+        $map = array();
+        foreach ($rows as $row) {
+            $map[strtolower(trim((string) $row->code))] = $row;
+        }
+
+        return $map;
+    }
+
+    public function get_po_items_for_sf($po_id)
+    {
+        if (!$this->db->table_exists('po_products')) {
+            return array();
+        }
+
+        return $this->db
+            ->select('pp.*, p.code as product_code, p.revision as product_revision, p.description as product_master_description')
+            ->from('po_products pp')
+            ->join('spare_parts_for_trading p', 'p.id = pp.product_id', 'left')
+            ->where('pp.po_id', (int) $po_id)
+            ->order_by('pp.po_product_id', 'ASC')
+            ->get()
+            ->result();
+    }
+
+    public function build_sf_number($order_id)
+    {
+        $year = (int) date('y');
+        $fy = (int) date('n') >= 4
+            ? sprintf('%02d-%02d', $year, ($year + 1) % 100)
+            : sprintf('%02d-%02d', ($year + 99) % 100, $year);
+
+        return 'SF/' . $fy . '/SO-' . (int) $order_id;
+    }
+
+    public function save_sf_form($sf_data, $items, $user_id, $release)
+    {
+        if (!$this->db->table_exists('spares_execution_sf_forms') || !$this->db->table_exists('spares_execution_sf_items')) {
+            return false;
+        }
+
+        $order_id = (int) $sf_data['order_id'];
+        $existing = $this->get_sf_form_by_order($order_id);
+        $now = date('Y-m-d H:i:s');
+
+        $this->db->trans_start();
+
+        if ($existing) {
+            $sf_form_id = (int) $existing->sf_form_id;
+            $sf_data['updated_by'] = (int) $user_id;
+            $sf_data['updated_at'] = $now;
+
+            if ($release) {
+                $sf_data['form_status'] = 'Released';
+                $sf_data['released_by'] = (int) $user_id;
+                $sf_data['released_at'] = $now;
+            }
+
+            $this->db
+                ->where('sf_form_id', $sf_form_id)
+                ->update('spares_execution_sf_forms', $sf_data);
+
+            $this->db
+                ->where('sf_form_id', $sf_form_id)
+                ->delete('spares_execution_sf_items');
+        } else {
+            $sf_data['created_by'] = (int) $user_id;
+            $sf_data['created_at'] = $now;
+            $sf_data['form_status'] = $release ? 'Released' : 'Draft';
+
+            if ($release) {
+                $sf_data['released_by'] = (int) $user_id;
+                $sf_data['released_at'] = $now;
+            }
+
+            $this->db->insert('spares_execution_sf_forms', $sf_data);
+            $sf_form_id = (int) $this->db->insert_id();
+        }
+
+        $item_rows = array();
+        foreach ($items as $index => $item) {
+            $description = trim((string) ($item['item_description'] ?? ''));
+            if ($description === '') {
+                continue;
+            }
+
+            $item_rows[] = array(
+                'sf_form_id' => $sf_form_id,
+                'line_no' => $index + 1,
+                'item_description' => $description,
+                'part_no_erp' => trim((string) ($item['part_no_erp'] ?? '')),
+                'drg_rev_no' => trim((string) ($item['drg_rev_no'] ?? '')),
+                'quantity' => !empty($item['quantity']) ? (float) $item['quantity'] : 0,
+                'target_date' => !empty($item['target_date']) ? $item['target_date'] : null,
+                'dispatch_1_date' => !empty($item['dispatch_1_date']) ? $item['dispatch_1_date'] : null,
+                'dispatch_2_date' => !empty($item['dispatch_2_date']) ? $item['dispatch_2_date'] : null,
+                'dispatch_3_date' => !empty($item['dispatch_3_date']) ? $item['dispatch_3_date'] : null,
+            );
+        }
+
+        if (!empty($item_rows)) {
+            $this->db->insert_batch('spares_execution_sf_items', $item_rows);
+        }
+
+        if ($release) {
+            $this->release_create_sf_task((int) $sf_data['execution_order_id'], (int) $user_id, $sf_data['sf_no']);
+        }
+
+        $this->db->trans_complete();
+
+        if ($this->db->trans_status() === false) {
+            return false;
+        }
+
+        return $sf_form_id;
+    }
+
+    private function release_create_sf_task($execution_order_id, $user_id, $sf_no)
+    {
+        $this->complete_execution_task_by_code((int) $execution_order_id, 'CREATE_SF', (int) $user_id, 'SF form released: ' . $sf_no);
+    }
+
+    private function complete_execution_task_by_code($execution_order_id, $task_code, $user_id, $remarks)
+    {
+        $task = $this->db
+            ->where('execution_order_id', (int) $execution_order_id)
+            ->where('task_code', $task_code)
+            ->get('spares_execution_tasks')
+            ->row();
+
+        if (!$task || in_array($task->task_status, array('Completed', 'Cancelled'), true)) {
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+
+        $this->db
+            ->where('execution_task_id', (int) $task->execution_task_id)
+            ->update('spares_execution_tasks', array(
+                'task_status' => 'Completed',
+                'completion_percent' => 100,
+                'actual_start_date' => !empty($task->actual_start_date) ? $task->actual_start_date : $now,
+                'actual_end_date' => $now,
+                'last_remark' => $remarks,
+                'updated_by' => (int) $user_id,
+                'updated_at' => $now,
+                'is_overdue' => 0,
+            ));
+
+        $this->db->insert('spares_execution_task_updates', array(
+            'execution_task_id' => (int) $task->execution_task_id,
+            'update_type' => 'Status',
+            'previous_status' => $task->task_status,
+            'new_status' => 'Completed',
+            'remarks' => $remarks,
+            'added_by' => (int) $user_id,
+            'added_on' => $now,
+        ));
+
+        $this->db
+            ->where('depends_on_task_id', (int) $task->execution_task_id)
+            ->where('task_status', 'Pending')
+            ->update('spares_execution_tasks', array(
+                'task_status' => 'Open',
+                'updated_by' => (int) $user_id,
+                'updated_at' => $now,
+            ));
+
+        $this->refresh_execution_order_status((int) $execution_order_id);
     }
 
     public function get_execution_dashboard_metrics()
@@ -575,8 +1410,10 @@ class Spares_execution_model extends CI_Model
     public function get_template_tasks($workflow_type)
     {
         $this->db
+            ->select('m.*, d.department, u.title, u.first_name, u.last_name')
             ->from('spares_execution_task_master m')
             ->join('departments d', 'd.department_id = m.department_id', 'left')
+            ->join('system_users u', 'u.user_id = m.default_owner_id', 'left')
             ->where('m.workflow_type', $workflow_type)
             ->where('m.is_active', 1)
             ->order_by('m.sequence_no', 'ASC');
@@ -596,14 +1433,15 @@ class Spares_execution_model extends CI_Model
             return $preview;
         }
 
-        $cursor = new DateTime($commit_date);
+        $holiday_map = $this->get_execution_holiday_map();
+        $cursor = $this->move_to_previous_execution_working_day(new DateTime($commit_date), $holiday_map);
         $reversed = array_reverse($tasks);
 
         foreach ($reversed as $task) {
             $sla_days = max(1, (int) $task->sla_days);
             $planned_end = clone $cursor;
-            $planned_start = clone $cursor;
-            $planned_start->modify('-' . ($sla_days - 1) . ' day');
+            $planned_start = $this->subtract_execution_working_days($planned_end, $sla_days - 1, $holiday_map);
+            $owner_name = trim((string) ($task->title . ' ' . $task->first_name . ' ' . $task->last_name));
 
             $preview[$task->task_code] = array(
                 'task_master_id' => (int) $task->task_master_id,
@@ -611,7 +1449,9 @@ class Spares_execution_model extends CI_Model
                 'task_code' => $task->task_code,
                 'task_name' => $task->task_name,
                 'department_id' => $task->department_id,
+                'department_name' => !empty($task->department) ? $task->department : '',
                 'default_owner_id' => $task->default_owner_id,
+                'owner_name' => $owner_name,
                 'sequence_no' => (int) $task->sequence_no,
                 'sla_days' => $sla_days,
                 'depends_on_code' => $task->depends_on_code,
@@ -622,6 +1462,7 @@ class Spares_execution_model extends CI_Model
 
             $cursor = clone $planned_start;
             $cursor->modify('-1 day');
+            $cursor = $this->move_to_previous_execution_working_day($cursor, $holiday_map);
         }
 
         $ordered_preview = array();
@@ -632,6 +1473,73 @@ class Spares_execution_model extends CI_Model
         }
 
         return $ordered_preview;
+    }
+
+    private function get_execution_holiday_map()
+    {
+        if (!$this->db->table_exists('prestogroup_holidays')) {
+            return array();
+        }
+
+        $rows = $this->db
+            ->select('holiday_date')
+            ->from('prestogroup_holidays')
+            ->get()
+            ->result();
+
+        $holiday_map = array();
+        foreach ($rows as $row) {
+            if (!empty($row->holiday_date)) {
+                $holiday_map[date('Y-m-d', strtotime($row->holiday_date))] = true;
+            }
+        }
+
+        return $holiday_map;
+    }
+
+    private function is_execution_working_day(DateTime $date, $holiday_map)
+    {
+        $date_key = $date->format('Y-m-d');
+        return $date->format('N') !== '7' && empty($holiday_map[$date_key]);
+    }
+
+    private function move_to_previous_execution_working_day(DateTime $date, $holiday_map)
+    {
+        $adjusted = clone $date;
+        while (!$this->is_execution_working_day($adjusted, $holiday_map)) {
+            $adjusted->modify('-1 day');
+        }
+
+        return $adjusted;
+    }
+
+    private function subtract_execution_working_days(DateTime $date, $days_to_subtract, $holiday_map)
+    {
+        $adjusted = clone $date;
+        $remaining_days = max(0, (int) $days_to_subtract);
+
+        while ($remaining_days > 0) {
+            $adjusted->modify('-1 day');
+            if ($this->is_execution_working_day($adjusted, $holiday_map)) {
+                $remaining_days--;
+            }
+        }
+
+        return $adjusted;
+    }
+
+    public function is_execution_working_date($date)
+    {
+        if (empty($date)) {
+            return false;
+        }
+
+        $date_obj = DateTime::createFromFormat('Y-m-d', $date);
+        if (!$date_obj || $date_obj->format('Y-m-d') !== $date) {
+            return false;
+        }
+
+        return $this->is_execution_working_day($date_obj, $this->get_execution_holiday_map());
     }
 
     public function create_execution_schedule($execution_data, $task_rows)
@@ -780,6 +1688,7 @@ class Spares_execution_model extends CI_Model
             ->select("
                 t.*,
                 CASE WHEN t.task_status NOT IN ('Completed', 'Cancelled') AND t.planned_end_date < CURDATE() THEN 1 ELSE 0 END as live_is_overdue,
+                COALESCE(tm.sla_days, 0) as sla_days,
                 COALESCE(tm.extension_allowed, 1) as extension_allowed,
                 COALESCE(tm.can_start_parallel, 0) as can_start_parallel,
                 (

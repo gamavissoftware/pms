@@ -1,3 +1,8 @@
+<?php
+$company_q = $this->db->select('company_name, logo, colorcode')->from('company_information')->get();
+$LOGO = ($company_q->num_rows() > 0) ? $company_q->row() : null;
+$themeColor = (!empty($LOGO->colorcode)) ? $LOGO->colorcode : '#4872b8';
+?>
 <!DOCTYPE html>
 <html>
     <head>
@@ -46,7 +51,7 @@
         }
             table.pretty thead th {
                 text-align: center;
-                background: <?php echo $LOGO->colorcode;?>;
+                background: <?php echo $themeColor;?>;
                 color:#fff;
 				font-size:12px;
             }
@@ -55,7 +60,7 @@
                 font-size:12px;
             }
 			.feedback {
-				  background-color : <?php echo $LOGO->colorcode;?>;
+				  background-color : <?php echo $themeColor;?>;
 				  color: white;
 				  padding: 10px 20px;
 				  border-radius: 4px;

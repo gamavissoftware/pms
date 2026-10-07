@@ -481,6 +481,7 @@ if ($check_spares && !empty($check_spares->tax_number)) {
                           
                         <?php }else{ ?>
                             <option value="USD" <?php echo $is_export ? 'selected' : ''; ?>>Export (USD $)</option>
+                            <option value="EUR">Export (EUR €)</option>
                         <?php } ?>
                         </select>
                     </div>
@@ -577,6 +578,7 @@ if ($check_spares && !empty($check_spares->tax_number)) {
                                             <option value="<?php echo $s->id; ?>"
                                                     data-rate-inr="<?php echo $s->default_rate_inr; ?>"
                                                     data-rate-usd="<?php echo $s->default_rate_usd; ?>"
+                                                    data-rate-eur="<?php echo isset($s->default_rate_eur) ? $s->default_rate_eur : '0.00'; ?>"
                                                     data-type="<?php echo $s->charge_type; ?>">
                                                 <?php echo $s->charge_name; ?>
                                             </option>
@@ -794,9 +796,10 @@ $(document).ready(function() {
     }
 
     function applyCurrencyMode(mode, resetTaxes) {
-        $('.curr-symbol').text(mode === 'USD' ? '$' : '₹');
+        const currencySymbols = { INR: '₹', USD: '$', EUR: '€' };
+        $('.curr-symbol').text(currencySymbols[mode] || mode);
 
-        if (mode === 'USD') {
+        if (mode !== 'INR') {
             $('#gst_container, #gst_summary_line').hide();
             $('#wht_container, #wht_summary_line').show();
             if (resetTaxes) {
@@ -816,12 +819,20 @@ $(document).ready(function() {
             let opt = row.find('.service-select option:selected');
 
             if (opt.val() !== "") {
-                let rate = mode === 'USD' ? opt.data('rate-usd') : opt.data('rate-inr');
+                let rate = getDefaultRate(opt, mode);
                 row.find('.unit-price').val(rate);
             }
         });
 
         calculateTotals();
+    }
+
+    function getDefaultRate(option, mode) {
+        if (mode === 'EUR') {
+            return option.data('rate-eur');
+        }
+
+        return mode === 'USD' ? option.data('rate-usd') : option.data('rate-inr');
     }
 
     function syncRowChargeType(row, forceDefaultValues) {
@@ -1052,7 +1063,7 @@ $(document).ready(function() {
         let mode = $('#currency_selector').val();
 
         if (opt.val() !== "") {
-            let defaultRate = mode === 'USD' ? opt.data('rate-usd') : opt.data('rate-inr');
+            let defaultRate = getDefaultRate(opt, mode);
             row.find('.unit-price').val(defaultRate);
             syncRowChargeType(row, true);
         } else {
@@ -1152,6 +1163,8 @@ $(document).ready(function() {
             });
             return false;
         }
+
+        $('#submitBtn').prop('disabled', true);
 
         Swal.fire({
             title: 'Generating PDF...',

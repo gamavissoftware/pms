@@ -12,6 +12,17 @@ $department_options_html = preg_replace('/\s+/', ' ', trim(ob_get_clean()));
 $user_placeholder_options_html = '<option value="">Select Department First</option>';
 
 $is_edit_mode = !empty($execution_order);
+$default_workflow_type = isset($default_workflow_type) ? $default_workflow_type : '';
+$raw_schedule_workflow_type = $is_edit_mode && !empty($execution_order->workflow_type) ? $execution_order->workflow_type : $default_workflow_type;
+$quotation_flow_display = array(
+    'CONSUMABLE' => array('quotation_type' => 'Consumable', 'custom_type' => ''),
+    'CRITICAL' => array('quotation_type' => 'Critical', 'custom_type' => ''),
+    'CONS_CRITICAL' => array('quotation_type' => 'Consumable + Critical', 'custom_type' => ''),
+    'CUSTOM_CHANGEOVER' => array('quotation_type' => 'Custom Engg', 'custom_type' => 'Changeover'),
+    'CUSTOM_SPEED_UPGRADATION' => array('quotation_type' => 'Custom Engg', 'custom_type' => 'Speed Upgradation'),
+);
+$schedule_flow = isset($quotation_flow_display[$raw_schedule_workflow_type]) ? $quotation_flow_display[$raw_schedule_workflow_type] : array('quotation_type' => 'Not mapped from quotation', 'custom_type' => '');
+$schedule_workflow_type = isset($quotation_flow_display[$raw_schedule_workflow_type]) || $is_edit_mode ? $raw_schedule_workflow_type : '';
 $initial_tasks = array();
 
 if ($is_edit_mode && !empty($tasks)) {
@@ -22,9 +33,12 @@ if ($is_edit_mode && !empty($tasks)) {
             'task_code' => $task->task_code,
             'task_name' => $task->task_name,
             'department_id' => !empty($task->department_id) ? (int) $task->department_id : '',
+            'department_name' => !empty($task->department) ? $task->department : '',
             'default_owner_id' => !empty($task->assigned_to) ? (int) $task->assigned_to : '',
             'assigned_to' => !empty($task->assigned_to) ? (int) $task->assigned_to : '',
+            'owner_name' => !empty($task->first_name) ? trim($task->title . ' ' . $task->first_name . ' ' . $task->last_name) : '',
             'sequence_no' => (int) $task->sequence_no,
+            'sla_days' => !empty($task->sla_days) ? (int) $task->sla_days : '',
             'depends_on_code' => !empty($task->dependency_task_code) ? $task->dependency_task_code : '',
             'can_start_parallel' => !empty($task->can_start_parallel) ? 1 : 0,
             'dependency_label' => !empty($task->dependency_task_name) ? $task->dependency_task_name . (!empty($task->can_start_parallel) ? ' (parallel allowed)' : '') : (!empty($task->dependency_task_code) ? $task->dependency_task_code : ''),
@@ -46,12 +60,32 @@ if ($is_edit_mode && !empty($tasks)) {
     <link href="<?php echo assets_url; ?>css/icons.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>plugins/select2/dist/css/select2.css" rel="stylesheet" type="text/css" />
     <style>
         body { background: #f5f7fb; }
         .card-box { border-radius: 10px; border: 1px solid #e8edf3; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
-        .summary-box { background: #fbfcff; border: 1px solid #edf1f7; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
-        .summary-key { font-size: 12px; color: #7f8a9a; text-transform: uppercase; }
-        .summary-value { font-size: 16px; font-weight: 600; color: #243447; }
+        .order-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .summary-box { background: #fbfcff; border: 1px solid #edf1f7; border-radius: 8px; padding: 12px 14px; min-height: 76px; }
+        .summary-key { font-size: 11px; color: #7f8a9a; text-transform: uppercase; font-weight: 600; }
+        .summary-value { font-size: 15px; line-height: 1.35; font-weight: 600; color: #243447; word-break: break-word; }
+        .flow-display { background: #fbfcff; border: 1px solid #dfe7f1; border-radius: 6px; min-height: 48px; padding: 8px 11px; }
+        .flow-main { font-size: 15px; line-height: 1.25; font-weight: 600; color: #243447; }
+        .flow-sub { margin-top: 3px; font-size: 12px; color: #667085; }
+        .schedule-actions { padding-top: 24px; }
+        .schedule-actions .btn { width: 100%; }
+        #tasksTable .select2-container { min-width: 240px; }
+        .select2-container { width: 100% !important; }
+        .select2-container .select2-selection--single { height: 34px; border-color: #ddd; }
+        .select2-container .select2-selection--single .select2-selection__rendered { line-height: 32px; padding-left: 12px; color: #555; }
+        .select2-container .select2-selection--single .select2-selection__arrow { height: 32px; }
+        #tasksTable th, #tasksTable td { vertical-align: middle; }
+        #tasksTable .task-cell { min-width: 280px; white-space: normal; }
+        #tasksTable .mapped-cell { min-width: 180px; color: #243447; }
+        #tasksTable .mapped-muted { color: #98a2b3; font-size: 12px; }
+        .task-title { font-weight: 600; color: #243447; white-space: normal; line-height: 1.4; }
+        .task-code { font-size: 11px; color: #7f8a9a; margin-top: 4px; }
+        @media (max-width: 1199px) { .order-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 767px) { .order-strip { grid-template-columns: 1fr; } .schedule-actions { padding-top: 0; } }
     </style>
 </head>
 <body>
@@ -80,30 +114,22 @@ if ($is_edit_mode && !empty($tasks)) {
             <div class="row">
                 <div class="col-lg-12">
                     <div class="card-box">
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="summary-box">
-                                    <div class="summary-key">Company</div>
-                                    <div class="summary-value"><?php echo htmlspecialchars($order_snapshot->company_name); ?></div>
-                                </div>
+                        <div class="order-strip">
+                            <div class="summary-box">
+                                <div class="summary-key">Company</div>
+                                <div class="summary-value" title="<?php echo htmlspecialchars($order_snapshot->company_name); ?>"><?php echo htmlspecialchars($order_snapshot->company_name); ?></div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="summary-box">
-                                    <div class="summary-key">Opportunity</div>
-                                    <div class="summary-value"><?php echo htmlspecialchars($order_snapshot->op_no); ?></div>
-                                </div>
+                            <div class="summary-box">
+                                <div class="summary-key">Opportunity</div>
+                                <div class="summary-value" title="<?php echo htmlspecialchars($order_snapshot->op_no); ?>"><?php echo htmlspecialchars($order_snapshot->op_no); ?></div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="summary-box">
-                                    <div class="summary-key">Customer PO</div>
-                                    <div class="summary-value"><?php echo htmlspecialchars($order_snapshot->po_no); ?></div>
-                                </div>
+                            <div class="summary-box">
+                                <div class="summary-key">Customer PO</div>
+                                <div class="summary-value" title="<?php echo htmlspecialchars($order_snapshot->po_no); ?>"><?php echo htmlspecialchars($order_snapshot->po_no); ?></div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="summary-box">
-                                    <div class="summary-key">Order Value</div>
-                                    <div class="summary-value"><?php echo number_format($order_snapshot->order_value, 2); ?></div>
-                                </div>
+                            <div class="summary-box">
+                                <div class="summary-key">Order Value</div>
+                                <div class="summary-value"><?php echo number_format($order_snapshot->order_value, 2); ?></div>
                             </div>
                         </div>
 
@@ -116,22 +142,18 @@ if ($is_edit_mode && !empty($tasks)) {
                             <div class="row">
                                 <div class="col-md-3">
                                     <div class="form-group">
-                                        <label>Workflow Type</label>
-                                        <?php if ($is_edit_mode): ?>
-                                            <input type="hidden" name="workflow_type" id="workflow_type" value="<?php echo htmlspecialchars($execution_order->workflow_type); ?>">
-                                            <select class="form-control" disabled>
-                                                <?php foreach ($workflows as $workflow_key => $workflow_label): ?>
-                                                    <option value="<?php echo $workflow_key; ?>" <?php echo $execution_order->workflow_type === $workflow_key ? 'selected' : ''; ?>><?php echo $workflow_label; ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <small class="text-muted">Workflow is locked after schedule creation.</small>
-                                        <?php else: ?>
-                                            <select name="workflow_type" id="workflow_type" class="form-control" required>
-                                                <option value="">Select Workflow</option>
-                                                <?php foreach ($workflows as $workflow_key => $workflow_label): ?>
-                                                    <option value="<?php echo $workflow_key; ?>"><?php echo $workflow_label; ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
+                                        <label>Quotation Type / Flow</label>
+                                        <input type="hidden" name="workflow_type" id="workflow_type" value="<?php echo htmlspecialchars($schedule_workflow_type); ?>">
+                                        <div class="flow-display">
+                                            <div class="flow-main"><?php echo htmlspecialchars($schedule_flow['quotation_type']); ?></div>
+                                            <?php if (!empty($schedule_flow['custom_type'])): ?>
+                                                <div class="flow-sub">Custom Engg Type: <?php echo htmlspecialchars($schedule_flow['custom_type']); ?></div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if (!empty($schedule_workflow_type) && !$is_edit_mode): ?>
+                                            <small class="text-muted">Picked from the latest quotation.</small>
+                                        <?php elseif (empty($schedule_workflow_type)): ?>
+                                            <small class="text-danger">Update the quotation type before loading TAT.</small>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -144,7 +166,7 @@ if ($is_edit_mode && !empty($tasks)) {
                                 <div class="col-md-3">
                                     <div class="form-group">
                                         <label>Priority</label>
-                                        <select name="priority" class="form-control" required>
+                                        <select name="priority" class="form-control schedule-select2" data-placeholder="Select Priority" required>
                                             <?php $selected_priority = $is_edit_mode ? $execution_order->priority : 'Medium'; ?>
                                             <option value="Medium" <?php echo $selected_priority === 'Medium' ? 'selected' : ''; ?>>Medium</option>
                                             <option value="Low" <?php echo $selected_priority === 'Low' ? 'selected' : ''; ?>>Low</option>
@@ -154,14 +176,12 @@ if ($is_edit_mode && !empty($tasks)) {
                                     </div>
                                 </div>
                                 <div class="col-md-3">
-                                    <div class="form-group">
-                                        <label>&nbsp;</label><br>
+                                    <div class="form-group schedule-actions">
                                         <?php if (!$is_edit_mode): ?>
-                                            <button type="button" id="loadTemplateBtn" class="btn btn-info"><i class="fa fa-magic"></i> Load Task Template</button>
+                                            <button type="button" id="loadTemplateBtn" class="btn btn-info"><i class="fa fa-magic"></i> Load TAT Template</button>
                                         <?php else: ?>
                                             <span class="text-muted">Update the current task dates and owners below.</span>
                                         <?php endif; ?>
-                                        <a href="<?php echo page_url; ?>Spares_execution/task_master" class="btn btn-default">Task Master</a>
                                     </div>
                                 </div>
                             </div>
@@ -177,11 +197,11 @@ if ($is_edit_mode && !empty($tasks)) {
                                         <tr>
                                             <th style="width:60px;">Seq</th>
                                             <th>Task</th>
+                                            <th style="width:90px;">TAT</th>
                                             <th>Department</th>
                                             <th>Owner</th>
                                             <th>Start Date</th>
                                             <th>End Date</th>
-                                            <th>Dependency</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -205,6 +225,7 @@ if ($is_edit_mode && !empty($tasks)) {
     <?php $this->load->view('common/footer'); ?>
     <script src="<?php echo assets_url; ?>js/jquery.min.js"></script>
     <script src="<?php echo assets_url; ?>js/bootstrap.min.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/select2/dist/js/select2.min.js" type="text/javascript"></script>
     <script>
         const departmentOptions = <?php echo json_encode($department_options_html); ?>;
         const userPlaceholderOptions = <?php echo json_encode($user_placeholder_options_html); ?>;
@@ -225,6 +246,31 @@ if ($is_edit_mode && !empty($tasks)) {
             });
 
             return options;
+        }
+
+        function destroySelect2($select) {
+            if ($.fn.select2 && $select.hasClass('select2-hidden-accessible')) {
+                $select.select2('destroy');
+            }
+        }
+
+        function initializeSelect2($scope) {
+            if (!$.fn.select2) {
+                return;
+            }
+
+            const $root = $scope && $scope.length ? $scope : $(document);
+            $root.find('select.schedule-select2, select.department-select, select.user-select').each(function() {
+                const $select = $(this);
+                const placeholder = $select.data('placeholder') || $select.find('option:first').text() || 'Select';
+
+                destroySelect2($select);
+                $select.select2({
+                    width: '100%',
+                    placeholder: placeholder,
+                    allowClear: !$select.prop('required')
+                });
+            });
         }
 
         function getDepartmentUsers(departmentId) {
@@ -257,13 +303,18 @@ if ($is_edit_mode && !empty($tasks)) {
             const $userSelect = $row.find('.user-select');
 
             if (!departmentId) {
+                destroySelect2($userSelect);
                 $userSelect.html(userPlaceholderOptions).prop('disabled', true);
+                initializeSelect2($row);
                 return;
             }
 
+            destroySelect2($userSelect);
             $userSelect.html('<option value="">Loading users...</option>').prop('disabled', true);
+            initializeSelect2($row);
 
             getDepartmentUsers(departmentId).done(function(users) {
+                destroySelect2($userSelect);
                 $userSelect.html(buildUserOptions(users)).prop('disabled', false);
 
                 if (selectedUserId) {
@@ -274,8 +325,11 @@ if ($is_edit_mode && !empty($tasks)) {
                 } else {
                     $userSelect.val('');
                 }
+                initializeSelect2($row);
             }).fail(function() {
+                destroySelect2($userSelect);
                 $userSelect.html('<option value="">Unable to load users</option>').prop('disabled', true);
+                initializeSelect2($row);
             });
         }
 
@@ -289,6 +343,8 @@ if ($is_edit_mode && !empty($tasks)) {
             }
 
             tasks.forEach(function(task, index) {
+                const departmentName = task.department_name || 'Not mapped in Task Master';
+                const ownerName = task.owner_name || 'Not mapped in Task Master';
                 const row = `
                     <tr>
                         <td>
@@ -300,18 +356,21 @@ if ($is_edit_mode && !empty($tasks)) {
                             <input type="hidden" name="can_start_parallel[]" value="${task.can_start_parallel ? '1' : '0'}">
                             ${task.sequence_no}
                         </td>
-                        <td>
-                            <input type="text" class="form-control input-sm" name="task_name[]" value="${escapeHtml(task.task_name)}" readonly>
+                        <td class="task-cell">
+                            <input type="hidden" name="task_name[]" value="${escapeHtml(task.task_name)}">
+                            <div class="task-title">${escapeHtml(task.task_name)}</div>
+                            <div class="task-code">${escapeHtml(task.task_code || '')}</div>
                         </td>
-                        <td>
-                            <select class="form-control input-sm department-select" name="department_id[]" data-index="${index}">
-                                ${departmentOptions}
-                            </select>
+                        <td>${task.sla_days ? escapeHtml(task.sla_days) + ' day(s)' : '-'}</td>
+                        <td class="mapped-cell">
+                            <input type="hidden" name="department_id[]" value="${task.department_id || ''}">
+                            <div>${escapeHtml(departmentName)}</div>
+                            ${task.department_name ? '' : '<div class="mapped-muted">Update Task Master</div>'}
                         </td>
-                        <td>
-                            <select class="form-control input-sm user-select" name="assigned_to[]" data-index="${index}" disabled>
-                                ${userPlaceholderOptions}
-                            </select>
+                        <td class="mapped-cell">
+                            <input type="hidden" name="assigned_to[]" value="${task.assigned_to || task.default_owner_id || ''}">
+                            <div>${escapeHtml(ownerName)}</div>
+                            ${task.owner_name ? '' : '<div class="mapped-muted">Update Task Master</div>'}
                         </td>
                         <td>
                             <input type="date" class="form-control input-sm" name="planned_start_date[]" value="${task.planned_start_date || ''}" required>
@@ -319,13 +378,9 @@ if ($is_edit_mode && !empty($tasks)) {
                         <td>
                             <input type="date" class="form-control input-sm" name="planned_end_date[]" value="${task.planned_end_date || ''}" required>
                         </td>
-                        <td>${task.dependency_label ? escapeHtml(task.dependency_label) : (task.depends_on_code ? escapeHtml(task.depends_on_code) : '<span class="text-muted">None</span>')}</td>
                     </tr>`;
 
                 $tbody.append(row);
-                const $row = $tbody.find('tr:last');
-                $row.find('.department-select[data-index="' + index + '"]').val(task.department_id || '');
-                loadRowUsers($row, task.assigned_to || task.default_owner_id || '');
             });
         }
 
@@ -333,8 +388,14 @@ if ($is_edit_mode && !empty($tasks)) {
             const workflowType = $('#workflow_type').val();
             const commitDate = $('#commit_date').val();
 
-            if (!workflowType || !commitDate) {
-                alert('Please select workflow type and commit date first.');
+            if (!workflowType) {
+                alert('Quotation Type / Flow is not mapped from quotation. Please update the quotation first.');
+                return;
+            }
+
+            if (!commitDate) {
+                alert('Please select Commit Date first.');
+                $('#commit_date').focus();
                 return;
             }
 
@@ -347,6 +408,8 @@ if ($is_edit_mode && !empty($tasks)) {
         });
 
         $(document).ready(function() {
+            initializeSelect2($(document));
+
             $('#tasksTable').on('change', '.department-select', function() {
                 loadRowUsers($(this).closest('tr'), '');
             });

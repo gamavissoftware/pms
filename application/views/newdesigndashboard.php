@@ -192,9 +192,8 @@ $this->db->from('df_release df');
 $this->db->join('task_department_wise_scheduling t', 't.df_id = df.id', 'inner');
 $this->db->where('df.on_hold', 0);
 $this->db->where('df.df_status', 0);
-$this->db->where('t.on_hold', 0);
-$this->db->where('t.task_status', 0);
-$this->db->where('t.end_date <', $today);
+$this->load->helper('df_delay');
+$this->db->where(df_open_overdue_sql($this->db, 't', $today), null, false);
 
 if ($usertyp == 2 && !empty($visibleDepartmentIds)) {
     $this->db->where_in('t.department_id', $visibleDepartmentIds);
@@ -1763,6 +1762,7 @@ $(document).ready(function () {
 
                     <div class="neo-badge-group">
                         <a href="<?php echo page_url; ?>Dashboard/daily_df_progress_report" target="_blank" class="neo-action-btn neo-action-blue">Daily DF Progress</a>
+                        <a href="<?php echo page_url; ?>Dashboard/daily_planned_task_report" target="_blank" class="neo-action-btn neo-action-blue">Daily Planned Tasks</a>
                         <a href="<?php echo page_url; ?>Dashboard/closeddf" target="_blank" class="neo-action-btn neo-action-red">Closed DF</a>
                         <a href="<?php echo page_url; ?>Dashboard/df_full_detail" target="_blank" class="neo-action-btn neo-action-blue">Filter Information by DF</a>
                     </div>

@@ -154,7 +154,7 @@ text-align:center;
 
 						 <div class="btn-group pull-right">
 
-						 <!-- <a class="btn btn-success waves-effect waves-light" data-toggle="modal" data-target="#con-close-modal">ADD NEW BUSINESS LOCATION</a>-->
+						 <button class="btn btn-success waves-effect waves-light" data-toggle="modal" data-target="#con-close-modal">ADD NEW BUSINESS LOCATION</button>
 
                                
 
@@ -646,6 +646,13 @@ $(document).ready(function() {
 
 $("#businesssave").click(function() {
 
+// Clear last attempt's messages, otherwise a field the user has
+
+// since filled in keeps showing "Required!".
+
+$("#error_name, #error_state, #error_status, #error_city, #error_company, #address_error, #contact_error").html('');
+
+
 var country_name = $("#country_name").val();
 
 if(country_name=='')
@@ -740,7 +747,7 @@ if(contact_number=='')
 
 
 
-if(country_name=='' || state=='' || city_name=='' || company_name=='' || address=='' || contact_number=='' )
+if(country_name=='' || state=='' || city_name=='' || company_name=='' || address=='' || contact_number=='' || status=='' )
 
 {
 

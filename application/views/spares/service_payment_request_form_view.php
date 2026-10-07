@@ -538,7 +538,7 @@ $can_approve_service_payment = !empty($payment_permissions['can_approve']);
                                     <select class="form-control" name="request_type" id="request_type" required>
                                         <?php foreach ($request_types as $type): ?>
                                             <option value="<?php echo htmlspecialchars($type); ?>" <?php echo $selected_request_type === $type ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($type); ?>
+                                                <?php echo htmlspecialchars($type === 'Order Won' ? 'Paid' : $type); ?>
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
@@ -654,6 +654,9 @@ $can_approve_service_payment = !empty($payment_permissions['can_approve']);
                                         </div>
                                         <div class="chain-meta">
                                             <?php echo htmlspecialchars($request->request_type); ?> | ₹ <?php echo number_format((float) $request->amount, 2); ?><br>
+                                            <?php if (!empty($request->amount_revised)): ?>
+                                                HOD approved ₹ <?php echo number_format((float) $request->payable_amount, 2); ?><br>
+                                            <?php endif; ?>
                                             <?php echo htmlspecialchars($request->created_by_name); ?> | <?php echo date('d M Y', strtotime($request->request_date)); ?>
                                             <?php if (!empty($request->parent_request_code)): ?>
                                                 <br>Linked to <?php echo htmlspecialchars($request->parent_request_code); ?>
@@ -851,6 +854,7 @@ $can_approve_service_payment = !empty($payment_permissions['can_approve']);
                     '</div>' +
                     '<div class="chain-meta">' +
                     request.request_type + ' | ' + currencyFormat(request.amount) + '<br>' +
+                    (request.amount_revised ? 'HOD approved ' + currencyFormat(request.payable_amount) + '<br>' : '') +
                     request.created_by_name + ' | ' + request.request_date +
                     (request.parent_request_code ? '<br>Linked to ' + request.parent_request_code : '') +
                     '</div>' +

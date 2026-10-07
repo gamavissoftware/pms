@@ -399,6 +399,8 @@ if ($check_spares && !empty($check_spares->tax_number)) {
 
             <input type="hidden" name="opportunity_id" value="<?php echo $opportunity->opportunity_id; ?>">
             <input type="hidden" name="customer_id" value="<?php echo $opportunity->customer_id; ?>">
+            <input type="hidden" name="parent_quotation_id" value="<?php echo (int) $prev_quote->id; ?>">
+            <input type="hidden" name="revision_no" value="<?php echo (int) $new_revision_no; ?>">
 
             <div class="card-box">
                 <div class="row">
@@ -426,6 +428,7 @@ if ($check_spares && !empty($check_spares->tax_number)) {
                         <select name="currency" id="currency_selector" class="form-control" style="font-weight: 600; color: #003366;">
                             <option value="INR" <?php echo ($prev_quote->currency == 'INR') ? 'selected' : ''; ?>>Domestic (INR ₹)</option>
                             <option value="USD" <?php echo ($prev_quote->currency == 'USD') ? 'selected' : ''; ?>>Export (USD $)</option>
+                            <option value="EUR" <?php echo ($prev_quote->currency == 'EUR') ? 'selected' : ''; ?>>Export (EUR €)</option>
                         </select>
                     </div>
 
@@ -528,6 +531,7 @@ if ($check_spares && !empty($check_spares->tax_number)) {
                                                             <?php echo ($s->id == $item->charge_id) ? 'selected' : ''; ?>
                                                             data-rate-inr="<?php echo $s->default_rate_inr; ?>"
                                                             data-rate-usd="<?php echo $s->default_rate_usd; ?>"
+                                                            data-rate-eur="<?php echo isset($s->default_rate_eur) ? $s->default_rate_eur : '0.00'; ?>"
                                                             data-type="<?php echo $s->charge_type; ?>">
                                                         <?php echo $s->charge_name; ?>
                                                     </option>
@@ -612,6 +616,7 @@ if ($check_spares && !empty($check_spares->tax_number)) {
                                                 <option value="<?php echo $s->id; ?>"
                                                         data-rate-inr="<?php echo $s->default_rate_inr; ?>"
                                                         data-rate-usd="<?php echo $s->default_rate_usd; ?>"
+                                                        data-rate-eur="<?php echo isset($s->default_rate_eur) ? $s->default_rate_eur : '0.00'; ?>"
                                                         data-type="<?php echo $s->charge_type; ?>">
                                                     <?php echo $s->charge_name; ?>
                                                 </option>
@@ -824,12 +829,13 @@ $(document).ready(function() {
     initPlugins();
 
     // Currency Toggle
-    $('#currency_selector').on('change', function() {
+    $('#currency_selector').on('change', function(event) {
         let mode = $(this).val();
 
-        $('.curr-symbol').text(mode === 'USD' ? '$' : '₹');
+        const currencySymbols = { INR: '₹', USD: '$', EUR: '€' };
+        $('.curr-symbol').text(currencySymbols[mode] || mode);
 
-        if (mode === 'USD') {
+        if (mode !== 'INR') {
             $('#gst_container, #gst_summary_line').hide();
             $('#wht_container, #wht_summary_line').show();
             $('#gst_percent').val(0);
@@ -840,15 +846,17 @@ $(document).ready(function() {
             $('#gst_percent').val(18);
         }
 
-        $('#service-table tbody tr').each(function() {
-            let row = $(this);
-            let opt = row.find('.service-select option:selected');
+        if (event.originalEvent) {
+            $('#service-table tbody tr').each(function() {
+                let row = $(this);
+                let opt = row.find('.service-select option:selected');
 
-            if (opt.val() !== '') {
-                let rate = mode === 'USD' ? opt.data('rate-usd') : opt.data('rate-inr');
-                row.find('.unit-price').val(rate);
-            }
-        });
+                if (opt.val() !== '') {
+                    let rate = mode === 'EUR' ? opt.data('rate-eur') : (mode === 'USD' ? opt.data('rate-usd') : opt.data('rate-inr'));
+                    row.find('.unit-price').val(rate);
+                }
+            });
+        }
 
         calculateTotals();
     });
@@ -862,7 +870,7 @@ $(document).ready(function() {
         row.find('.service-select').next('.select2-container').find('.select2-selection').removeClass('error-border');
 
         if (opt.val() !== '') {
-            let defaultRate = mode === 'USD' ? opt.data('rate-usd') : opt.data('rate-inr');
+            let defaultRate = mode === 'EUR' ? opt.data('rate-eur') : (mode === 'USD' ? opt.data('rate-usd') : opt.data('rate-inr'));
 
             row.find('.unit-price').val(defaultRate);
 
@@ -1081,6 +1089,8 @@ $(document).ready(function() {
             });
             return false;
         }
+
+        $('#submitBtn').prop('disabled', true);
 
         Swal.fire({
             title: 'Processing Revision...',

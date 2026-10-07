@@ -30,25 +30,10 @@ if(count($basicData)>0)
     echo "Invalid Details"; exit;
 }
 
-$re=$this->db->select('payment_percentage')->from('payment_terms_milestone')->where('payment_term_id',$payment_term)->order_by('id','ASC')->limit(1)->get();
-if($re->num_rows()>0)
-{
-    foreach($re->result() as $rrow);
-    $payment_percent=$rrow->payment_percentage;
-}else
-{
-    echo "Payment Terms not found please edit payment terms and check!"; exit;
-}
-
-$re=$this->db->select('payment_terms')->from('payment_terms')->where('id',$payment_term)->get();
-if($re->num_rows()>0)
-{
-    foreach($re->result() as $rrrrror);
-    $payment_terms_written=$rrrrror->payment_terms;
-}else
-{
-    $payment_terms_written='';
-}
+$this->load->helper('export_pi');
+$pi_payment = export_pi_payment_terms($CI, $payment_term, $quote_record_id);
+$payment_percent = $pi_payment['advance_percentage'];
+$payment_terms_written = $pi_payment['text'];
 
 $rest=$this->db->select('*')->from('performa_invoice')->where('lead_id',$lead_id)->where('po_id',$poid)->get();
 if($rest->num_rows()>0)
@@ -213,14 +198,12 @@ class MYPDF extends TCPDF {
 
     // Page footer
     public function Footer() {
-    $this->SetY(-50);
-    $logoX = -2; // 
-    $logoFileName = imagepaths.'Footer.jpg';
-    $logoWidth = 210; // 15mm
-    $logoY = 270;
-    $logo = $this->Image($logoFileName, $logoX, $logoY, $logoWidth);
-    // $this->SetX($this->w - 18 - $logoWidth); // documentRightMargin = 18
-    // $this->Cell(10,10, $logo, 0, 0, '');
+        $logoFileName = imagepaths.'Footer.jpg';
+        $logoWidth = $this->getPageWidth();
+        $logoHeight = $logoWidth * 250 / 1646;
+        $logoY = $this->getPageHeight() - $logoHeight;
+
+        $this->Image($logoFileName, 0, $logoY, $logoWidth);
     }
 }
 
@@ -259,9 +242,8 @@ $pdf->SetFooterMargin(PDF_MARGIN_FOOTER);
 
 // define ('PDF_PAGE_ORIENTATION', 'L');
 
-// set auto page breaks
-$pdf->SetAutoPageBreak(TRUE, PDF_MARGIN_BOTTOM);
-$pdf->SetAutoPageBreak(TRUE, 2);
+// Keep invoice content above the full-width footer image.
+$pdf->SetAutoPageBreak(TRUE, 35);
 // set image scale factor
 $pdf->setImageScale(PDF_IMAGE_SCALE_RATIO);
 
@@ -282,7 +264,7 @@ $pdf->setPrintFooter(true);
 // print standard ASCII chars, you can use core fonts like
 // helvetica or times to reduce file size.
 $pdf->SetFont('dejavusans', '', 12, '', true);
-$pdf->SetAutoPageBreak(TRUE, PDF_MARGIN_BOTTOM);
+$pdf->SetAutoPageBreak(TRUE, 35);
 
 // Add a page
 // This method has several options, check the source code documentation for more information.
@@ -541,7 +523,14 @@ $html.='<table class="table1">
         }
 
 
-        $othercharge=$CI->salescrm->quotation_freight_packing_forwarding($quote_record_id);
+        $this->load->helper('export_pi');
+        $othercharge=export_pi_commercial($CI, $record_id, $quote_record_id);
+        $discount_amount=export_pi_discount(array_sum($basic_cost), $othercharge);
+        if ($discount_amount > 0) {
+            $total_array[] = -$discount_amount;
+            $basic_cost[] = -$discount_amount;
+            $html .= '<tr><td>'.$t++.'</td><td>Discount</td><td></td><td></td><td></td><td></td><td>-'.$CI->salescrm->formatIndianNumber($discount_amount).'</td></tr>';
+        }
                     //echo "<pre>"; print_r($othercharge); exit;
                     $i=$t;
                     if(count($othercharge)>0)
@@ -654,6 +643,13 @@ $html.='<table class="table1">
     //     <td></td>
     //     <td>'.$CI->salescrm->formatIndianNumber(array_sum($total_array)).'</td>
     // </tr>
+foreach (array('installation'=>'Installation Charges', 'other_charges'=>'Other Charges') as $key=>$label) {
+    if ($othercharge[$key] > 0) {
+        $amount = (float) $othercharge[$key];
+        $total_array[] = $amount;
+        $html .= '<tr><td>'.$t++.'</td><td>'.$label.'</td><td></td><td>1</td><td>Nos</td><td>'.$CI->salescrm->formatIndianNumber($amount).'</td><td>'.$CI->salescrm->formatIndianNumber($amount).'</td></tr>';
+    }
+}
 $html.='</table>
 
 
@@ -675,12 +671,13 @@ Swift code- AXISINBB039<br></td>
         <td style="text-align:left;">
             <table width="100%">
                 <tr>
-                    <td width="50%"><b>Advance '.floatval($payment_percent).'%</b></td>';
+                    <td width="50%"><b>Advance '.($payment_percent === null ? 'as per payment terms' : floatval($payment_percent).'%').'</b></td>';
                       $tot=round(array_sum($total_array));
                       
-                    $tobepaid=floatval($tot*($payment_percent/100));
+                    $tobepaid = $payment_percent === null ? null : floatval($tot*($payment_percent/100));
+                    $pi_amount_display = $tobepaid === null ? 'As per payment terms' : $sign.$CI->salescrm->formatIndianNumber($tobepaid);
 
-                    $html.='<td width="50%" style="text-align:left;"><b>'.$sign.$CI->salescrm->formatIndianNumber($tobepaid).'</b></td>
+                    $html.='<td width="50%" style="text-align:left;"><b>'.$pi_amount_display.'</b></td>
                 </tr>
             </table>
             <br>
@@ -695,8 +692,8 @@ Swift code- AXISINBB039<br></td>
             <td>
                 <table width="100%">
                  <tr>
-                    <td width="50%" style="text-align:left;"><b>Total Amount</b></td>
-                  <td width="50%" style="text-align:left;"><b>'.$sign.$CI->salescrm->formatIndianNumber(round($tobepaid)).'</b></td>
+                    <td width="50%" style="text-align:left;"><b>'.($tobepaid === null ? 'Invoice Value' : 'Advance Amount').'</b></td>
+                  <td width="50%" style="text-align:left;"><b>'.$sign.$CI->salescrm->formatIndianNumber(round($tobepaid === null ? $tot : $tobepaid)).'</b></td>
                 </tr>
             </table>
             </td>
@@ -708,8 +705,8 @@ Swift code- AXISINBB039<br></td>
         <td>
              <table class="table2">
                 <tr>
-                    <td width="20%"><b>Amount In Words</b>.</td>
-                    <td width="80%">: '.ucwords(strtolower(str_replace('-','',$CI->salescrm->convertNumberToWordsUSD(round($tobepaid))))).'</td>
+                    <td width="20%"><b>'.($tobepaid === null ? 'Invoice Value In Words' : 'Amount In Words').'</b>.</td>
+                    <td width="80%">: '.ucwords(strtolower(str_replace('-','',$CI->salescrm->convertNumberToWordsUSD(round($tobepaid === null ? $tot : $tobepaid))))).'</td>
                 </tr>
             </table>
         </td>

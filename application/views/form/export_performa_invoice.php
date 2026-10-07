@@ -36,15 +36,10 @@ if($currency==1){
 
 
 
-    $re=$this->db->select('payment_terms')->from('payment_terms')->where('id',$payment_term)->get();
-if($re->num_rows()>0)
-{
-    foreach($re->result() as $rrrrror);
-    $payment_terms_written=$rrrrror->payment_terms;
-}else
-{
-    $payment_terms_written='';
-}
+    $this->load->helper('export_pi');
+    $pi_payment = export_pi_payment_terms($CI, $payment_term, $CI->salescrm->getRecordID($lead_id));
+    $payment_terms_written = $pi_payment['text'];
+
 
 
 
@@ -334,7 +329,7 @@ if(count($basicData)>0)
                                     <b>I.E.C Code No. <span style="color:red">*</span></b>
                                 </td>
                                 <td width="30%"  style="vertical-align: top;">
-                                    <input type="text" class="form-control" name="iec_code" required>
+                                    <input type="text" class="form-control" name="iec_code">
                                 </td> -->
                                
                             </tr>
@@ -424,30 +419,30 @@ if(count($basicData)>0)
                                     <table class="table">
                                         <tr>
                                             <td width="20%">
-                                                <b>State<span style="color:red">*</span></b>
+                                                <b>State (optional)</b>
                                             </td>
                                             <td width="30%">
-                                                <input type="text" class="form-control" required name="bill_to_state" id="bill_to_state">
+                                                <input type="text" class="form-control" name="bill_to_state" id="bill_to_state">
                                             </td>
                                             <td width="20%">
-                                                <b>State Code<span style="color:red">*</span></b>
+                                                <b>State Code (optional)</b>
                                             </td>
                                             <td width="30%">
-                                                <input type="text" class="form-control" required name="bill_to_state_code" id="bill_to_state_code">
+                                                <input type="text" class="form-control" name="bill_to_state_code" id="bill_to_state_code">
                                             </td>
                                         </tr>
                                         <tr>
                                             <td width="20%">
-                                                <b>IEC CODE<span style="color:red">*</span></b>
+                                                <b>IEC CODE (optional)</b>
                                             </td>
                                             <td width="30%">
-                                                <input type="text" class="form-control" required name="bill_to_iec_no" id="bill_to_iec_no">
+                                                <input type="text" class="form-control" name="bill_to_iec_no" id="bill_to_iec_no">
                                             </td>
                                             <td width="20%">
                                                 <b>GST No.<span style="color:red"></span></b>
                                             </td>
                                             <td width="30%">
-                                                <input type="text" class="form-control" required name="bill_to_gst_no" id="bill_to_gst_no">
+                                                <input type="text" class="form-control" name="bill_to_gst_no" id="bill_to_gst_no">
                                             </td>
                                         </tr>
                                     </table>
@@ -485,25 +480,25 @@ if(count($basicData)>0)
                                     <table class="table">
                                         <tr>
                                             <td width="20%">
-                                                <b>State<span style="color:red">*</span></b>
+                                                <b>State (optional)</b>
                                             </td>
                                             <td width="30%">
-                                                <input type="text" class="form-control" name="ship_to_state" id="ship_to_state" required>
+                                                <input type="text" class="form-control" name="ship_to_state" id="ship_to_state">
                                             </td>
                                             <td width="20%">
-                                                <b>State Code<span style="color:red">*</span></b>
+                                                <b>State Code (optional)</b>
                                                
                                             </td>
                                             <td width="30%">
-                                                <input type="text" required class="form-control" name="ship_to_state_code" id="ship_to_state_code">
+                                                <input type="text" class="form-control" name="ship_to_state_code" id="ship_to_state_code">
                                             </td>
                                         </tr>
                                         <!-- <tr>
                                             <td width="20%">
-                                                <b>GST No.<span style="color:red">*</span></b>
+                                                <b>GST No. (optional)</b>
                                             </td>
                                             <td width="30%">
-                                                <input type="text" required class="form-control" name="ship_to_gst_no" id="ship_to_gst_no">
+                                                <input type="text" class="form-control" name="ship_to_gst_no" id="ship_to_gst_no">
                                             </td>
                                             <td width="20%">
                                                 <b>PAN No.<span style="color:red">*</span></b>
@@ -786,25 +781,10 @@ Annexure-II  <?php echo $desc;?></textarea>
                     ?>
 
                     <?php 
-                    $dscvalafterdiscount = 0;
-$q = $this->db->select('discount_type, discountvalue')->from('quotation_discount_data')->where('record_id',$record_id)->get();
-if($q->num_rows()>0){
-    foreach($q->result() as $discountdata);
-    if($discountdata->discount_type==1){
-        $pecentdesc = '';
-        $pecentdesc = "(".$discountdata->discountvalue." %)";
-        $dscvalafterdiscount  =array_sum($basic_cost)*$discountdata->discountvalue/100;
-        $basic_cost[]=0-$dscvalafterdiscount;
-    }else{
-        $pecentdesc = '';
-        //$disval = $discountdata->discountvalue;
-        $dscvalafterdiscount = $discountdata->discountvalue;
-        $basic_cost[]=0;
-    }
-
-}
-
-
+$this->load->helper('export_pi');
+$pi_commercial = export_pi_commercial($CI, 0, $record_id);
+$dscvalafterdiscount = export_pi_discount(array_sum($basic_cost), $pi_commercial);
+$basic_cost[] = -$dscvalafterdiscount;
                     ?>
 
                     <div style="display: flex; align-items: center; width: 100%;">
@@ -825,100 +805,11 @@ if($q->num_rows()>0){
                     <div style="clear:both;height: 40px;"></div>
 
 
-                    <?php 
-                    $othercharge=$CI->salescrm->quotation_freight_packing_forwarding($record_id);
-                    //echo "<pre>"; print_r($othercharge); exit;
-                    $i=$i+1;
-                    if(count($othercharge)>0)
-                    {
-
-                    ?>
-                    <div class="col-md-2"></div>
-                    <div class="col-md-8">
-                    <table class="table table-bordered">
-                    <thead>
-                    <tr>
-                    <th>Particular</th>
-                    <th>Rate</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <?php
-                    if($othercharge['packing_charges']>0)
-                    {
-                    ?>
-                     <tr>
-                    <td>Packing Charges</td>
-                    <td><?php echo floatval($othercharge['packing_charges']);?>%</td>
-                    </tr>
-                    <?php
-                    }
-                    ?>
-
-                    <?php
-                    if($othercharge['forwarding_charges']>0)
-                    {
-                    ?>
-                    <tr>
-                    <td>Forwarding Charges</td>
-                    <td><?php echo floatval($othercharge['forwarding_charges']);?>%</td>
-                    </tr>
-                    <?php  
-                    } ?>
-
-
-                    <?php
-                    if($othercharge['insurance']>0)
-                    {
-                    ?>
-                    <tr>
-                    <td>Insurance Charges</td>
-                    <td><?php echo floatval($othercharge['insurance']);?>%</td>
-                    </tr>
-
-                    <?php 
-                    } ?>
-
-
-                     <?php
-                    if($othercharge['freight']==1 || $othercharge['freight']==2)
-                    {
-                            if($othercharge['freight']==1)
-                            {
-                            $ftype="Extra at Actuals";
-                            }else
-                            {
-                            $ftype="In Customer Scope";
-                            }
-                    ?>
-                    <tr>
-                    <td>Freight</td>
-                    <td><?php echo $ftype;?></td>
-                    </tr>
-
-                    <?php  
-                    }else {
-                    ?>
-
-                    <tr>
-                    <td>Freight-Additional</td>
-                    <td><?php echo floatval($othercharge['freight_charges']);?></td>
-                    </tr>
-
-                    <?php
-                    } ?>
-
-
-
-
-
-
-                    <?php } ?>
-
-
-                    </tbody>
-                    </table>
-                    </div>
+<?php
+$this->load->helper('export_pi');
+$pi_commercial = export_pi_commercial($CI, 0, $CI->salescrm->getRecordID($lead_id));
+$this->load->view('form/_export_pi_charges', array('pi_commercial' => $pi_commercial));
+?>
 
 
                  <!--  <div class="col-md-12">
@@ -1160,7 +1051,10 @@ function getbasicCostSum()
 //    alert(total);
     // DISCOUNT 
 
-    var discount=$(".basicCost_discount").val();
+    var terms = <?php echo json_encode($pi_commercial); ?>;
+    var discount = Math.min(total, Math.max(0, Number(terms.discount_type) === 1 ? total * Number(terms.discountvalue) / 100 : Number(terms.discountvalue)));
+    $('.basicCost_discount').val(discount);
+    $('#tbc_dis').text(discount.toFixed(2));
 
     var total=total-discount;
     $(".basicCost").val(total);

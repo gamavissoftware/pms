@@ -4,9 +4,9 @@ $CI->load->model('MIS_model','mis_model');
 $user_id=$this->uri->segment(6);
 $fname=$_SESSION['logged_in']['user_name'];
 $lname=$_SESSION['logged_in']['last_name'];
-$st=$this->uri->segment(4);
-$et=$this->uri->segment(5);
-$dfid = $this->uri->segment(3);
+$st=$this->uri->segment(4) ?: date('Y-m-d', strtotime('-1 year +1 day'));
+$et=$this->uri->segment(5) ?: date('Y-m-d');
+$dfid = $this->uri->segment(3) ?: 'ALL';
 $user_role = $this->session->userdata['logged_in']['role'];
 $totaldata = array();
 $totaldata[] = 0;
@@ -115,6 +115,14 @@ table{
     font-size: 12px !important;
 
 }
+.appraisal-summary { font-size: 14px; font-weight: 700; }
+.performance-badge { display:inline-block; min-width:145px; padding:8px 12px; border-radius:18px; color:#fff; font-weight:700; }
+.performance-excellent { background:#159957; }
+.performance-average { background:#f0a202; }
+.performance-poor { background:#cf3f3f; }
+.performance-legend { margin:0 0 15px; color:#58616b; }
+.performance-legend span { margin-right:14px; white-space:nowrap; }
+.performance-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; }
 </style>
 
 </head>
@@ -143,8 +151,9 @@ table{
 </div>
 </div>
 </div>
-<?php 
-	if($_SESSION['logged_in']['business_location']!=1 && $user_role==12){?>
+<?php
+	$can_filter_appraisal = in_array((int) $user_role, array(1, 12, 68, 84), true);
+	if($can_filter_appraisal){?>
 
 <form name="frm" action="<?php echo page_url;?>MIS/filter_mis" method="post">
 <div class="row">
@@ -154,7 +163,7 @@ table{
 	<div class="form-group">
 		<label>FILTER BY DF NO</label>
 		<select class="form-control multipleselect" name="filterbydf" id="filterbydf">
-			<option value="ALL" <?php if($this->uri->segment(3)=='ALL'){echo "selected";}?>>ALL</option>
+			<option value="ALL" <?php if($dfid=='ALL'){echo "selected";}?>>ALL</option>
 			<?php 
 				$q = $this->db->select('df_no, id, df_description')->from('df_release')->where('df_status',0)->where('on_hold',0)->order_by('id','desc')->get();
 				if($q->num_rows()>0){
@@ -168,13 +177,13 @@ table{
 <div class="col-md-2">
 <div class="form-group">
 <label>START DATE</label>
-<input type="date" name="start_date" id="start_date" class="form-control" required value="<?php echo $this->uri->segment(4);?>">
+<input type="date" name="start_date" id="start_date" class="form-control" required value="<?php echo $st;?>">
 </div>
 </div>
 <div class="col-md-2">
 <div class="form-group">
 <label>END DATE</label>
-<input type="date" name="end_date" id="end_date" class="form-control" value="<?php echo $this->uri->segment(5);?>"  required>
+<input type="date" name="end_date" id="end_date" class="form-control" value="<?php echo $et;?>"  required>
 </div>
 </div>
 
@@ -241,17 +250,55 @@ foreach($rtr->result() as $rtr1)
 </div>
 <div class="col-md-1 text-center">
 	<div class="form-group" style="margin-top: 23px;"><input type="submit" value="Filter" name="sub" id="sub" class="btn btn-success"></div></div>
+<div class="col-md-12 text-right">
+	<button type="button" id="annualPeriod" class="btn btn-primary btn-sm">Last 12 Months</button>
+	<small style="margin-left:8px;color:#666;">Annual appraisal period is the default.</small>
+</div>
 
 </div>
 </div>
 </form>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+	var form = document.forms.frm;
+	if (!form) return;
+	var annualButton = document.getElementById('annualPeriod');
+	if (annualButton) annualButton.addEventListener('click', function () {
+		var end = new Date();
+		var start = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate() + 1);
+		function iso(date) {
+			var month = String(date.getMonth() + 1); if (month.length < 2) month = '0' + month;
+			var day = String(date.getDate()); if (day.length < 2) day = '0' + day;
+			return date.getFullYear() + '-' + month + '-' + day;
+		}
+		document.getElementById('start_date').value = iso(start);
+		document.getElementById('end_date').value = iso(end);
+		form.submit();
+	});
+	form.addEventListener('submit', function (event) {
+		var start = document.getElementById('start_date').value;
+		var end = document.getElementById('end_date').value;
+		if (start && end && start > end) {
+			event.preventDefault();
+			alert('Start Date cannot be after End Date.');
+		}
+	});
+});
+</script>
 <?php }?>
 
 
 
 
 <!-- end page title end breadcrumb -->
-<span style="color:red;"><?php //echo   $this->session->flashdata('message'); ?></span>
+<span style="color:red;"><?php echo $this->session->flashdata('message'); ?></span>
+
+<div class="performance-legend">
+	<strong>Performance classification:</strong>
+	<span><i class="performance-dot performance-excellent"></i>Excellent: 90–100%</span>
+	<span><i class="performance-dot performance-average"></i>Average: 75–89%</span>
+	<span><i class="performance-dot performance-poor"></i>Needs Improvement: below 75%</span>
+</div>
 
 <div class="row" style="margin-top:20px;">
 
@@ -321,9 +368,9 @@ $assigned_module[]=0;
 <td rowspan="<?php echo $cs;?>"><?php echo strtoupper($fname);?> <?php echo strtoupper($lname);?><br><br/>(<?php echo strtoupper($rtr11->department);?>)<?php //echo $user_id;?></td>
 <td rowspan="2">TASK</td>
 <td>% OF WORK NOT DONE<br/><span style="color:grey;font-weight: bold;">(Assigned vs completed tasks. Tasks with open help tickets are considered completed.)</span></td>
-<td><?php $totalassigned = $CI->mis_model->allassignedtask($user_id,$et,$dfid);
+<td><?php $totalassigned = $CI->mis_model->allassignedtask($user_id,$st,$et,$dfid);
 echo  $totalassigned;?></td>
-<td><?php $totaldonetask =  $CI->mis_model->totalassignedworkdone($user_id,$et,$dfid);
+<td><?php $totaldonetask =  $CI->mis_model->totalassignedworkdone($user_id,$st,$et,$dfid);
 echo $totaldonetask;?></td>
 <td><a href='javascript:;' onclick="gettaskmodel('<?php echo $user_id;?>','<?php echo $st;?>','<?php echo $et;?>',1,'<?php echo $dfid;?>');"><u><?php
 $diff = $totalassigned-$totaldonetask;
@@ -389,9 +436,9 @@ if($avg==''){echo "0";}else{echo round($avg,2);}?> DAYS</td>
 <tr>
 <td>HELPTICKETS RAISED FOR YOU</td>
 <td>% OF WORK NOT DONE</td>
-<td><?php $totalassigned = $CI->mis_model->allassigneTickets($user_id,$dfid);
+<td><?php $totalassigned = $CI->mis_model->allassigneTickets($user_id,$dfid,$st,$et);
 echo  $totalassigned;?></td>
-<td><?php $totaldonetask =  $CI->mis_model->allassigneTicketsDone($user_id,$dfid);
+<td><?php $totaldonetask =  $CI->mis_model->allassigneTicketsDone($user_id,$dfid,$st,$et);
 echo $totaldonetask;?></td>
 <td><a href='javascript:;' onclick="gettaskmodel('<?php echo $user_id;?>','<?php echo $st;?>','<?php echo $et;?>',3,'<?php echo $dfid;?>');"><u><?php
 $diff = $totalassigned-$totaldonetask;
@@ -416,9 +463,9 @@ echo $diff; ?></u></a></td>
 <tr>
 <td>HELPTICKETS RAISED BY YOU (NOT CLOSED)</td>
 <td>% OF WORK NOT DONE</td>
-<td><?php $totalassigned = $CI->mis_model->allCreatedTickets($user_id,$dfid);
+<td><?php $totalassigned = $CI->mis_model->allCreatedTickets($user_id,$dfid,$st,$et);
 echo  $totalassigned;?></td>
-<td><?php $totaldonetask =  $CI->mis_model->allcreatedTicketsDone($user_id,$dfid);
+<td><?php $totaldonetask =  $CI->mis_model->allcreatedTicketsDone($user_id,$dfid,$st,$et);
 echo $totaldonetask;?></td>
 <td><a href='javascript:;' onclick="gettaskmodel('<?php echo $user_id;?>','<?php echo $st;?>','<?php echo $et;?>',4,'<?php echo $dfid;?>');"><u><?php
 $diff = $totalassigned-$totaldonetask;
@@ -617,7 +664,7 @@ if($getMomAssigned>0)
 ?>
 <tr>
 <td rowspan="2" class="thirty_weightage">MOM</td>
-<td  class="thirty_weightage">% OF WORK DONE</td>
+<td  class="thirty_weightage">% OF WORK NOT DONE</td>
 <td  class="thirty_weightage"><?php echo $getMomAssigned;?></td>
 <td class="thirty_weightage"><?php echo $getMomCompleted;?></td>
 <td class="thirty_weightage"><a href='javascript:;' onclick="get_mom_modal('<?php echo $user_id;?>','<?php echo $st;?>','<?php echo $et;?>',1);"><u><?php echo $diff;?></u></a></td>
@@ -646,18 +693,39 @@ if($mom_done_this_week>0)
 
 
 
-<tr>
-<td colspan="5"></td>
-<td style="background-color: #efecec;">
-	<?php
-	if(array_sum($assigned_module)>0)
-	{
-	echo round(ceil($per2+$per3+$per4+$per5+$per6+$per7+$per8+$per9+$per10)/array_sum($assigned_module))."%";
-	}else
-	{
-		echo 0;
-	}
-	?>
+<?php
+$active_parameters = array_sum($assigned_module);
+$calculated_issue_rate = $active_parameters > 0
+	? round(($per2+$per3+$per4+$per5+$per6+$per7+$per8+$per9+$per10) / $active_parameters)
+	: 0;
+$issue_rate = $active_parameters > 0
+	? $CI->mis_model->get_appraisal_issue_rate($user_id, $calculated_issue_rate)
+	: 0;
+$performance_score = $active_parameters > 0 ? max(0, 100 - $issue_rate) : null;
+if ($performance_score === null) {
+	$performance_label = 'Insufficient Data';
+	$performance_class = 'performance-average';
+} elseif ($performance_score >= 90) {
+	$performance_label = 'Excellent';
+	$performance_class = 'performance-excellent';
+} elseif ($performance_score >= 75) {
+	$performance_label = 'Average';
+	$performance_class = 'performance-average';
+} else {
+	$performance_label = 'Needs Improvement';
+	$performance_class = 'performance-poor';
+}
+?>
+<tr class="appraisal-summary">
+<td colspan="4" class="text-right">APPRAISAL PERFORMANCE</td>
+<td><?php echo $active_parameters; ?> active parameter(s)</td>
+<td>
+	<span class="performance-badge <?php echo $performance_class; ?>">
+		<?php echo $performance_score === null ? 'N/A' : $performance_score.'%'; ?> — <?php echo $performance_label; ?>
+	</span>
+	<div style="margin-top:5px;color:#666;font-size:11px;">
+		Issue rate: <?php echo $issue_rate; ?>%
+	</div>
 </td>
 </tr>
 
@@ -924,9 +992,8 @@ $(document).on('click', '.save-remark-btn', function () {
             if (res.status === 'success') {
 
                 // ✅ Replace textarea + button with saved remark
-                $('#remark_' + res.id).closest('td').html(
-                    '<span id="remark_text_' + res.id + '">' + res.remark + '</span>'
-                );
+				var cell = $('#remark_' + res.id).closest('td').empty();
+				$('<span>').attr('id', 'remark_text_' + res.id).text(res.remark).appendTo(cell);
 
             } else {
                 alert('Failed to save');
@@ -949,4 +1016,4 @@ $(document).on('click', '.save-remark-btn', function () {
                     $('.multipleselect').select2();
             });
         </script>
-</html>	
+</html>

@@ -121,6 +121,228 @@ class Customer_master_control_model extends CI_Model
         return $customers;
     }
 
+    public function get_quotation_audit_rows()
+    {
+        $rows = $this->get_customers(array());
+        $marketing_usage = $this->get_marketing_quotation_usage();
+        $spares_usage = $this->get_spares_quotation_usage();
+        $service_usage = $this->get_service_quotation_usage();
+        $opportunity_usage = $this->get_customer_opportunities();
+
+        foreach ($rows as &$row) {
+            $source = $row['source_type'];
+            $id = (int) $row['record_id'];
+            $row['marketing_quote_count'] = ($source === 'marketing' && isset($marketing_usage[$id])) ? (int) $marketing_usage[$id] : 0;
+            $row['spares_quote_count'] = ($source === 'spares' && isset($spares_usage[$id])) ? (int) $spares_usage[$id] : 0;
+            $row['service_quote_count'] = isset($service_usage[$source][$id]) ? (int) $service_usage[$source][$id] : 0;
+            $row['total_quote_count'] = $row['marketing_quote_count'] + $row['spares_quote_count'] + $row['service_quote_count'];
+            $row['opportunities'] = isset($opportunity_usage[$source][$id]) ? $opportunity_usage[$source][$id] : array();
+            $row['opportunity_count'] = count($row['opportunities']);
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    private function get_customer_opportunities()
+    {
+        $result = array('marketing' => array(), 'spares' => array());
+        if ($this->db->table_exists('leads')) {
+            $sql = "SELECT l.id AS opportunity_id, l.company_name AS customer_id, COALESCE(NULLIF(l.unique_id, ''), CONCAT('Lead #', l.id)) AS opportunity_no,
+                           COALESCE(ls.lead_name, 'Stage not recorded') AS stage_name
+                    FROM leads l
+                    LEFT JOIN progress_remarks pr ON pr.id = (SELECT MAX(pr2.id) FROM progress_remarks pr2 WHERE pr2.lead_id = l.id)
+                    LEFT JOIN lead_stage ls ON ls.lead_id = pr.lead_status
+                    WHERE l.company_name IS NOT NULL AND l.company_name > 0";
+            foreach ($this->db->query($sql)->result_array() as $row) {
+                $result['marketing'][(int)$row['customer_id']][] = array('module' => 'Marketing', 'id' => (int)$row['opportunity_id'], 'number' => $row['opportunity_no'], 'stage' => $row['stage_name'], 'url' => 'Leads/view_detail/' . (int)$row['opportunity_id']);
+            }
+        }
+        if ($this->db->table_exists('opportunities')) {
+            $sql = "SELECT o.opportunity_id, o.customer_id, COALESCE(NULLIF(o.op_no, ''), CONCAT('Opportunity #', o.opportunity_id)) AS opportunity_no,
+                           COALESCE(s.lead_name, 'Stage not recorded') AS stage_name
+                    FROM opportunities o
+                    LEFT JOIN spare_progress_remarks pr ON pr.id = (SELECT MAX(pr2.id) FROM spare_progress_remarks pr2 WHERE pr2.lead_id = o.opportunity_id)
+                    LEFT JOIN spare_lead_stage s ON s.lead_id = pr.lead_stage
+                    WHERE o.customer_id IS NOT NULL AND o.customer_id > 0";
+            foreach ($this->db->query($sql)->result_array() as $row) {
+                $result['spares'][(int)$row['customer_id']][] = array('module' => 'Spares', 'id' => (int)$row['opportunity_id'], 'number' => $row['opportunity_no'], 'stage' => $row['stage_name'], 'url' => 'Spares/opportunity_detail/' . (int)$row['opportunity_id']);
+            }
+        }
+        if ($this->db->table_exists('service_opportunities')) {
+            $sql = "SELECT so.opportunity_id, so.customer_id, CASE WHEN so.customer_table_origin IN ('spare','spares') THEN 'spares' ELSE 'marketing' END AS source_type,
+                           COALESCE(NULLIF(so.op_no, ''), CONCAT('Service #', so.opportunity_id)) AS opportunity_no,
+                           COALESCE(s.stage_name, 'Stage not recorded') AS stage_name
+                    FROM service_opportunities so
+                    LEFT JOIN service_lead_stages s ON s.stage_id = so.current_stage_id
+                    WHERE so.customer_id IS NOT NULL AND so.customer_id > 0";
+            foreach ($this->db->query($sql)->result_array() as $row) {
+                $source = $row['source_type'];
+                $result[$source][(int)$row['customer_id']][] = array('module' => 'Service', 'id' => (int)$row['opportunity_id'], 'number' => $row['opportunity_no'], 'stage' => $row['stage_name'], 'url' => 'ServiceLeads/opportunity_detail/' . (int)$row['opportunity_id']);
+            }
+        }
+        return $result;
+    }
+
+    private function get_marketing_quotation_usage()
+    {
+        if (!$this->db->table_exists('quotation_customer_data') || !$this->db->table_exists('leads')) {
+            return array();
+        }
+
+        $sql = "SELECT x.customer_id, COUNT(DISTINCT x.quote_id) AS quote_count
+                FROM (
+                    SELECT q.id AS quote_id, q.customer_id
+                    FROM quotation_customer_data q
+                    WHERE q.customer_id IS NOT NULL AND q.customer_id > 0
+                    UNION ALL
+                    SELECT q.id AS quote_id, l.company_name AS customer_id
+                    FROM quotation_customer_data q
+                    INNER JOIN leads l ON l.id = q.lead_id
+                    WHERE l.company_name IS NOT NULL AND l.company_name > 0
+                ) x
+                GROUP BY x.customer_id";
+        return $this->usage_rows_to_map($this->db->query($sql)->result_array());
+    }
+
+    private function get_spares_quotation_usage()
+    {
+        if (!$this->db->table_exists('quotations')) {
+            return array();
+        }
+
+        $sql = "SELECT x.customer_id, COUNT(DISTINCT x.quote_id) AS quote_count
+                FROM (
+                    SELECT q.quotation_id AS quote_id, q.customer_id
+                    FROM quotations q
+                    WHERE q.customer_id IS NOT NULL AND q.customer_id > 0";
+        if ($this->db->table_exists('opportunities')) {
+            $sql .= " UNION ALL
+                      SELECT q.quotation_id AS quote_id, o.customer_id
+                      FROM quotations q
+                      INNER JOIN opportunities o ON o.opportunity_id = q.opportunity_id
+                      WHERE o.customer_id IS NOT NULL AND o.customer_id > 0";
+        }
+        $sql .= ") x GROUP BY x.customer_id";
+
+        return $this->usage_rows_to_map($this->db->query($sql)->result_array());
+    }
+
+    private function get_service_quotation_usage()
+    {
+        $usage = array('marketing' => array(), 'spares' => array());
+        if (!$this->db->table_exists('service_quotations') || !$this->db->table_exists('service_opportunities')) {
+            return $usage;
+        }
+
+        $sql = "SELECT
+                    CASE WHEN so.customer_table_origin IN ('spare', 'spares') THEN 'spares' ELSE 'marketing' END AS source_type,
+                    so.customer_id,
+                    COUNT(DISTINCT sq.id) AS quote_count
+                FROM service_quotations sq
+                INNER JOIN service_opportunities so ON so.opportunity_id = sq.opportunity_id
+                WHERE so.customer_id IS NOT NULL AND so.customer_id > 0
+                GROUP BY source_type, so.customer_id";
+        foreach ($this->db->query($sql)->result_array() as $row) {
+            $source = $row['source_type'];
+            $usage[$source][(int) $row['customer_id']] = (int) $row['quote_count'];
+        }
+        return $usage;
+    }
+
+    private function usage_rows_to_map($rows)
+    {
+        $result = array();
+        foreach ($rows as $row) {
+            $result[(int) $row['customer_id']] = (int) $row['quote_count'];
+        }
+        return $result;
+    }
+
+    public function delete_unused_customer($source, $record_id, $changed_by)
+    {
+        $source = trim((string) $source);
+        $record_id = (int) $record_id;
+        $audit_rows = $this->get_quotation_audit_rows();
+        $target = null;
+        foreach ($audit_rows as $row) {
+            if ($row['source_type'] === $source && (int) $row['record_id'] === $record_id) {
+                $target = $row;
+                break;
+            }
+        }
+        if (!$target || (int) $target['total_quote_count'] > 0) {
+            return array('success' => false, 'message' => 'Deletion stopped because the record now has quotation usage or no longer exists.');
+        }
+
+        $snapshot = $source === 'marketing'
+            ? $this->get_marketing_customer_snapshot($record_id)
+            : $this->get_spares_customer_snapshot($record_id);
+        if (empty($snapshot)) {
+            return array('success' => false, 'message' => 'Customer record was not found.');
+        }
+
+        $this->db->trans_start();
+        $this->log_history($source, $record_id, 'DELETED_UNUSED_DUPLICATE', (int) $changed_by, $snapshot, array(), 'Deleted from duplicate quotation audit.', array('record_deleted'));
+        if ($source === 'marketing') {
+            $this->delete_marketing_opportunities($record_id);
+            $this->delete_service_opportunities($source, $record_id);
+            if ($this->db->table_exists('company_multiple_contacts')) {
+                $this->db->where('customer_id', $record_id)->delete('company_multiple_contacts');
+            }
+            $this->db->where('id', $record_id)->delete('customer_detail');
+        } else {
+            $this->delete_spares_opportunities($record_id);
+            $this->delete_service_opportunities($source, $record_id);
+            $this->db->where('shipping_customer_id', $record_id)->update('spares_customers', array('shipping_customer_id' => null));
+            $this->db->where('customer_id', $record_id)->delete('spares_customers');
+        }
+        $this->db->trans_complete();
+
+        if ($this->db->trans_status() === false) {
+            return array('success' => false, 'message' => 'The customer could not be deleted because it is still linked to other records.');
+        }
+        return array('success' => true, 'message' => 'Unused duplicate customer and its zero-quotation opportunities deleted successfully.');
+    }
+
+    private function delete_marketing_opportunities($customer_id)
+    {
+        if (!$this->db->table_exists('leads')) return;
+        $ids = array_column($this->db->select('id')->from('leads')->where('company_name', (int)$customer_id)->get()->result_array(), 'id');
+        if (empty($ids)) return;
+        foreach (array('progress_remarks', 'lead_products', 'lead_assigned_to_team_member') as $table) {
+            if ($this->db->table_exists($table) && $this->db->field_exists('lead_id', $table)) $this->db->where_in('lead_id', $ids)->delete($table);
+        }
+        $this->db->where_in('id', $ids)->delete('leads');
+    }
+
+    private function delete_spares_opportunities($customer_id)
+    {
+        if (!$this->db->table_exists('opportunities')) return;
+        $ids = array_column($this->db->select('opportunity_id')->from('opportunities')->where('customer_id', (int)$customer_id)->get()->result_array(), 'opportunity_id');
+        if (empty($ids)) return;
+        foreach (array('opportunity_products', 'spare_progress_remarks') as $table) {
+            if (!$this->db->table_exists($table)) continue;
+            $field = $table === 'spare_progress_remarks' ? 'lead_id' : 'opportunity_id';
+            $this->db->where_in($field, $ids)->delete($table);
+        }
+        $this->db->where_in('opportunity_id', $ids)->delete('opportunities');
+    }
+
+    private function delete_service_opportunities($source, $customer_id)
+    {
+        if (!$this->db->table_exists('service_opportunities')) return;
+        $this->db->select('opportunity_id')->from('service_opportunities')->where('customer_id', (int)$customer_id);
+        if ($source === 'spares') $this->db->where_in('customer_table_origin', array('spare', 'spares'));
+        else $this->db->group_start()->where('customer_table_origin IS NULL', null, false)->or_where_not_in('customer_table_origin', array('spare', 'spares'))->group_end();
+        $ids = array_column($this->db->get()->result_array(), 'opportunity_id');
+        if (empty($ids)) return;
+        foreach (array('service_progress_history') as $table) {
+            if ($this->db->table_exists($table) && $this->db->field_exists('opportunity_id', $table)) $this->db->where_in('opportunity_id', $ids)->delete($table);
+        }
+        $this->db->where_in('opportunity_id', $ids)->delete('service_opportunities');
+    }
+
     public function compare_customer_rows($left, $right)
     {
         $left_timestamp = strtotime(!empty($left['sort_date']) ? $left['sort_date'] : '1970-01-01 00:00:00');

@@ -5,7 +5,16 @@ $CIA->load->model('Task_model');
 $administrator_user_ids = [161, 139, 61, 162, 167];
 $current_user_id = (int) $this->session->userdata['logged_in']['user_id'];
 $is_df_admin = in_array($current_user_id, $administrator_user_ids, true);
+$is_team_leader = $this->db->select('department_id')
+    ->from('prestogroup_teams')
+    ->where('team_leader', $current_user_id)
+    ->limit(1)
+    ->get()
+    ->num_rows() > 0;
+$can_view_all_running_df = ($is_df_admin || $is_team_leader);
 $today = date('Y-m-d');
+$this->load->helper('df_delay');
+$currentDfDelays = df_current_delay_counts($this->db, $today);
 
 $company_q = $this->db->select('company_name, logo, colorcode')->from('company_information')->get();
 $LOGO = ($company_q->num_rows() > 0) ? $company_q->row() : null;
@@ -22,10 +31,14 @@ function safeDateShowDfDelayReport($date, $format = 'd-m-Y')
 
 $reportid = (string) $this->uri->segment(3);
 $isDelayReport = ($reportid === '1');
+$customisedDfActivity = isset($customised_df_activity) && is_array($customised_df_activity)
+    ? $customised_df_activity
+    : array();
 
 $rowsData = array();
 
 $totalDf = 0;
+$totalCustomisedDf = 0;
 $totalDelayedDf = 0;
 $totalCriticalDf = 0;
 $totalOpenTickets = 0;
@@ -80,29 +93,12 @@ $this->db->where('df.df_status', 0);
 $this->db->where('df.on_hold', 0);
 
 if ($isDelayReport) {
-    $delayed_df_visibility_query = '
-        EXISTS (
-            SELECT 1
-            FROM task_department_wise_scheduling delayed_tasks
-            WHERE delayed_tasks.df_id = df.id
-            AND delayed_tasks.on_hold = 0
-            AND (
-                (
-                    delayed_tasks.task_status = 0
-                    AND delayed_tasks.end_date < ' . $this->db->escape($today) . '
-                )
-                OR
-                (
-                    delayed_tasks.task_status = 1
-                    AND delayed_tasks.task_completed_on IS NOT NULL
-                    AND delayed_tasks.task_completed_on != "0000-00-00 00:00:00"
-                    AND DATE(delayed_tasks.task_completed_on) > delayed_tasks.end_date
-                )
-            )
-        )
-    ';
+    $delayed_df_visibility_query = 'EXISTS (
+        SELECT 1 FROM task_department_wise_scheduling delayed_tasks
+        WHERE delayed_tasks.df_id = df.id AND ' . df_open_overdue_sql($this->db, 'delayed_tasks', $today) . '
+    )';
 
-    if ($is_df_admin) {
+    if ($can_view_all_running_df) {
         $this->db->where($delayed_df_visibility_query, null, false);
     } else {
         // A marketing user's dashboard must contain only DFs owned by that user.
@@ -112,7 +108,7 @@ if ($isDelayReport) {
         $this->db->where($delayed_df_visibility_query, null, false);
         $this->db->group_end();
     }
-} elseif (!$is_df_admin) {
+} elseif (!$can_view_all_running_df) {
     $this->db->where('po.added_by', $current_user_id);
 }
 
@@ -247,7 +243,8 @@ if ($query->num_rows() > 0) {
             }
         }
 
-        $delayStatus = ($delayPercentage > 0 || $dfDelayDays > 0) ? 'Delayed' : 'On Time';
+        $hasCurrentDelay = !empty($currentDfDelays[(int)$rows->id]);
+        $delayStatus = $hasCurrentDelay ? 'Delayed' : 'On Time';
         $ticketStatus = ((int)$rows->open_ticket_count > 0) ? 'Open Tickets' : 'No Tickets';
 
         $riskLevel = 'Normal';
@@ -263,13 +260,21 @@ if ($query->num_rows() > 0) {
 
         $show = 1;
         if ($isDelayReport) {
-            $show = ($delayPercentage > 0 || $dfDelayDays > 0) ? 1 : 0;
+            $show = $hasCurrentDelay ? 1 : 0;
         }
 
         if ($show == 1) {
+            $customisedActivity = isset($customisedDfActivity[(int) $rows->id])
+                ? $customisedDfActivity[(int) $rows->id]
+                : array();
+            $isCustomisedDf = !empty($customisedActivity);
             $totalDf++;
             $totalProgress += $completionPercentage;
             $totalOpenTickets += (int)$rows->open_ticket_count;
+
+            if ($isCustomisedDf) {
+                $totalCustomisedDf++;
+            }
 
             if ($delayStatus == 'Delayed') {
                 $totalDelayedDf++;
@@ -299,6 +304,7 @@ if ($query->num_rows() > 0) {
                 'projected_completion_date' => $projectedDisplay,
                 'actual_completion_date' => $actualDisplay,
                 'df_delay_days' => $dfDelayDays,
+                'overdue_task_count' => isset($currentDfDelays[(int)$rows->id]) ? (int)$currentDfDelays[(int)$rows->id] : 0,
                 'completion_percentage' => $completionPercentage,
                 'delay_percentage' => $delayPercentage,
                 'open_ticket_count' => (int)$rows->open_ticket_count,
@@ -309,7 +315,10 @@ if ($query->num_rows() > 0) {
                 'delay_status' => $delayStatus,
                 'ticket_status' => $ticketStatus,
                 'risk_level' => $riskLevel,
-                'risk_class' => $riskClass
+                'risk_class' => $riskClass,
+                'is_customised_df' => $isCustomisedDf,
+                'customised_activity_count' => isset($customisedActivity['activity_count']) ? (int) $customisedActivity['activity_count'] : 0,
+                'customised_last_scheduled_on' => isset($customisedActivity['last_scheduled_on']) ? $customisedActivity['last_scheduled_on'] : ''
             );
         }
     }
@@ -466,6 +475,56 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
             box-shadow: 0 8px 24px rgba(31,41,55,0.05);
         }
 
+        .df-view-tabs {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            margin-bottom: 16px;
+            padding: 3px;
+            border: 1px solid #d8dee9;
+            border-radius: 7px;
+            background: #f3f6fb;
+        }
+
+        .df-view-tab {
+            min-height: 36px;
+            border: 0;
+            border-radius: 5px;
+            padding: 7px 13px;
+            background: transparent;
+            color: #4b5563;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .df-view-tab:hover,
+        .df-view-tab:focus {
+            color: #111827;
+            outline: none;
+        }
+
+        .df-view-tab.is-active {
+            background: #fff;
+            color: #0f766e;
+            box-shadow: 0 1px 4px rgba(31,41,55,0.12);
+        }
+
+        .df-view-count {
+            display: inline-block;
+            min-width: 22px;
+            margin-left: 5px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #e5e7eb;
+            color: #374151;
+            text-align: center;
+        }
+
+        .df-view-tab.is-active .df-view-count {
+            background: #d8f3ec;
+            color: #0f766e;
+        }
+
         .filter-title {
             font-size: 15px;
             font-weight: 900;
@@ -507,6 +566,31 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
             font-weight: 900;
             display: inline-block;
             white-space: nowrap;
+        }
+
+        .customised-df-badge {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 4px 7px;
+            border: 1px solid #99d8c9;
+            border-radius: 4px;
+            background: #e8f7f2;
+            color: #0f766e;
+            font-size: 10px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+        table.manglesh tbody tr.customised-df-row > td {
+            background-color: #f4fbf9 !important;
+        }
+
+        table.manglesh tbody tr.customised-df-row > td:first-child {
+            box-shadow: inset 4px 0 0 #159477;
+        }
+
+        table.manglesh tbody tr.customised-df-row:hover > td {
+            background-color: #eaf7f3 !important;
         }
 
         .progress-wrap {
@@ -739,7 +823,7 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
                     <div class="kpi-icon"><i class="fa fa-clock-o"></i></div>
                     <div class="kpi-label">Delayed DF</div>
                     <div class="kpi-value"><?php echo $totalDelayedDf; ?></div>
-                    <div class="kpi-hint">DF having task or closure delay</div>
+                    <div class="kpi-hint">DF with overdue pending tasks</div>
                 </div>
             </div>
 
@@ -763,6 +847,15 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
         </div>
 
         <div class="filter-card">
+            <div class="df-view-tabs" role="tablist" aria-label="DF list view">
+                <button type="button" class="df-view-tab is-active" data-customised-filter="" role="tab" aria-selected="true">
+                    All DF <span class="df-view-count"><?php echo $totalDf; ?></span>
+                </button>
+                <button type="button" class="df-view-tab" data-customised-filter="1" role="tab" aria-selected="false">
+                    <i class="fa fa-sliders"></i> Customised DF <span class="df-view-count"><?php echo $totalCustomisedDf; ?></span>
+                </button>
+            </div>
+
             <div class="filter-title">
                 <i class="fa fa-filter"></i> Smart Filters
             </div>
@@ -880,10 +973,12 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
                             $hasPenaltyMarked = ((float)$row['penalty_amount'] > 0);
                         ?>
                             <tr
+                                class="<?php echo $row['is_customised_df'] ? 'customised-df-row' : ''; ?>"
                                 data-owner="<?php echo htmlspecialchars($row['df_owner']); ?>"
                                 data-delay="<?php echo $row['delay_status']; ?>"
                                 data-ticket="<?php echo $row['ticket_status']; ?>"
                                 data-risk="<?php echo $row['risk_level']; ?>"
+                                data-customised="<?php echo $row['is_customised_df'] ? '1' : '0'; ?>"
                             >
                                 <td><?php echo $m; ?></td>
 
@@ -891,6 +986,17 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
                                     <span class="df-badge">
                                         <?php echo strtoupper($row['df_no']); ?>
                                     </span>
+                                    <?php if ($row['is_customised_df']) { ?>
+                                        <?php
+                                        $lastCustomisedDate = !empty($row['customised_last_scheduled_on'])
+                                            ? date('d-m-Y H:i', strtotime($row['customised_last_scheduled_on']))
+                                            : '';
+                                        ?>
+                                        <br>
+                                        <span class="customised-df-badge" title="Last Customised DF update: <?php echo htmlspecialchars($lastCustomisedDate); ?>">
+                                            <i class="fa fa-sliders"></i> Customised DF
+                                        </span>
+                                    <?php } ?>
                                 </td>
 
                                 <td>
@@ -918,10 +1024,14 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
                                 <td><?php echo !empty($row['actual_completion_date']) ? $row['actual_completion_date'] : '-'; ?></td>
 
                                 <td>
-                                    <?php if ($row['df_delay_days'] > 0) { ?>
-                                        <span class="status-pill pill-danger"><?php echo $row['df_delay_days']; ?> Days</span>
+                                    <?php if ($row['delay_status'] === 'Delayed') { ?>
+                                        <span class="status-pill pill-danger">Delayed</span>
+                                        <div class="date-muted"><?php echo (int)$row['overdue_task_count']; ?> overdue pending tasks</div>
                                     <?php } else { ?>
                                         <span class="status-pill pill-success">On Time</span>
+                                    <?php } ?>
+                                    <?php if ($row['df_delay_days'] > 0) { ?>
+                                        <div class="date-muted">Projected closure delay: <?php echo (int)$row['df_delay_days']; ?> days</div>
                                     <?php } ?>
                                 </td>
 
@@ -996,7 +1106,7 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
                                         <i class="fa fa-line-chart"></i> Mgmt Report
                                     </a>
 
-                                    <a href="<?php echo page_url;?>Task/dfgantchartNew/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
+                                    <a href="<?php echo page_url;?>gantt/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
                                         <i class="fa fa-bar-chart"></i> Gantt
                                     </a>
                                 </td>
@@ -1182,11 +1292,13 @@ $(document).ready(function () {
         var delayFilter = $('#delayFilter').val();
         var ticketFilter = $('#ticketFilter').val();
         var riskFilter = $('#riskFilter').val();
+        var customisedFilter = $('.df-view-tab.is-active').data('customised-filter') || '';
 
         var rowOwner = $(rowNode).data('owner');
         var rowDelay = $(rowNode).data('delay');
         var rowTicket = $(rowNode).data('ticket');
         var rowRisk = $(rowNode).data('risk');
+        var rowCustomised = String($(rowNode).data('customised') || '0');
 
         if (ownerFilter !== '' && rowOwner !== ownerFilter) {
             return false;
@@ -1204,6 +1316,10 @@ $(document).ready(function () {
             return false;
         }
 
+        if (customisedFilter !== '' && rowCustomised !== String(customisedFilter)) {
+            return false;
+        }
+
         return true;
     });
 
@@ -1215,12 +1331,20 @@ $(document).ready(function () {
         table.draw();
     });
 
+    $('.df-view-tab').on('click', function () {
+        $('.df-view-tab').removeClass('is-active').attr('aria-selected', 'false');
+        $(this).addClass('is-active').attr('aria-selected', 'true');
+        table.draw();
+    });
+
     $('#resetFilters').on('click', function () {
         $('#customSearch').val('');
         $('#ownerFilter').val('');
         $('#delayFilter').val('');
         $('#ticketFilter').val('');
         $('#riskFilter').val('');
+        $('.df-view-tab').removeClass('is-active').attr('aria-selected', 'false');
+        $('.df-view-tab[data-customised-filter=""]').addClass('is-active').attr('aria-selected', 'true');
 
         table.search('');
         table.columns().search('');

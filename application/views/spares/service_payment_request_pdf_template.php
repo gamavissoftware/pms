@@ -65,6 +65,7 @@ $format_action_label = static function ($action) {
         'REQUEST_CREATED' => 'Request created',
         'HOD_APPROVED' => 'Approved by HOD',
         'HOD_REJECTED' => 'Rejected by HOD',
+        'AMOUNT_REVISED' => 'Amount revised by HOD',
     ];
 
     if (isset($map[$action])) {
@@ -300,6 +301,9 @@ $attachment_url = !empty($request->attachment)
             <td>
                 <span class="meta-label">Requested amount</span>
                 <div class="meta-value amount-value">Rs. <?php echo number_format((float) ($request->amount ?? 0), 2); ?></div>
+                <?php if (!empty($request->amount_revised)): ?>
+                    <div class="muted">HOD approved Rs. <?php echo number_format((float) ($request->payable_amount ?? 0), 2); ?></div>
+                <?php endif; ?>
             </td>
             <td>
                 <span class="meta-label">PO value</span>
@@ -384,7 +388,7 @@ $attachment_url = !empty($request->attachment)
     </div>
 
     <?php if (!empty($request->parent_request_code) || !empty($request->extension_reason)): ?>
-        <div class="section-title">Linked request information</div>
+        <div class="section-title"><?php echo !empty($request->parent_request_code) ? 'Linked request information' : 'Visit extension details'; ?></div>
         <table class="meta-table">
             <tr>
                 <td style="width: 35%;">
@@ -397,7 +401,7 @@ $attachment_url = !empty($request->attachment)
                     </div>
                 </td>
                 <td style="width: 65%;">
-                    <span class="meta-label">Link reason</span>
+                    <span class="meta-label"><?php echo !empty($request->parent_request_code) ? 'Link reason' : 'Extension reason'; ?></span>
                     <div class="meta-value">
                         <?php echo trim((string) ($request->extension_reason ?? '')) !== '' ? nl2br(htmlspecialchars((string) $request->extension_reason, ENT_QUOTES, 'UTF-8')) : 'No additional note added.'; ?>
                     </div>
@@ -418,6 +422,21 @@ $attachment_url = !empty($request->attachment)
                 <div class="meta-value"><?php echo !empty($request->hod_action_on) ? date('d M Y h:i A', strtotime($request->hod_action_on)) : 'Pending'; ?></div>
             </td>
             <td colspan="2">
+                <span class="meta-label">Approved amount</span>
+                <div class="meta-value amount-value">
+                    <?php if (trim((string) ($request->status ?? '')) === 'Approved'): ?>
+                        Rs. <?php echo number_format((float) ($request->payable_amount ?? 0), 2); ?>
+                        <?php if (!empty($request->amount_revised)): ?>
+                            <div class="muted">Revised from the requested Rs. <?php echo number_format((float) ($request->amount ?? 0), 2); ?></div>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        Not approved yet
+                    <?php endif; ?>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="4">
                 <span class="meta-label">Approval remarks</span>
                 <div class="meta-value">
                     <?php echo trim((string) ($request->hod_remarks ?? '')) !== '' ? nl2br(htmlspecialchars((string) $request->hod_remarks, ENT_QUOTES, 'UTF-8')) : 'No approval remarks recorded.'; ?>

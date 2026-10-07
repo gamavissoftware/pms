@@ -353,6 +353,7 @@ $user_id = $this->session->userdata['logged_in']['user_id'];
                                 <th>Location</th>
                                 <th>Status of M/cs</th>
                                 <th>DF Release Date</th>
+                                <th>PO Date</th>
                                 <th>Model</th>
                                 <th>Customer</th>
                                 <th>Payment Term</th>
@@ -374,6 +375,7 @@ $user_id = $this->session->userdata['logged_in']['user_id'];
                                     a.df_no,
                                     b.company_name,
                                     b.pono,
+                                    b.podate,
                                     a.added_on,
                                     a.df_description,
                                     b.order_value,
@@ -458,6 +460,16 @@ $user_id = $this->session->userdata['logged_in']['user_id'];
                                         <?php 
                                         if (!empty($row->added_on) && $row->added_on != '0000-00-00') {
                                             echo date('d-m-Y', strtotime($row->added_on));
+                                        } else {
+                                            echo '-';
+                                        }
+                                        ?>
+                                    </td>
+
+                                    <td>
+                                        <?php
+                                        if (!empty($row->podate) && $row->podate != '0000-00-00' && $row->podate != '0000-00-00 00:00:00') {
+                                            echo date('d-m-Y', strtotime($row->podate));
                                         } else {
                                             echo '-';
                                         }
@@ -550,7 +562,7 @@ $user_id = $this->session->userdata['logged_in']['user_id'];
                             } else {
                             ?>
                                 <tr>
-                                    <td colspan="16" class="text-center">
+                                    <td colspan="17" class="text-center">
                                         No machine floor data found.
                                     </td>
                                 </tr>
@@ -620,7 +632,7 @@ $(document).ready(function() {
         searching: true,
         columnDefs: [
             {
-                targets: [3, 4, 10, 11, 12, 13, 14],
+                targets: [3, 4, 11, 12, 13, 14, 15],
                 orderable: false
             }
         ],

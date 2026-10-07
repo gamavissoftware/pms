@@ -90,6 +90,50 @@ $planner_remarks = trim((string) ($visit->remarks ?? ''));
 $completion_notes = trim((string) ($visit->completion_notes ?? ''));
 $update_count = is_array($updates) ? count($updates) : 0;
 $document_count = is_array($documents) ? count($documents) : 0;
+
+// Sign-off / sharing context. All optional: the same template serves the plain
+// "View PDF" download and the copy that is mailed to the HOD for signature.
+$sign_off = isset($sign_off) && is_array($sign_off) ? $sign_off : [];
+$hod_name = trim((string) ($sign_off['hod_name'] ?? ''));
+$hod_designation = trim((string) ($sign_off['hod_designation'] ?? 'Head of Department - Service'));
+$engineer_name = $format_person_name($visit->engineer_full_name ?? '', '');
+$share_note = trim((string) ($sign_off['note'] ?? ''));
+$shared_on = trim((string) ($sign_off['shared_on'] ?? ''));
+$shared_by_name = trim((string) ($sign_off['shared_by_name'] ?? ''));
+$is_hod_review_copy = !empty($sign_off['for_hod_review']);
+
+// The screen shows the newest MOM first; a document that gets signed reads
+// better day 1 to day N, so the order is flipped here rather than in the model.
+$mom_rows = is_array($updates) ? $updates : [];
+usort($mom_rows, static function ($a, $b) {
+    $left = !empty($a->work_date) ? strtotime($a->work_date) : 0;
+    $right = !empty($b->work_date) ? strtotime($b->work_date) : 0;
+
+    if ($left === $right) {
+        return (int) ($a->update_id ?? 0) - (int) ($b->update_id ?? 0);
+    }
+
+    return $left < $right ? -1 : 1;
+});
+
+$mom_period = '-';
+if ($update_count > 0) {
+    $mom_dates = [];
+    foreach ($mom_rows as $mom_row) {
+        if (!empty($mom_row->work_date)) {
+            $mom_dates[] = date('Y-m-d', strtotime($mom_row->work_date));
+        }
+    }
+    if (!empty($mom_dates)) {
+        sort($mom_dates);
+        $mom_period = date('d M Y', strtotime($mom_dates[0]))
+            . ' to ' . date('d M Y', strtotime($mom_dates[count($mom_dates) - 1]));
+    }
+}
+
+$letterhead_color = trim((string) ($company_profile['colorcode'] ?? '')) !== ''
+    ? (string) $company_profile['colorcode']
+    : '#003366';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -99,7 +143,13 @@ $document_count = is_array($documents) ? count($documents) : 0;
     <style>
         <?php echo $font_face_css; ?>
 
-        @page { margin: 18px 20px 20px 20px; }
+        /*
+         * Letterhead geometry. The page margin leaves room for the fixed header
+         * and footer, which dompdf repeats on EVERY page - a consolidated MOM
+         * for a two-week visit runs to several pages, and each of them has to
+         * stand on its own as company stationery.
+         */
+        @page { margin: 128px 34px 74px 34px; }
 
         body {
             font-family: Calibri, ArialPdf, Arial, "DejaVu Sans", sans-serif;
@@ -116,26 +166,122 @@ $document_count = is_array($documents) ? count($documents) : 0;
             border-spacing: 0;
         }
 
+        .letterhead {
+            position: fixed;
+            top: -114px;
+            left: 0;
+            right: 0;
+            height: 104px;
+            overflow: hidden;
+            border-bottom: 2px solid <?php echo $letterhead_color; ?>;
+        }
+
+        .letterhead-foot {
+            position: fixed;
+            bottom: -58px;
+            left: 0;
+            right: 0;
+            height: 48px;
+            border-top: 1px solid #d7e1ec;
+            padding-top: 6px;
+            font-size: 8.2px;
+            color: #6d7d93;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .watermark {
+            position: fixed;
+            top: 42%;
+            left: 16%;
+            font-size: 58px;
+            font-weight: bold;
+            color: #f5f8fb;
+            transform: rotate(-28deg);
+        }
+
         .header-table td {
             vertical-align: top;
         }
 
+        .letterhead .doc-title {
+            text-align: right;
+            font-size: 15px;
+            font-weight: bold;
+            color: <?php echo $letterhead_color; ?>;
+            letter-spacing: 0.6px;
+            margin: 0 0 4px;
+        }
+
+        .letterhead .doc-ref {
+            text-align: right;
+            font-size: 9.2px;
+            color: #54657d;
+            line-height: 1.5;
+        }
+
+        .review-banner {
+            margin-top: 10px;
+            padding: 8px 11px;
+            border: 1px solid #f0d3a5;
+            border-left: 4px solid #d98314;
+            background: #fffaf1;
+            font-size: 10px;
+            color: #6b4708;
+            line-height: 1.5;
+        }
+
+        .signoff-table {
+            border: 1px solid #d7e1ec;
+            margin-top: 6px;
+        }
+
+        .signoff-table td {
+            border-right: 1px solid #d7e1ec;
+            padding: 9px 11px;
+            vertical-align: top;
+            width: 50%;
+        }
+
+        .signoff-table td:last-child {
+            border-right: none;
+        }
+
+        .sign-space {
+            height: 46px;
+            border-bottom: 1px solid #94a3b8;
+            margin: 6px 0 5px;
+        }
+
+        .sign-line {
+            font-size: 9.4px;
+            color: #54657d;
+            line-height: 1.6;
+        }
+
+        .sign-name {
+            font-size: 10.9px;
+            font-weight: bold;
+            color: #1f2937;
+        }
+
         .logo {
-            width: 86px;
-            max-height: 86px;
+            width: 74px;
+            max-height: 62px;
         }
 
         .company-name {
-            font-size: 19px;
+            font-size: 14.5px;
             font-weight: bold;
             color: #173f6d;
-            margin-bottom: 5px;
+            line-height: 1.25;
+            margin-bottom: 4px;
         }
 
         .company-subline {
             color: #54657d;
-            line-height: 1.45;
-            font-size: 9.9px;
+            line-height: 1.4;
+            font-size: 8.8px;
         }
 
         .report-title {
@@ -256,14 +402,6 @@ $document_count = is_array($documents) ? count($documents) : 0;
             white-space: pre-line;
         }
 
-        .footer-note {
-            position: fixed;
-            right: 0;
-            bottom: -2px;
-            font-size: 9px;
-            color: #7c8798;
-        }
-
         .section-block,
         .meta-table,
         .updates-table,
@@ -273,36 +411,76 @@ $document_count = is_array($documents) ? count($documents) : 0;
     </style>
 </head>
 <body>
-    <table class="header-table">
-        <tr>
-            <td style="width: 94px;">
-                <?php if (!empty($company_profile['logo'])): ?>
-                    <img src="<?php echo htmlspecialchars((string) $company_profile['logo'], ENT_QUOTES, 'UTF-8'); ?>" alt="Company Logo" class="logo">
-                <?php endif; ?>
-            </td>
-            <td>
-                <div class="company-name"><?php echo htmlspecialchars((string) $company_profile['name'], ENT_QUOTES, 'UTF-8'); ?></div>
-                <div class="company-subline">
-                    <?php echo htmlspecialchars((string) $company_profile['unit'], ENT_QUOTES, 'UTF-8'); ?><br>
-                    <?php echo htmlspecialchars((string) $company_profile['iso_label'], ENT_QUOTES, 'UTF-8'); ?><br>
-                    <?php echo htmlspecialchars((string) $company_profile['corporate_office'], ENT_QUOTES, 'UTF-8'); ?><br>
-                    Phone: <?php echo htmlspecialchars((string) $company_profile['phone'], ENT_QUOTES, 'UTF-8'); ?> |
-                    Email: <?php echo htmlspecialchars((string) $company_profile['emails'], ENT_QUOTES, 'UTF-8'); ?>
-                </div>
-            </td>
-        </tr>
-    </table>
+    <div class="watermark">Shubham Pack</div>
+
+    <!-- Company letterhead. Fixed, so dompdf repeats it on every page. -->
+    <div class="letterhead">
+        <table class="header-table">
+            <tr>
+                <td style="width: 96px;">
+                    <?php if (!empty($company_profile['logo'])): ?>
+                        <img src="<?php echo htmlspecialchars((string) $company_profile['logo'], ENT_QUOTES, 'UTF-8'); ?>" alt="Company Logo" class="logo">
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <div class="company-name"><?php echo htmlspecialchars((string) $company_profile['name'], ENT_QUOTES, 'UTF-8'); ?></div>
+                    <div class="company-subline">
+                        <?php echo htmlspecialchars((string) $company_profile['unit'], ENT_QUOTES, 'UTF-8'); ?>
+                        &nbsp;|&nbsp;
+                        <?php echo htmlspecialchars((string) $company_profile['iso_label'], ENT_QUOTES, 'UTF-8'); ?><br>
+                        <?php echo htmlspecialchars((string) $company_profile['corporate_office'], ENT_QUOTES, 'UTF-8'); ?>
+                    </div>
+                </td>
+                <td style="width: 200px;">
+                    <div class="doc-title">VISIT MOM REPORT</div>
+                    <div class="doc-ref">
+                        Ref: <strong><?php echo htmlspecialchars((string) ($visit->op_no ?? '-'), ENT_QUOTES, 'UTF-8'); ?> / V<?php echo (int) $visit->visit_id; ?></strong><br>
+                        Date: <strong><?php echo date('d M Y'); ?></strong>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="letterhead-foot">
+        <strong><?php echo htmlspecialchars((string) $company_profile['name'], ENT_QUOTES, 'UTF-8'); ?></strong>
+        &nbsp;|&nbsp; GSTIN: <?php echo htmlspecialchars((string) $company_profile['gst_no'], ENT_QUOTES, 'UTF-8'); ?>
+        &nbsp;|&nbsp; CIN: <?php echo htmlspecialchars((string) $company_profile['cin_no'], ENT_QUOTES, 'UTF-8'); ?><br>
+        Regd. Office: <?php echo htmlspecialchars((string) $company_profile['registered_office'], ENT_QUOTES, 'UTF-8'); ?>
+        &nbsp;|&nbsp; Phone: <?php echo htmlspecialchars((string) $company_profile['phone'], ENT_QUOTES, 'UTF-8'); ?><br>
+        <?php echo htmlspecialchars((string) $company_profile['emails'], ENT_QUOTES, 'UTF-8'); ?>
+        &nbsp;|&nbsp; <?php echo htmlspecialchars((string) $company_profile['website'], ENT_QUOTES, 'UTF-8'); ?>
+        &nbsp;|&nbsp; Generated <?php echo date('d M Y h:i A'); ?>
+    </div>
 
     <div class="report-title">
-        <h1>Engineer Visit MOM Report</h1>
+        <h1>Consolidated Engineer Visit MOM<?php echo $is_hod_review_copy ? ' &mdash; for HOD review and signature' : ''; ?></h1>
         <div class="report-subline">
-            Opportunity no.: <strong><?php echo htmlspecialchars((string) ($visit->op_no ?? '-'), ENT_QUOTES, 'UTF-8'); ?></strong>
+            Order / DF: <strong><?php echo htmlspecialchars((string) ($visit->op_no ?? '-'), ENT_QUOTES, 'UTF-8'); ?></strong>
             &nbsp;|&nbsp;
             Visit id: <strong>#<?php echo (int) $visit->visit_id; ?></strong>
             &nbsp;|&nbsp;
-            Visit window: <strong><?php echo htmlspecialchars($visit_window, ENT_QUOTES, 'UTF-8'); ?></strong>
+            Visit window: <strong><?php echo htmlspecialchars($visit_window, ENT_QUOTES, 'UTF-8'); ?></strong><br>
+            All <strong><?php echo (int) $update_count; ?></strong> day-wise MOM entries
+            (<?php echo htmlspecialchars($mom_period, ENT_QUOTES, 'UTF-8'); ?>) are consolidated in this single document.
         </div>
     </div>
+
+    <?php if ($is_hod_review_copy): ?>
+        <div class="review-banner">
+            <strong>For review and signature.</strong>
+            Sent to <?php echo htmlspecialchars($hod_name !== '' ? $hod_name : 'the service HOD', ENT_QUOTES, 'UTF-8'); ?>
+            <?php if ($shared_by_name !== ''): ?>
+                by <?php echo htmlspecialchars($shared_by_name, ENT_QUOTES, 'UTF-8'); ?>
+            <?php endif; ?>
+            <?php if ($shared_on !== ''): ?>
+                on <?php echo htmlspecialchars($shared_on, ENT_QUOTES, 'UTF-8'); ?>
+            <?php endif; ?>.
+            <?php if ($share_note !== ''): ?>
+                <br><strong>Note:</strong> <?php echo nl2br(htmlspecialchars($share_note, ENT_QUOTES, 'UTF-8')); ?>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 
     <div class="section-title">Visit snapshot</div>
     <table class="meta-table">
@@ -377,12 +555,12 @@ $document_count = is_array($documents) ? count($documents) : 0;
             </tr>
         </thead>
         <tbody>
-            <?php if (empty($updates)): ?>
+            <?php if (empty($mom_rows)): ?>
                 <tr>
                     <td colspan="4">No daily MOM entries have been recorded for this visit.</td>
                 </tr>
             <?php else: ?>
-                <?php foreach ($updates as $update): ?>
+                <?php foreach ($mom_rows as $update): ?>
                     <tr>
                         <td><?php echo !empty($update->work_date) ? date('d M Y', strtotime($update->work_date)) : '-'; ?></td>
                         <td><?php echo !empty($update->mom_points) ? nl2br(htmlspecialchars((string) $update->mom_points, ENT_QUOTES, 'UTF-8')) : '-'; ?></td>
@@ -427,8 +605,31 @@ $document_count = is_array($documents) ? count($documents) : 0;
         </tbody>
     </table>
 
-    <div class="footer-note">
-        Generated on <?php echo date('d M Y h:i A'); ?>
+    <div class="section-block">
+        <div class="section-title">Review and sign-off</div>
+        <table class="signoff-table">
+            <tr>
+                <td>
+                    <span class="meta-label">Prepared by (Service Engineer)</span>
+                    <div class="sign-space"></div>
+                    <div class="sign-name"><?php echo htmlspecialchars($engineer_name !== '' ? $engineer_name : '____________________', ENT_QUOTES, 'UTF-8'); ?></div>
+                    <div class="sign-line">Signature &amp; date: ______________________</div>
+                </td>
+                <td>
+                    <span class="meta-label">Reviewed and approved by</span>
+                    <div class="sign-space"></div>
+                    <div class="sign-name"><?php echo htmlspecialchars($hod_name !== '' ? $hod_name : '____________________', ENT_QUOTES, 'UTF-8'); ?></div>
+                    <div class="sign-line">
+                        <?php echo htmlspecialchars($hod_designation, ENT_QUOTES, 'UTF-8'); ?><br>
+                        Signature &amp; date: ______________________
+                    </div>
+                </td>
+            </tr>
+        </table>
+        <div class="sign-line" style="margin-top: 5px;">
+            The HOD's signature on this page confirms that every day-wise MOM entry listed above has been reviewed.
+        </div>
     </div>
+
 </body>
 </html>

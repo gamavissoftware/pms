@@ -61,7 +61,10 @@ $this->load->view('dashboard/newdashboardreport');
 		$data['order_data'] = $this->user->checkorderdomesticorintl();
 
 		$data['sales_data1'] = $this->user->get_sales_data_for_current_month();
-		 $data['order_data_by_brand'] = $this->user->get_order_values_and_counts_by_brand();
+		$data['order_data_by_brand'] = $this->user->get_order_values_and_counts_by_brand();
+		if ($this->is_administrator_income_user()) {
+			$data = array_merge($data, $this->get_administrator_income_dashboard_data());
+		}
         
 
 		$user_id =$this->session->userdata['logged_in']['user_id'];
@@ -72,24 +75,25 @@ $this->load->view('dashboard/newdashboardreport');
 	    //$role_id =$this->session->userdata['logged_in']['role'];
 	    $businesslocation =$this->session->userdata['logged_in']['business_location'];
 
+	    $this->load->helper('df_delay');
+	    $today = date('Y-m-d');
+	    $departmentDelaySql = df_department_overdue_sql($this->db, 't', $today);
 	    $query = "
         SELECT 
             d.department, df.df_no, t.department_id,
             COUNT(t.id) AS total_tasks,
             MAX(
                 CASE 
-                    WHEN t.end_date < CURDATE() AND t.task_status = 0 THEN DATEDIFF(CURDATE(), t.end_date)
+                    WHEN " . $departmentDelaySql . " THEN DATEDIFF(CURDATE(), t.end_date)
                     ELSE 0
                 END
             ) AS max_delay_days
         FROM task_department_wise_scheduling t
         JOIN df_release df ON t.df_id = df.id
         JOIN departments d ON t.department_id = d.department_id
-        WHERE (df.df_status = 'running' OR df.df_status = 0 OR df.df_status IS NULL)
+        WHERE df.df_status = 0
           AND IFNULL(df.on_hold, 0) = 0
-          AND t.task_status = 0
-          AND t.end_date < CURDATE()
-           AND t.on_hold = '0'
+          AND " . $departmentDelaySql . "
         GROUP BY t.department_id
         ORDER BY max_delay_days DESC;
     ";
@@ -119,6 +123,9 @@ $this->load->view('dashboard/newdashboardreport');
 	{
 		$data['sales_data'] = $this->user->get_monthly_sales();
 		$data['order_data'] = $this->user->checkorderdomesticorintl();
+		if ($this->is_administrator_income_user()) {
+			$data = array_merge($data, $this->get_administrator_income_dashboard_data());
+		}
 
 		$user_id =$this->session->userdata['logged_in']['user_id'];
 		$this->reportingdata->delegated_task($user_id);
@@ -131,6 +138,69 @@ $this->load->view('dashboard/newdashboardreport');
 	   $this->load->view('dashboard/newdesigndashboard',$data); 
 		
 
+	}
+
+	private function get_administrator_income_dashboard_data()
+	{
+		$financial_year_options = $this->user->get_available_financial_years();
+		$available_values = array();
+		foreach ($financial_year_options as $option) {
+			$available_values[] = $option['value'];
+		}
+
+		$selected_financial_year = trim((string) $this->input->get('income_financial_year', true));
+		if ($selected_financial_year === '' || !in_array($selected_financial_year, $available_values, true)) {
+			$selected_financial_year = !empty($financial_year_options)
+				? $financial_year_options[0]['value']
+				: $this->user->get_financial_year_details('')['value'];
+		}
+
+		$allowed_departments = array('all', 'marketing', 'spares', 'service');
+		$selected_department = strtolower(trim((string) $this->input->get('income_department', true)));
+		if (!in_array($selected_department, $allowed_departments, true)) {
+			$selected_department = 'all';
+		}
+
+		$marketing = $this->user->get_financial_year_order_summary($selected_financial_year);
+		$marketing_df = $this->user->get_marketing_df_income_breakdown_by_financial_year($selected_financial_year);
+		$spares = $this->user->get_spares_order_summary_by_financial_year($selected_financial_year);
+		$spares_breakdown = $this->user->get_spares_income_breakdown_by_financial_year($selected_financial_year);
+		$service_rows = $this->user->get_service_order_summary_by_financial_year($selected_financial_year);
+		$service_breakdown = $this->user->get_service_income_breakdown_by_financial_year($selected_financial_year);
+		$service = array();
+		foreach ($service_rows as $row) {
+			$currency = strtoupper(trim((string) $row['currency']));
+			$service[$currency !== '' ? $currency : 'INR'] = $row;
+		}
+
+		$marketing_value = !empty($marketing_df['running_total_value']) ? (float) $marketing_df['running_total_value'] : 0;
+		$spares_value = !empty($spares_breakdown['domestic_value']) ? (float) $spares_breakdown['domestic_value'] : 0;
+		$service_inr_value = !empty($service['INR']['total_order_value']) ? (float) $service['INR']['total_order_value'] : 0;
+
+		return array(
+			'admin_income_financial_year_options' => $financial_year_options,
+			'admin_income_financial_year' => $selected_financial_year,
+			'admin_income_financial_year_details' => $this->user->get_financial_year_details($selected_financial_year),
+			'admin_income_department' => $selected_department,
+			'admin_income_marketing' => $marketing,
+			'admin_income_marketing_df' => $marketing_df,
+			'admin_income_spares' => $spares,
+			'admin_income_spares_breakdown' => $spares_breakdown,
+			'admin_income_service' => $service,
+			'admin_income_service_breakdown' => $service_breakdown,
+			'admin_income_total_inr' => $marketing_value + $spares_value + $service_inr_value,
+		);
+	}
+
+	private function is_administrator_income_user()
+	{
+		$role_id = (int) $this->session->userdata['logged_in']['role'];
+		if ($role_id === 1) {
+			return true;
+		}
+
+		$administrator_roles = array_map('intval', $this->reportingdata->getsuperadminuserole());
+		return in_array($role_id, $administrator_roles, true);
 	}
 	
 		 public function get_active_dfs() {
@@ -770,6 +840,15 @@ $user_id = $_SESSION['logged_in']['user_id'];
 		$sales_data = $this->user->get_sales_data_by_financial_year($selected_financial_year);
 		$order_data_by_brand = $this->user->get_order_values_and_counts_by_brand_for_financial_year($selected_financial_year);
 		$order_summary = $this->user->get_financial_year_order_summary($selected_financial_year);
+		$marketing_df_income = $this->user->get_marketing_df_income_breakdown_by_financial_year($selected_financial_year);
+		$spares_sales_data = $this->user->get_spares_sales_data_by_financial_year($selected_financial_year);
+		$spares_order_summary = $this->user->get_spares_order_summary_by_financial_year($selected_financial_year);
+		$spares_income_breakdown = $this->user->get_spares_income_breakdown_by_financial_year($selected_financial_year);
+		$spares_top_brand = $this->user->get_spares_top_brand_by_financial_year($selected_financial_year);
+		$service_sales_data = $this->user->get_service_sales_data_by_financial_year($selected_financial_year);
+		$service_order_summary = $this->user->get_service_order_summary_by_financial_year($selected_financial_year);
+		$service_income_breakdown = $this->user->get_service_income_breakdown_by_financial_year($selected_financial_year);
+		$service_top_brands = $this->user->get_service_top_brands_by_financial_year($selected_financial_year);
 
 		$top_agent_name = 'No sales data';
 		$top_agent_value = 0;
@@ -787,6 +866,15 @@ $user_id = $_SESSION['logged_in']['user_id'];
 
 		$data['sales_data'] = $sales_data;
 		$data['order_data_by_brand'] = $order_data_by_brand;
+		$data['spares_sales_data'] = $spares_sales_data;
+		$data['spares_order_summary'] = $spares_order_summary;
+		$data['marketing_df_income'] = $marketing_df_income;
+		$data['spares_income_breakdown'] = $spares_income_breakdown;
+		$data['spares_top_brand'] = $spares_top_brand;
+		$data['service_sales_data'] = $service_sales_data;
+		$data['service_order_summary'] = $service_order_summary;
+		$data['service_income_breakdown'] = $service_income_breakdown;
+		$data['service_top_brands'] = $service_top_brands;
 		$data['financial_year_options'] = $financial_year_options;
 		$data['selected_financial_year'] = $selected_financial_year_details['value'];
 		$data['selected_financial_year_label'] = $selected_financial_year_details['label'];
@@ -1532,8 +1620,8 @@ function getpono($recordid){
 				'individual_weight_remarks'=>$this->input->post('individual_weight_remarks'),
 				'overall_weight_adjust'=>$this->input->post('overall_weight_adjust'),
 				'overall_weight_adjust_remarks'=>$this->input->post('overall_weight_adjust_remarks'),
-				// 'vertical_sealer_width'=>$this->input->post('vertical_sealer_width'),
-				// 'horizontal_sealer_width'=>$this->input->post('horizontal_sealer_width'),
+					'vertical_sealer_width'=>$this->input->post('vertical_sealer_width'),
+					'horizontal_sealer_width'=>$this->input->post('horizontal_sealer_width'),
 				'added_on'=>date("Y-m-d h:i:s"),
 				'added_by'=>$this->session->userdata['logged_in']['user_id']
 			);
@@ -1819,34 +1907,31 @@ function getpono($recordid){
         $this->db->update('df_form_multi_track_machine', $data1);
 
 
-        // [Optional: Pouch Size & Quantity] (Kept commented as per original)
-        /*
-        $pouch_widths = $this->input->post('pouch_width');
-        $pouch_lengths = $this->input->post('pouch_length');
-        $pouch_heights = $this->input->post('pouch_height');
-        $quantity_packed = $this->input->post('quantity_packed');
-        $quantity_units = $this->input->post('quantity_packed_unit');
+        // [Table 3] Pouch Size & Quantity Remarks
+        $data2 = array(
+            'pouch_size_remarks'     => $this->input->post('pouch_size_remarks'),
+            'quantity_packed_remarks' => $this->input->post('quantity_packed_remarks'),
+            'added_on'               => date("Y-m-d h:i:s"),
+            'added_by'               => $user_id
+        );
 
-        if (!empty($pouch_widths)) {
-            for ($i = 0; $i < count($pouch_widths); $i++) {
-                $data2 = array(
-                    // 'pouch_width' => $pouch_widths[$i],
-                    // 'pouch_length' => $pouch_lengths[$i],
-                    // 'pouch_height' => $pouch_heights[$i],
-                    'pouch_size_remarks' => $this->input->post('pouch_size_remarks'),
-                    // 'quantity_packed' => $quantity_packed[$i],
-                    // 'quantity_packed_unit' => $quantity_units[$i],
-                    'quantity_packed_remarks' => $this->input->post('quantity_packed_remarks'),
-                    'added_on' => date("Y-m-d h:i:s"),
-                    'added_by' => $user_id
-                );
-                $this->db->where('record_id', $record_id);
-                $this->db->update('df_form_machine_specification_size_qnty', $data2);
-            }
+        $size_quantity_exists = $this->db
+            ->select('id')
+            ->from('df_form_machine_specification_size_qnty')
+            ->where('record_id', $record_id)
+            ->limit(1)
+            ->get()
+            ->num_rows() > 0;
+
+        if ($size_quantity_exists) {
+            $this->db->where('record_id', $record_id);
+            $this->db->update('df_form_machine_specification_size_qnty', $data2);
+        } else {
+            $data2['record_id'] = $record_id;
+            $this->db->insert('df_form_machine_specification_size_qnty', $data2);
         }
-        */
 
-        // [Table 3] Machine Specification Update
+        // [Table 4] Machine Specification Update
         $data3 = array(
             // 'tracks' => $this->input->post('tracks'),
             // 'product_packed' => $this->input->post('product_packed'),
@@ -2422,7 +2507,7 @@ public function powder_df_project_form_add(){
 				// 'liner_weigher_option'=>$this->input->post('liner_weigher_option'),
 				// 'mult_head_weigher_option'=>$this->input->post('mult_head_weigher_option'),
 				// 'volumetric_cap_option'=>$this->input->post('volumetric_cap_option'),
-				// 'profile_of_sealing'=>$this->input->post('profile_of_sealing'),
+					'profile_of_sealing'=>$this->input->post('profile_of_sealing'),
 				'tracks_remarks'=>$this->input->post('tracks_remarks'),
 				'product_packed_remarks'=>$this->input->post('product_packed_remarks'),
 				'filling_unit_remarks'=>$this->input->post('filling_unit_remarks'),
@@ -2521,8 +2606,8 @@ public function powder_df_project_form_add(){
 				'individual_weight_remarks'=>$this->input->post('individual_weight_remarks'),
 				'overall_weight_adjust'=>$this->input->post('overall_weight_adjust'),
 				'overall_weight_adjust_remarks'=>$this->input->post('overall_weight_adjust_remarks'),
-				// 'vertical_sealer_width'=>$this->input->post('vertical_sealer_width'),
-				// 'horizontal_sealer_width'=>$this->input->post('horizontal_sealer_width'),
+				'vertical_sealer_width'=>$this->input->post('vertical_sealer_width'),
+				'horizontal_sealer_width'=>$this->input->post('horizontal_sealer_width'),
 				'added_on'=>date("Y-m-d h:i:s"),
 				'added_by'=>$this->session->userdata['logged_in']['user_id']
 			);
@@ -2786,8 +2871,6 @@ public function powder_df_project_form_edit(){
 			 $this->db->where('id', $record_id);
         $this->db->update('df_design_form_table', $data);
 
-			$latest_id =$this->db->insert_id();
-
 			$data1 = array(
 
 				'ce_complied'=>$this->input->post('ce_complied'),
@@ -2824,19 +2907,41 @@ public function powder_df_project_form_edit(){
 
 		//   if (!empty($pouch_widths)) {
         //     for ($i = 0; $i < count($pouch_widths); $i++) {
+                $pouch_size_remarks = $this->input->post('pouch_size_remarks');
+                $quantity_packed_remarks = $this->input->post('quantity_packed_remarks');
+                if (strpos((string) $pouch_size_remarks, 'Undefined variable: pouch_size_remarks') !== false) {
+                    $pouch_size_remarks = '';
+                }
+                if (strpos((string) $quantity_packed_remarks, 'Undefined variable: quantity_packed_remarks') !== false) {
+                    $quantity_packed_remarks = '';
+                }
+
                 $data2 = array(
-                    'record_id' => $latest_id,
                     // 'pouch_width' => $pouch_widths[$i],
                     // 'pouch_length' => $pouch_lengths[$i],
                     // 'pouch_height' => $pouch_heights[$i],
-                    'pouch_size_remarks' => $this->input->post('pouch_size_remarks'),
+                    'pouch_size_remarks' => $pouch_size_remarks,
 					//  'quantity_packed' => $quantity_packed[$i],
                     // 'quantity_packed_unit' => $quantity_units[$i],
-                    'quantity_packed_remarks' => $this->input->post('quantity_packed_remarks'),
+                    'quantity_packed_remarks' => $quantity_packed_remarks,
                     'added_on' => date("Y-m-d h:i:s"),
                     'added_by' => $this->session->userdata['logged_in']['user_id']
                 );
-                $this->db->insert('df_form_machine_specification_size_qnty', $data2);
+                $size_quantity_exists = $this->db
+                    ->select('id')
+                    ->from('df_form_machine_specification_size_qnty')
+                    ->where('record_id', $record_id)
+                    ->limit(1)
+                    ->get()
+                    ->num_rows() > 0;
+
+                if ($size_quantity_exists) {
+                    $this->db->where('record_id', $record_id);
+                    $this->db->update('df_form_machine_specification_size_qnty', $data2);
+                } else {
+                    $data2['record_id'] = $record_id;
+                    $this->db->insert('df_form_machine_specification_size_qnty', $data2);
+                }
         //     }
         // }
 
@@ -2857,7 +2962,7 @@ public function powder_df_project_form_edit(){
 				// 'liner_weigher_option'=>$this->input->post('liner_weigher_option'),
 				// 'mult_head_weigher_option'=>$this->input->post('mult_head_weigher_option'),
 				// 'volumetric_cap_option'=>$this->input->post('volumetric_cap_option'),
-				// 'profile_of_sealing'=>$this->input->post('profile_of_sealing'),
+				'profile_of_sealing'=>$this->input->post('profile_of_sealing'),
 				'tracks_remarks'=>$this->input->post('tracks_remarks'),
 				'product_packed_remarks'=>$this->input->post('product_packed_remarks'),
 				'filling_unit_remarks'=>$this->input->post('filling_unit_remarks'),
@@ -2955,8 +3060,8 @@ public function powder_df_project_form_edit(){
 				'individual_weight_remarks'=>$this->input->post('individual_weight_remarks'),
 				'overall_weight_adjust'=>$this->input->post('overall_weight_adjust'),
 				'overall_weight_adjust_remarks'=>$this->input->post('overall_weight_adjust_remarks'),
-				// 'vertical_sealer_width'=>$this->input->post('vertical_sealer_width'),
-				// 'horizontal_sealer_width'=>$this->input->post('horizontal_sealer_width'),
+				'vertical_sealer_width'=>$this->input->post('vertical_sealer_width'),
+				'horizontal_sealer_width'=>$this->input->post('horizontal_sealer_width'),
 				'added_on'=>date("Y-m-d h:i:s"),
 				'added_by'=>$this->session->userdata['logged_in']['user_id']
 			);
@@ -3639,6 +3744,101 @@ public function checkHolidays() {
 	}
 
 
+	private function empty_df_overtime()
+	{
+		return array(
+			'rows' => array(),
+			'by_day' => array(),
+			'show_cost' => false,
+			'available' => false,
+			'summary' => array('occasions' => 0, 'people_entries' => 0, 'person_minutes' => 0, 'total_cost' => 0, 'last_approved_at' => '')
+		);
+	}
+
+	/**
+	 * Approved overtime booked against one DF, one row per person, plus the day-wise
+	 * rollup the overtime reports use. Only APPROVED requests count - pending and
+	 * rejected hours were never authorised work.
+	 *
+	 * Rates and amounts are money, so they only reach users who already hold an overtime
+	 * reporting or cost-rate grant. Everyone who can open this page still sees who worked
+	 * and for how long.
+	 */
+	private function df_detail_overtime($df_id)
+	{
+		$overtime = $this->empty_df_overtime();
+		foreach (array('overtime_requests', 'overtime_assignments') as $table) {
+			if (!$this->db->table_exists($table)) return $overtime;
+		}
+		$this->load->helper('overtime');
+		$permissions = ot_user_permissions($this->db, (int) $this->session->userdata['logged_in']['user_id']);
+		$overtime['available'] = true;
+		$overtime['show_cost'] = !empty($permissions['reports']) || !empty($permissions['costs']);
+		// A site that has not yet run overtime_004 has no cost columns to read.
+		$cost_columns = $this->db->field_exists('cost_amount', 'overtime_assignments')
+			? 'COALESCE(w.hourly_rate, 0) AS hourly_rate, COALESCE(w.cost_amount, 0) AS cost_amount,'
+			: '0 AS hourly_rate, 0 AS cost_amount,';
+
+		$rows = $this->db->query('SELECT r.id AS request_id, r.request_code, r.start_at, r.end_at, r.requested_minutes,
+				IFNULL(r.reason, "") AS reason, IFNULL(r.work_reference, "") AS work_reference, r.admin_decided_at,
+				COALESCE(w.person_name, CONCAT(COALESCE(req.first_name, ""), " ", COALESCE(req.last_name, ""))) AS person_name,
+				CASE WHEN w.id IS NULL THEN r.employee_id ELSE w.user_id END AS worker_id,
+				IFNULL(dept.department, "") AS department, ' . $cost_columns . '
+				IFNULL(req.first_name, "") AS requested_first_name, IFNULL(req.last_name, "") AS requested_last_name,
+				IFNULL(apr.first_name, "") AS approved_first_name, IFNULL(apr.last_name, "") AS approved_last_name
+			FROM overtime_requests r
+			LEFT JOIN overtime_assignments w ON w.request_id = r.id
+			LEFT JOIN system_users req ON req.user_id = r.employee_id
+			LEFT JOIN system_users apr ON apr.user_id = r.admin_decided_by
+			LEFT JOIN departments dept ON dept.department_id = COALESCE(w.department_id, r.department_id)
+			WHERE r.df_id = ? AND r.status = "APPROVED"
+			ORDER BY r.start_at DESC, r.id DESC, w.id', array((int) $df_id))->result_array();
+
+		$requests = array();
+		$days = array();
+		foreach ($rows as $row) {
+			$day = substr((string) $row['start_at'], 0, 10);
+			$minutes = (int) $row['requested_minutes'];
+			$cost = $overtime['show_cost'] ? (float) $row['cost_amount'] : 0;
+			$requests[(int) $row['request_id']] = true;
+			if (!isset($days[$day])) $days[$day] = array('day' => $day, 'occasions' => array(), 'people_entries' => 0, 'person_minutes' => 0, 'total_cost' => 0);
+			$days[$day]['occasions'][(int) $row['request_id']] = true;
+			$days[$day]['people_entries']++;
+			$days[$day]['person_minutes'] += $minutes;
+			$days[$day]['total_cost'] += $cost;
+			$overtime['summary']['people_entries']++;
+			$overtime['summary']['person_minutes'] += $minutes;
+			$overtime['summary']['total_cost'] += $cost;
+			if ($row['admin_decided_at'] > $overtime['summary']['last_approved_at']) $overtime['summary']['last_approved_at'] = $row['admin_decided_at'];
+			// A manual labour name is kept exactly as typed; it may carry a contractor
+			// reference that is the only thing separating two people with the same name.
+			$overtime['rows'][] = array(
+				'request_code' => $row['request_code'],
+				'person_name' => $row['worker_id'] ? ot_person_name($row['person_name']) : $row['person_name'],
+				'person_type' => $row['worker_id'] ? 'PMS user' : 'Manual / contract',
+				'department' => $row['department'],
+				'start_at' => $row['start_at'],
+				'end_at' => $row['end_at'],
+				'day' => $day,
+				'minutes' => $minutes,
+				'hourly_rate' => $overtime['show_cost'] ? (float) $row['hourly_rate'] : null,
+				'cost_amount' => $overtime['show_cost'] ? $cost : null,
+				'requested_by' => ot_person_name($row['requested_first_name'], $row['requested_last_name']),
+				'approved_by' => ot_person_name($row['approved_first_name'], $row['approved_last_name']),
+				'approved_at' => $row['admin_decided_at'],
+				'work_reference' => $row['work_reference'],
+				'reason' => $row['reason']
+			);
+		}
+		$overtime['summary']['occasions'] = count($requests);
+		foreach ($days as $day) {
+			$day['occasions'] = count($day['occasions']);
+			$overtime['by_day'][] = $day;
+		}
+		usort($overtime['by_day'], function ($a, $b) { return strcmp($a['day'], $b['day']); });
+		return $overtime;
+	}
+
 	public function get_df_details($df_id) {
 		$this->output->set_content_type('application/json');
 		$df_id = (int) $df_id;
@@ -3647,6 +3847,7 @@ public function checkHolidays() {
 			'df_info' => null,
 			'po_info' => null,
 			'help_tickets' => array(),
+			'overtime' => $this->empty_df_overtime(),
 			'plan_vs_actual' => array(),
 			'department_users' => array(),
 			'metrics' => array(
@@ -3826,6 +4027,9 @@ public function checkHolidays() {
 			->get()
 			->result_array();
 
+		$this->load->helper('df_delay');
+		$departmentDelaySql = df_department_overdue_sql($this->db, 'tdws', date('Y-m-d'));
+
 		$this->db->select("
 			tdws.id as task_record_id,
 			tdws.df_id,
@@ -3881,8 +4085,7 @@ public function checkHolidays() {
 					AND tdws.task_completed_on != '0000-00-00 00:00:00'
 					AND DATE(tdws.task_completed_on) > tdws.end_date
 				THEN DATEDIFF(DATE(tdws.task_completed_on), tdws.end_date)
-				WHEN tdws.task_status IN (0, 2)
-					AND CURDATE() > tdws.end_date
+				WHEN $departmentDelaySql
 				THEN DATEDIFF(CURDATE(), tdws.end_date)
 				ELSE 0
 			END as delay_days
@@ -4369,6 +4572,8 @@ public function checkHolidays() {
 			$output['summary']['health_note'] = 'Execution is moving without visible delay risk right now.';
 		}
 
+		$output['overtime'] = $this->df_detail_overtime($df_id);
+
 		$this->output->set_output(json_encode($output));
 	}
 
@@ -4415,9 +4620,11 @@ public function checkHolidays() {
 
 
 
-	function sparesdashboard()
-	{
-		 $data['sales_data'] = $this->user->get_sales_data_for_current_month();
+		function sparesdashboard()
+		{
+			 $this->load->model('Spare_quotation_expiry_model', 'spare_quotation_expiry_model');
+			 $this->spare_quotation_expiry_model->expire_stale_quotations(date('Y-m-d'));
+			 $data['sales_data'] = $this->user->get_sales_data_for_current_month();
 		 $data['order_data_by_brand'] = $this->user->get_order_values_and_counts_by_brand();
         
        
@@ -4442,7 +4649,7 @@ public function checkHolidays() {
     // --- 1. Get Logged-in User and Define Super Admins ---
     $logged_in_user_id = $this->session->userdata['logged_in']['user_id'];
     $manager_dept_id = $this->session->userdata['logged_in']['department_id'];
-    $super_admin_ids = [61, 62, 167, 161, 139, 162, 114,230];
+    $super_admin_ids = [61, 62, 167, 161, 139, 162, 114,230,243];
    
     $is_super_admin = in_array($logged_in_user_id, $super_admin_ids);
     $data['is_super_admin'] = $is_super_admin;
@@ -5011,6 +5218,50 @@ public function daily_df_progress_report()
     $this->load->view('reports/daily_df_progress_report_view', $data);
 }
 
+public function daily_planned_task_report()
+{
+    $this->load->model('Report_model');
+
+    $report_date_input = trim((string) $this->input->get('report_date', true));
+    $date_object = DateTime::createFromFormat('Y-m-d', $report_date_input);
+    $report_date = ($date_object && $date_object->format('Y-m-d') === $report_date_input)
+        ? $report_date_input
+        : date('Y-m-d');
+
+    $department_input = trim((string) $this->input->get('department_id', true));
+    $department_ids = array_values(array_unique(array_filter(array_map(
+        'intval',
+        explode(',', $department_input)
+    ))));
+    $selected_department_ids = implode(',', $department_ids);
+    $user_id = max(0, (int) $this->input->get('user_id', true));
+    $df_id = max(0, (int) $this->input->get('df_id', true));
+
+    $report = $this->Report_model->get_daily_planned_task_report(
+        $report_date,
+        $department_ids,
+        $user_id,
+        $df_id
+    );
+    $filters = $this->Report_model->get_daily_planned_task_filters();
+
+    $data = [
+        'page_title' => 'Daily Planned Task Intelligence Report',
+        'report_date' => $report_date,
+        'report_date_display' => date('d M Y', strtotime($report_date)),
+        'selected_department_ids' => $selected_department_ids,
+        'user_id' => $user_id,
+        'df_id' => $df_id,
+        'departments' => $filters['departments'],
+        'users' => $filters['users'],
+        'running_dfs' => $filters['running_dfs'],
+        'summary' => $report['summary'],
+        'rows' => $report['rows']
+    ];
+
+    $this->load->view('reports/daily_planned_task_report_view', $data);
+}
+
 /**
  * AJAX function for the management report to get ticket details
  * for a specific task record.
@@ -5466,6 +5717,10 @@ $remark_add = $this->input->post('yes_secondary_pack_remark_add');
     public function ajax_customised_df_save()
     {
         $df_id = (int) $this->input->post('df_id');
+        $save_mode = trim((string) $this->input->post('save_mode'));
+        if (!in_array($save_mode, array('workspace_update', 'department_update', 'department_schedule'), true)) {
+            $save_mode = 'workspace_update';
+        }
         $access = $this->get_customised_df_access_context($df_id, 0, 0);
 
         if (empty($access['context']) || empty($access['context']['df_id'])) {
@@ -5546,10 +5801,24 @@ $remark_add = $this->input->post('yes_secondary_pack_remark_add');
                 )));
         }
 
+        $this->load->model('Customised_df_model', 'customisedDfModel');
+        if (!$this->customisedDfModel->ensure_activity_table()) {
+            return $this->output
+                ->set_status_header(500)
+                ->set_content_type('application/json')
+                ->set_output(json_encode(array(
+                    'success' => false,
+                    'message' => 'Customised DF tracking storage could not be prepared.'
+                )));
+        }
+
         date_default_timezone_set("Asia/Kolkata");
         $current_user_id = (int) $access['user_id'];
         $now = date('Y-m-d H:i:s');
         $pending_notifications = array();
+        $scheduled_department_ids = array();
+        $common_schedule_date = null;
+        $has_common_schedule_date = ($save_mode === 'department_schedule');
 
         $this->db->trans_begin();
 
@@ -5567,6 +5836,7 @@ $remark_add = $this->input->post('yes_secondary_pack_remark_add');
             }
 
             $task_row = $task_rows[$task_record_id];
+            $scheduled_department_ids[(int) $task_row['department_id']] = true;
             $assigned_user_id = isset($task_payload['assigned_user']) && $task_payload['assigned_user'] !== ''
                 ? (int) $task_payload['assigned_user']
                 : 0;
@@ -5607,6 +5877,16 @@ $remark_add = $this->input->post('yes_secondary_pack_remark_add');
                         'success' => false,
                         'message' => 'Task start date cannot be after the due date.'
                     )));
+            }
+
+            if ($has_common_schedule_date) {
+                if ($start_date !== $end_date) {
+                    $has_common_schedule_date = false;
+                } elseif ($common_schedule_date === null) {
+                    $common_schedule_date = $start_date;
+                } elseif ($common_schedule_date !== $start_date) {
+                    $has_common_schedule_date = false;
+                }
             }
 
             if ($assigned_user_id > 0) {
@@ -5666,6 +5946,27 @@ $remark_add = $this->input->post('yes_secondary_pack_remark_add');
                     'assigned_user_id' => $assigned_user_id
                 );
             }
+        }
+
+        $activity_saved = $this->customisedDfModel->record_activity(array(
+            'df_id' => $df_id,
+            'activity_type' => $save_mode,
+            'task_count' => count($task_ids),
+            'department_count' => count($scheduled_department_ids),
+            'schedule_date' => $has_common_schedule_date ? $common_schedule_date : null,
+            'scheduled_by' => $current_user_id,
+            'scheduled_on' => $now
+        ));
+
+        if (!$activity_saved) {
+            $this->db->trans_rollback();
+            return $this->output
+                ->set_status_header(500)
+                ->set_content_type('application/json')
+                ->set_output(json_encode(array(
+                    'success' => false,
+                    'message' => 'The Customised DF plan could not be tracked, so no changes were saved.'
+                )));
         }
 
         if ($this->db->trans_status() === FALSE) {

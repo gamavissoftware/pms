@@ -7,9 +7,24 @@ $curr_symbol = $is_export ? '$' : '₹';
 $curr_text = $is_export ? 'USD' : 'INR';
 $spare_pi = isset($spare_pi) ? $spare_pi : null;
 $has_quotation = !empty($quotations);
-$can_manage_pi = !empty($spare_pi) || ($has_quotation && ((int) ($opportunity->current_stage_id ?? 0) !== 11) && (int) ($opportunity->current_stage_order ?? 0) >= 9);
+$is_cancelled_quotation = !empty($is_cancelled_quotation);
+$can_manage_pi = !$is_cancelled_quotation && (!empty($spare_pi) || ($has_quotation && ((int) ($opportunity->current_stage_id ?? 0) !== 11) && (int) ($opportunity->current_stage_order ?? 0) >= 9));
 $pi_currency = strtoupper(trim((string) ($spare_pi->currency ?? $curr_text)));
 $pi_symbol = $pi_currency === 'USD' ? '$' : '₹';
+$quotation_type_labels = array(
+    'CONSUMABLE' => 'Consumable',
+    'CRITICAL' => 'Critical',
+    'CONS_CRITICAL' => 'Consumable + Critical',
+    'CUSTOM_ENGG' => 'Custom Engg.',
+);
+$custom_engg_type_labels = array(
+    'CHANGEOVER' => 'Changeover',
+    'SPEED_UPGRADATION' => 'Speed Upgradation',
+);
+$dispatch_mode_labels = array(
+    'SELF_PICKUP' => 'Self Pickup',
+    'COURIER' => 'Courier',
+);
 ?>
 <!DOCTYPE html>
 <html>
@@ -50,6 +65,9 @@ $pi_symbol = $pi_currency === 'USD' ? '$' : '₹';
         .follow-up-label .text-danger { display: none; }
         .pi-card { border-left: 4px solid <?php echo $company_info->colorcode ?? '#4a90e2'; ?>; }
         .pi-meta { color: #6c757d; margin-bottom: 8px; }
+        .cancelled-alert { border-left: 5px solid #e11d48; background-color: #fff7f8; }
+        .quote-flow-badge { display: inline-block; padding: 4px 8px; border-radius: 12px; background: #eef6ff; color: #1f4e79; font-size: 11px; font-weight: 600; }
+        .dispatch-badge { display: inline-block; margin-top: 4px; color: #667085; font-size: 11px; }
     </style>
 </head>
 <body>
@@ -90,6 +108,28 @@ $pi_symbol = $pi_currency === 'USD' ? '$' : '₹';
                         <span class="op-no">(<?php echo htmlspecialchars($opportunity->op_no); ?>)</span>
                     </div>
 
+                    <?php if ($is_cancelled_quotation): ?>
+                    <div class="card-box cancelled-alert">
+                        <h4 class="m-t-0 text-danger"><b><i class="fa fa-calendar-times-o"></i> Quotation Automatically Cancelled</b></h4>
+                        <p>This quotation became inactive after one month without progressing to PI, PO, or order stages.</p>
+                        <p class="small text-muted">
+                            Previous stage: <b><?php echo htmlspecialchars($quotation_cancellation->previous_stage_name ?? 'Quotation Follow-up'); ?></b>
+                            <?php if (!empty($quotation_cancellation->quotation_date)): ?>
+                                | Quotation date: <b><?php echo date('d M Y', strtotime($quotation_cancellation->quotation_date)); ?></b>
+                            <?php endif; ?>
+                        </p>
+                        <?php if (!empty($can_reopen_quotation)): ?>
+                            <form method="post" action="<?php echo page_url; ?>Spares/reopen_cancelled_quotation/<?php echo (int) $opportunity->opportunity_id; ?>" onsubmit="return confirm('Reopen this quotation at <?php echo htmlspecialchars($quotation_cancellation->previous_stage_name ?? 'its previous stage', ENT_QUOTES, 'UTF-8'); ?>?');">
+                                <input type="hidden" name="return_url" value="<?php echo page_url; ?>Spares/opportunity_detail/<?php echo (int) $opportunity->opportunity_id; ?>">
+                                <button type="submit" class="btn btn-info btn-sm"><i class="fa fa-undo"></i> Reopen at Previous Stage</button>
+                            </form>
+                        <?php else: ?>
+                            <p class="small text-muted m-b-0">The account owner or Spares manager can reopen this quotation when the customer responds.</p>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!$is_cancelled_quotation): ?>
                     <div class="card-box" id="progressCard">
                         <h4 class="m-t-0 m-b-20 header-title"><b>Update Progress</b></h4>
                         
@@ -124,6 +164,7 @@ $pi_symbol = $pi_currency === 'USD' ? '$' : '₹';
                             </div>
                         </form>
                     </div>
+                    <?php endif; ?>
 
                     <?php if ($can_manage_pi): ?>
                     <div class="card-box pi-card">
@@ -178,7 +219,7 @@ $pi_symbol = $pi_currency === 'USD' ? '$' : '₹';
                                     <div class="info-item"><div class="info-icon"><i class="fa fa-user"></i></div><div class="info-label">Marketing</div><div class="info-value"><?php echo htmlspecialchars($opportunity->marketing_person_name); ?></div></div>
                                     <div class="info-item"><div class="info-icon"><i class="fa fa-globe"></i></div><div class="info-label">Type</div><div class="info-value"><span class="label label-inverse"><?php echo ($opportunity->op_type == 1) ? 'Domestic' : 'Export'; ?></span></div></div>
                                     <div class="info-item"><div class="info-icon"><i class="fa fa-line-chart"></i></div><div class="info-label">Probability</div><div class="info-value"><?php echo $opportunity->probability; ?>%</div></div>
-                                    <div class="info-item"><div class="info-icon"><i class="fa fa-info-circle"></i></div><div class="info-label">Current Status</div><div class="info-value"><span class="text-primary"><b><?php echo htmlspecialchars($opportunity->status); ?></b></span></div></div>
+                                    <div class="info-item"><div class="info-icon"><i class="fa fa-info-circle"></i></div><div class="info-label">Current Status</div><div class="info-value"><span class="<?php echo $is_cancelled_quotation ? 'text-danger' : 'text-primary'; ?>"><b><?php echo $is_cancelled_quotation ? 'Cancelled' : htmlspecialchars($opportunity->status); ?></b></span></div></div>
                                 </div>
                             </div>
 
@@ -233,13 +274,27 @@ $pi_symbol = $pi_currency === 'USD' ? '$' : '₹';
                                     <div class="table-responsive">
                                         <table class="table table-hover">
                                             <thead>
-                                                <tr><th>Quote No</th><th>Date</th><th class="text-right">Value (<?php echo $curr_text; ?>)</th><th class="text-center">Action</th></tr>
+                                                <tr><th>Quote No</th><th>Date</th><th>SF Flow</th><th class="text-right">Value (<?php echo $curr_text; ?>)</th><th class="text-center">Action</th></tr>
                                             </thead>
                                             <tbody>
                                                 <?php foreach ($quotations as $quote): ?>
+                                                <?php
+                                                    $quote_type = strtoupper(trim((string) ($quote->quotation_type ?? 'CONSUMABLE')));
+                                                    $custom_type = strtoupper(trim((string) ($quote->custom_engg_type ?? '')));
+                                                    $dispatch_mode = strtoupper(trim((string) ($quote->dispatch_mode ?? 'COURIER')));
+                                                    $quote_type_label = isset($quotation_type_labels[$quote_type]) ? $quotation_type_labels[$quote_type] : 'Consumable';
+                                                    if ($quote_type === 'CUSTOM_ENGG' && isset($custom_engg_type_labels[$custom_type])) {
+                                                        $quote_type_label .= ' - ' . $custom_engg_type_labels[$custom_type];
+                                                    }
+                                                    $dispatch_label = isset($dispatch_mode_labels[$dispatch_mode]) ? $dispatch_mode_labels[$dispatch_mode] : 'Courier';
+                                                ?>
                                                 <tr>
                                                     <td><b><?php echo htmlspecialchars($quote->quotation_no); ?></b></td>
                                                     <td><?php echo date('d M, Y', strtotime($quote->quotation_date)); ?></td>
+                                                    <td>
+                                                        <span class="quote-flow-badge"><?php echo htmlspecialchars($quote_type_label); ?></span><br>
+                                                        <span class="dispatch-badge"><i class="fa fa-truck"></i> <?php echo htmlspecialchars($dispatch_label); ?></span>
+                                                    </td>
                                                     <td class="text-right"><?php echo $curr_symbol; ?> <?php echo number_format($quote->total_value, 2); ?></td>
                                                     <td class="text-center">
                                                         <a href="<?php echo page_url; ?>Spares/view_quotation_pdf/<?php echo $quote->quotation_id; ?>" target="_blank" class="btn btn-primary btn-xs waves-effect"><i class="fa fa-file-pdf-o"></i> PDF</a>

@@ -30,6 +30,12 @@ $company_info = $this->db->select('company_name, colorcode')->from('company_info
         .badge-open { background-color: #3498db; color: #fff; }
         .badge-won { background-color: #2ecc71; color: #fff; }
         .badge-lost { background-color: #e74c3c; color: #fff; }
+        .badge-cancelled { background-color: #be123c; color: #fff; }
+        .cancelled-quotation-row td { background-color: #fffafb; }
+        .cancelled-quotation-row td:first-child { box-shadow: inset 4px 0 0 #e11d48; }
+        .cancelled-stage { background-color: #fff1f2 !important; color: #be123c !important; border: 1px solid #fecdd3; }
+        .quote-age-note { display: block; margin-top: 4px; color: #8b6470; font-size: 10px; white-space: nowrap; }
+        .action-form-inline { display: inline-block; margin-left: 5px; }
         .btn-reset { background-color: #6c757d; border-color: #6c757d; color: #fff; }
         .action-icons a { margin: 0 5px; font-size: 1.2em; }
         td.details-control { background: url('https://datatables.net/examples/resources/details_open.png') no-repeat center center; cursor: pointer; }
@@ -46,6 +52,13 @@ $company_info = $this->db->select('company_name, colorcode')->from('company_info
         <div class="container-fluid">
             <div class="row"> <div class="col-sm-12"> <div class="page-title-box"> <div class="btn-group pull-right"> <a href="<?php echo page_url; ?>Spares/leadform" class="btn btn-primary waves-effect waves-light"> <i class="fa fa-plus"></i> Add New Opportunity </a> </div> <h4 class="page-title">Opportunities List</h4> </div> </div> </div>
 
+            <?php if ($this->session->flashdata('success')): ?>
+                <div class="alert alert-success"><?php echo htmlspecialchars($this->session->flashdata('success')); ?></div>
+            <?php endif; ?>
+            <?php if ($this->session->flashdata('error')): ?>
+                <div class="alert alert-danger"><?php echo htmlspecialchars($this->session->flashdata('error')); ?></div>
+            <?php endif; ?>
+
             <div class="card-box filter-card">
                 <a data-toggle="collapse" href="#filterCollapse" role="button" aria-expanded="false" aria-controls="filterCollapse">
                     <h5 class="m-t-0 header-title"><b><i class="fa fa-filter"></i> Filter Options</b> <i class="fa fa-chevron-down pull-right"></i></h5>
@@ -58,7 +71,7 @@ $company_info = $this->db->select('company_name, colorcode')->from('company_info
                             <div class="col-md-3 form-group"> <label>To Date</label> <input type="date" name="to_date" class="form-control" value="<?php echo htmlspecialchars($this->input->get('to_date')); ?>"> </div>
                             <div class="col-md-3 form-group"> <label>Marketing Person</label> <select name="marketing_person" class="form-control"> <option value="">All Persons</option> <?php foreach ($marketing_persons as $person): ?> <option value="<?php echo $person->user_id; ?>" <?php if($this->input->get('marketing_person') == $person->user_id) echo 'selected'; ?>> <?php echo htmlspecialchars($person->first_name . ' ' . $person->last_name); ?> </option> <?php endforeach; ?> </select> </div>
                             <div class="col-md-3 form-group"> <label>Opportunity Type</label> <select name="op_type" class="form-control"> <option value="">All Types</option> <option value="1" <?php if($this->input->get('op_type') == '1') echo 'selected'; ?>>Domestic</option> <option value="2" <?php if($this->input->get('op_type') == '2') echo 'selected'; ?>>Export</option> </select> </div>
-                            <div class="col-md-3 form-group"> <label>Status</label> <select name="status" class="form-control"> <option value="">All Statuses</option> <option value="Open" <?php if($this->input->get('status') == 'Open') echo 'selected'; ?>>Open</option> <option value="Won" <?php if($this->input->get('status') == 'Won') echo 'selected'; ?>>Won</option> <option value="Lost" <?php if($this->input->get('status') == 'Lost') echo 'selected'; ?>>Lost</option> </select> </div>
+                            <div class="col-md-3 form-group"> <label>Status</label> <select name="status" class="form-control"> <option value="">All Statuses</option> <option value="Open" <?php if($this->input->get('status') == 'Open') echo 'selected'; ?>>Open</option> <option value="Won" <?php if($this->input->get('status') == 'Won') echo 'selected'; ?>>Won</option> <option value="Lost" <?php if($this->input->get('status') == 'Lost') echo 'selected'; ?>>Lost</option> <option value="Cancelled" <?php if($this->input->get('status') == 'Cancelled') echo 'selected'; ?>>Cancelled</option> </select> </div>
                             <div class="col-md-3 form-group"> <label>Stage</label> <select name="stage" class="form-control"> <option value="">All Stages</option> <?php foreach ($stages as $stage): ?> <option value="<?php echo $stage->lead_id; ?>" <?php if($this->input->get('stage') == $stage->lead_id) echo 'selected'; ?>> <?php echo htmlspecialchars($stage->lead_name); ?> </option> <?php endforeach; ?> </select> </div>
                         </div>
                         <div class="row">
@@ -92,14 +105,26 @@ $company_info = $this->db->select('company_name, colorcode')->from('company_info
                                 <tbody>
                                 <?php if (!empty($opportunities)): ?>
                                     <?php foreach ($opportunities as $op): ?>
-                                        <tr data-op-id="<?php echo $op->opportunity_id; ?>">
+                                        <?php
+                                            $is_cancelled_quotation = ((int) $op->current_stage_id === (int) $cancelled_quotation_stage_id);
+                                            $can_reopen_quotation = $is_cancelled_quotation && (
+                                                !empty($can_reopen_all_cancelled)
+                                                || (int) $op->marketing_person_id === (int) $current_user_id
+                                            );
+                                        ?>
+                                        <tr data-op-id="<?php echo $op->opportunity_id; ?>" class="<?php echo $is_cancelled_quotation ? 'cancelled-quotation-row' : ''; ?>">
                                             <td class="details-control"></td>
                                             <td data-order="<?php echo (int) $op->opportunity_id; ?>"><b><?php echo htmlspecialchars($op->op_no); ?></b></td>
                                             <td><?php echo date('d M, Y', strtotime($op->op_date)); ?></td>
                                             <td><?php echo htmlspecialchars($op->company_name); ?></td>
                                             <td><?php echo htmlspecialchars($op->marketing_person_name); ?></td>
                                             <td><?php echo htmlspecialchars($op->lead_source); ?></td>
-                                            <td><span class="label label-info"><?php echo htmlspecialchars($op->current_stage_name ?? 'N/A'); ?></span></td>
+                                            <td>
+                                                <span class="label <?php echo $is_cancelled_quotation ? 'cancelled-stage' : 'label-info'; ?>"><?php echo htmlspecialchars($op->current_stage_name ?? 'N/A'); ?></span>
+                                                <?php if (!empty($op->latest_quotation_date)): ?>
+                                                    <span class="quote-age-note">Quoted <?php echo date('d M Y', strtotime($op->latest_quotation_date)); ?></span>
+                                                <?php endif; ?>
+                                            </td>
                                             <td>
                                                 <div class="progress" style="height: 10px; margin-bottom: 0; border-radius: 5px;"><div class="progress-bar" role="progressbar" style="width: <?php echo $op->probability; ?>%;" ></div></div>
                                                 <small><?php echo $op->probability; ?>%</small>
@@ -110,15 +135,22 @@ $company_info = $this->db->select('company_name, colorcode')->from('company_info
                                                     $status_class = 'badge-open';
                                                     if ($op->status == 'Won') $status_class = 'badge-won';
                                                     if ($op->status == 'Lost') $status_class = 'badge-lost';
+                                                    if ($is_cancelled_quotation) $status_class = 'badge-cancelled';
                                                 ?>
-                                                <span class="badge <?php echo $status_class; ?>"><?php echo htmlspecialchars($op->status ?? 'Open'); ?></span>
+                                                <span class="badge <?php echo $status_class; ?>"><?php echo $is_cancelled_quotation ? 'Cancelled' : htmlspecialchars($op->status ?? 'Open'); ?></span>
                                             </td>
-                                            <td><a href="<?php echo page_url; ?>Spares/opportunity_detail/<?php echo $op->opportunity_id; ?>" class="btn btn-success btn-xs">Update Progress</a></td>
+                                            <td><a href="<?php echo page_url; ?>Spares/opportunity_detail/<?php echo $op->opportunity_id; ?>" class="btn <?php echo $is_cancelled_quotation ? 'btn-default' : 'btn-success'; ?> btn-xs"><?php echo $is_cancelled_quotation ? 'View Details' : 'Update Progress'; ?></a></td>
                                             <td class="action-icons">
                                                 <?php if (!empty($op->latest_quotation_id)): ?>
                                                     <a href="<?php echo page_url; ?>Spares/view_quotation_pdf/<?php echo $op->latest_quotation_id; ?>" target="_blank" title="View Latest Quotation" class="text-info"><i class="fa fa-file-pdf-o"></i></a>
                                                 <?php endif; ?>
                                                 <a href="<?php echo page_url; ?>Spares/edit_opportunity/<?php echo $op->opportunity_id; ?>" title="Edit" class="text-warning"><i class="fa fa-pencil"></i></a>
+                                                <?php if ($can_reopen_quotation): ?>
+                                                    <form method="post" action="<?php echo page_url; ?>Spares/reopen_cancelled_quotation/<?php echo (int) $op->opportunity_id; ?>" class="action-form-inline" onsubmit="return confirm('Reopen this quotation at its previous pipeline stage?');">
+                                                        <input type="hidden" name="return_url" value="<?php echo page_url; ?>Spares/opportunity_list?stage=<?php echo (int) $cancelled_quotation_stage_id; ?>">
+                                                        <button type="submit" class="btn btn-info btn-xs" title="Reopen at previous stage"><i class="fa fa-undo"></i> Reopen</button>
+                                                    </form>
+                                                <?php endif; ?>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

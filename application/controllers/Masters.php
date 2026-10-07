@@ -857,6 +857,293 @@ public function save_daily_progress() {
         $this->load->view('production/job_timeline_view', $data);
     }
 
+    public function assembly_machine_report() {
+        $data['page_title'] = 'Assembly-wise Machine Progress Report';
+        $this->load->model('Assembly_line_progress_model', 'assembly_line_progress_model');
+        $this->assembly_line_progress_model->ensure_schema();
+        $this->load->model('Assembly_machine_sequence_model', 'assembly_machine_sequence_model');
+        $this->assembly_machine_sequence_model->ensure_schema();
+
+        $user_session = $this->session->userdata('logged_in');
+        $user_id = isset($user_session['user_id']) ? (int) $user_session['user_id'] : 0;
+        $role_id = isset($user_session['role'])
+            ? (int) $user_session['role']
+            : (isset($user_session['role_id']) ? (int) $user_session['role_id'] : 0);
+
+        $admin_user_ids = array(139, 143, 155, 180, 209);
+        $is_admin = $role_id === 12 || in_array($user_id, $admin_user_ids, true);
+        $supervisor = null;
+        if (!$is_admin) {
+            $supervisor = $this->db->get_where('mst_supervisors', array('user_id' => $user_id))->row();
+        }
+
+        $line_id = max(0, (int) $this->input->get('line_id', true));
+        $status = strtolower(trim((string) $this->input->get('status', true)));
+        if (!in_array($status, array('running', 'closed', 'all'), true)) {
+            $status = 'running';
+        }
+
+        $supervisor_line_ids = array();
+        if (!$is_admin && !empty($supervisor)) {
+            $supervisor_line_rows = $this->db
+                ->select('line_id')
+                ->from('trn_machine_assignments')
+                ->where('supervisor_id', (int) $supervisor->supervisor_id)
+                ->where('is_active', 1)
+                ->group_by('line_id')
+                ->get()
+                ->result_array();
+            $supervisor_line_ids = array_map('intval', array_column($supervisor_line_rows, 'line_id'));
+        }
+
+        $this->db
+            ->select('line_id, line_name')
+            ->from('mst_lines')
+            ->like('LOWER(line_category)', 'assembly', 'both', false)
+            ->where('status', 1);
+        if (!$is_admin && !empty($supervisor)) {
+            if (!empty($supervisor_line_ids)) {
+                $this->db->where_in('line_id', $supervisor_line_ids);
+            } else {
+                $this->db->where('1 = 0', null, false);
+            }
+        } elseif (!$is_admin) {
+            $this->db->where('1 = 0', null, false);
+        }
+        $data['assembly_lines'] = $this->db->order_by('line_name', 'ASC')->get()->result();
+
+        $assembly_line_ids = array_map(function ($line) {
+            return (int) $line->line_id;
+        }, $data['assembly_lines']);
+        $data['assembly_line_updates'] = $this->assembly_line_progress_model->get_latest_by_lines($assembly_line_ids);
+        $data['report_assembly_lines'] = $data['assembly_lines'];
+        if ($line_id > 0) {
+            $data['report_assembly_lines'] = array_values(array_filter($data['assembly_lines'], function ($line) use ($line_id) {
+                return (int) $line->line_id === (int) $line_id;
+            }));
+        }
+
+        $this->db->select('
+            trn.assignment_id,
+            trn.df_number,
+            trn.release_date,
+            trn.remarks as allocation_remarks,
+            trn.is_active,
+            trn.created_at as assigned_at,
+            m.machine_name,
+            m.machine_code,
+            m.model_no,
+            l.line_id,
+            l.line_name,
+            s.supervisor_name,
+            latest.log_id,
+            latest.log_date,
+            latest.log_time,
+            latest.progress_percent,
+            latest.remarks as progress_remarks,
+            latest.image_path,
+            latest.created_at as progress_updated_at,
+            machine_sequence.sequence_no,
+            CONCAT(COALESCE(lu.first_name, ""), " ", COALESCE(lu.last_name, "")) as progress_updated_by
+        ', false);
+        $this->db->from('trn_machine_assignments trn');
+        $this->db->join('mst_machines m', 'm.machine_id = trn.machine_id', 'inner');
+        $this->db->join('mst_lines l', 'l.line_id = trn.line_id', 'inner');
+        $this->db->join('mst_supervisors s', 's.supervisor_id = trn.supervisor_id', 'left');
+        $this->db->join(
+            '(SELECT dl.* FROM trn_daily_logs dl INNER JOIN (SELECT assignment_id, MAX(log_id) latest_log_id FROM trn_daily_logs GROUP BY assignment_id) last_log ON last_log.latest_log_id = dl.log_id) latest',
+            'latest.assignment_id = trn.assignment_id',
+            'left',
+            false
+        );
+        $this->db->join('system_users lu', 'lu.user_id = latest.created_by', 'left');
+        $this->db->join('trn_assembly_machine_sequence machine_sequence', 'machine_sequence.assignment_id = trn.assignment_id', 'left');
+        $this->db->like('LOWER(l.line_category)', 'assembly', 'both', false);
+
+        if ($line_id > 0) {
+            $this->db->where('trn.line_id', $line_id);
+        }
+        if ($status === 'running') {
+            $this->db->where('trn.is_active', 1);
+        } elseif ($status === 'closed') {
+            $this->db->where('trn.is_active', 0);
+        }
+
+        if (!$is_admin) {
+            if (!empty($supervisor)) {
+                $this->db->where('trn.supervisor_id', (int) $supervisor->supervisor_id);
+            } else {
+                $this->db->where('1 = 0', null, false);
+            }
+        }
+
+        $this->db->order_by('l.line_name', 'ASC');
+        $this->db->order_by('trn.is_active', 'DESC');
+        $this->db->order_by('CASE WHEN machine_sequence.sequence_no IS NULL OR machine_sequence.sequence_no < 1 THEN 1 ELSE 0 END', 'ASC', false);
+        $this->db->order_by('machine_sequence.sequence_no', 'ASC');
+        $this->db->order_by('trn.assignment_id', 'DESC');
+        $data['machines'] = $this->db->get()->result();
+
+        $this->load->model('Df_dispatch_plan_model', 'dispatch_plan_report');
+        $machine_df_numbers = array();
+        foreach ($data['machines'] as $machine) {
+            if (!empty($machine->df_number)) {
+                $machine_df_numbers[] = $machine->df_number;
+            }
+        }
+        $data['df_shortages'] = $this->dispatch_plan_report->get_shortages_by_df_numbers($machine_df_numbers);
+
+        $data['selected_line_id'] = $line_id;
+        $data['selected_status'] = $status;
+        $data['can_update'] = $is_admin || !empty($supervisor);
+
+        $this->load->view('production/assembly_machine_report_view', $data);
+    }
+
+    public function save_assembly_machine_sequence() {
+        header('Content-Type: application/json');
+        if (!$this->input->is_ajax_request()) {
+            echo json_encode(array('status' => 0, 'message' => 'Invalid request.'));
+            return;
+        }
+
+        $user_session = $this->session->userdata('logged_in');
+        $user_id = isset($user_session['user_id']) ? (int) $user_session['user_id'] : 0;
+        $role_id = isset($user_session['role'])
+            ? (int) $user_session['role']
+            : (isset($user_session['role_id']) ? (int) $user_session['role_id'] : 0);
+        $is_admin = $role_id === 12 || in_array($user_id, array(139, 143, 155, 180, 209), true);
+        $supervisor = $is_admin ? null : $this->db->get_where('mst_supervisors', array('user_id' => $user_id))->row();
+
+        if (!$is_admin && empty($supervisor)) {
+            echo json_encode(array('status' => 0, 'message' => 'You are not allowed to change the machine sequence.'));
+            return;
+        }
+
+        $line_id = max(0, (int) $this->input->post('line_id'));
+        $assignment_ids = array_values(array_unique(array_filter(array_map('intval', (array) $this->input->post('assignment_ids')))));
+        if ($line_id < 1 || empty($assignment_ids)) {
+            echo json_encode(array('status' => 0, 'message' => 'Please select one assembly line and arrange its machines.'));
+            return;
+        }
+
+        $this->db->select('assignment_id')->from('trn_machine_assignments')->where('line_id', $line_id)->where_in('assignment_id', $assignment_ids);
+        if (!$is_admin) {
+            $this->db->where('supervisor_id', (int) $supervisor->supervisor_id);
+        }
+        $allowed_ids = array_map('intval', array_column($this->db->get()->result_array(), 'assignment_id'));
+        sort($allowed_ids);
+        $requested_ids = $assignment_ids;
+        sort($requested_ids);
+        if ($allowed_ids !== $requested_ids) {
+            echo json_encode(array('status' => 0, 'message' => 'One or more machines do not belong to the selected assembly line.'));
+            return;
+        }
+
+        $this->load->model('Assembly_machine_sequence_model', 'assembly_machine_sequence_model');
+        $this->assembly_machine_sequence_model->ensure_schema();
+        $saved = $this->assembly_machine_sequence_model->save_line_sequence($line_id, $assignment_ids, $user_id);
+        echo json_encode(array('status' => $saved ? 1 : 0, 'message' => $saved ? 'Machine sequence saved.' : 'Unable to save machine sequence.'));
+    }
+
+    public function save_assembly_line_progress() {
+        header('Content-Type: application/json');
+        if (!$this->input->is_ajax_request()) {
+            echo json_encode(array('status' => 0, 'message' => 'Invalid request.'));
+            return;
+        }
+
+        $this->load->model('Assembly_line_progress_model', 'assembly_line_progress_model');
+        $this->assembly_line_progress_model->ensure_schema();
+
+        $line_id = max(0, (int) $this->input->post('line_id'));
+        $remarks = trim((string) $this->input->post('remarks'));
+        $progress_percent = max(0, min(100, (int) $this->input->post('progress_percent')));
+
+        $line = $this->db
+            ->where('line_id', $line_id)
+            ->like('LOWER(line_category)', 'assembly', 'both', false)
+            ->get('mst_lines')
+            ->row();
+
+        if (empty($line)) {
+            echo json_encode(array('status' => 0, 'message' => 'Please select a valid assembly line.'));
+            return;
+        }
+        if ($remarks === '') {
+            echo json_encode(array('status' => 0, 'message' => 'Progress remarks are required.'));
+            return;
+        }
+        if (empty($_FILES['assembly_image']['name'])) {
+            echo json_encode(array('status' => 0, 'message' => 'Please upload one assembly line picture.'));
+            return;
+        }
+
+        $user_session = $this->session->userdata('logged_in');
+        $user_id = isset($user_session['user_id']) ? (int) $user_session['user_id'] : 0;
+        $role_id = isset($user_session['role'])
+            ? (int) $user_session['role']
+            : (isset($user_session['role_id']) ? (int) $user_session['role_id'] : 0);
+        $is_admin = $role_id === 12 || in_array($user_id, array(139, 143, 155, 180, 209), true);
+
+        if (!$is_admin) {
+            $supervisor = $this->db->get_where('mst_supervisors', array('user_id' => $user_id))->row();
+            $can_update_line = !empty($supervisor) && $this->db
+                ->where('line_id', $line_id)
+                ->where('supervisor_id', (int) $supervisor->supervisor_id)
+                ->where('is_active', 1)
+                ->count_all_results('trn_machine_assignments') > 0;
+            if (!$can_update_line) {
+                echo json_encode(array('status' => 0, 'message' => 'You do not have permission to update this assembly line.'));
+                return;
+            }
+        }
+
+        $upload_path = FCPATH . 'uploads/assembly_line_progress/';
+        if (!is_dir($upload_path) && !mkdir($upload_path, 0775, true)) {
+            echo json_encode(array('status' => 0, 'message' => 'Unable to prepare the assembly image folder.'));
+            return;
+        }
+
+        $this->load->library('upload');
+        $this->upload->initialize(array(
+            'upload_path' => $upload_path,
+            'allowed_types' => 'jpg|jpeg|png|gif|webp',
+            'max_size' => 5120,
+            'encrypt_name' => true
+        ));
+
+        if (!$this->upload->do_upload('assembly_image')) {
+            echo json_encode(array(
+                'status' => 0,
+                'message' => 'Image upload failed: ' . $this->upload->display_errors('', '')
+            ));
+            return;
+        }
+
+        $uploaded = $this->upload->data();
+        $saved = $this->assembly_line_progress_model->insert(array(
+            'line_id' => $line_id,
+            'progress_date' => date('Y-m-d'),
+            'progress_percent' => $progress_percent,
+            'remarks' => $remarks,
+            'image_path' => $uploaded['file_name'],
+            'image_original_name' => $uploaded['orig_name'],
+            'created_by' => $user_id,
+            'created_at' => date('Y-m-d H:i:s')
+        ));
+
+        if (!$saved) {
+            if (is_file($upload_path . $uploaded['file_name'])) {
+                unlink($upload_path . $uploaded['file_name']);
+            }
+            echo json_encode(array('status' => 0, 'message' => 'Unable to save the assembly update.'));
+            return;
+        }
+
+        echo json_encode(array('status' => 1, 'message' => 'Assembly line update saved successfully.'));
+    }
+
     public function combined_live_progress(){
          $this->load->view('production/combined_live_progress');
     }

@@ -1,5 +1,15 @@
 <script>
     (function ($) {
+        var isSubmitting = false;
+
+        function setSubmitting(submitting) {
+            isSubmitting = submitting;
+            $('#taskManagementCreateForm').attr('aria-busy', submitting ? 'true' : 'false');
+            $('#createTaskButton').prop('disabled', submitting);
+            $('#createTaskButtonLabel').text(submitting ? 'Creating task…' : 'Create Task');
+            $('#taskCreateLoading').prop('hidden', !submitting);
+        }
+
         function showValidationGrowl(message) {
             if (typeof window.showTaskManagementGrowl === 'function') {
                 window.showTaskManagementGrowl({
@@ -35,27 +45,36 @@
 
         function validateCreateForm() {
             var missingLabels = [];
+            var invalidMessages = [];
 
             $('#taskManagementCreateForm [data-required="1"], #taskManagementCreateForm [required]').each(function () {
                 var $field = $(this);
                 var value = $.trim(($field.val() || '').toString());
-                var hasError = false;
+                var label = $field.closest('.tm-field').find('label').first().text().replace('*', '').trim();
+                var hasError = value === '';
 
-                if ($field.is('select')) {
-                    hasError = value === '';
+                if (hasError) {
+                    missingLabels.push(label);
                 } else if ($field.attr('type') === 'date') {
-                    hasError = value === '';
-                } else {
-                    hasError = value === '';
+                    /* The form carries novalidate, so the browser will not
+                       enforce min= on its own. The server rejects a past date
+                       either way (callback_not_past_date); this is only so the
+                       user finds out before the round trip. Both compare
+                       yyyy-mm-dd strings against the same server-rendered day. */
+                    var min = $field.attr('min');
+                    if (min && value < min) {
+                        hasError = true;
+                        invalidMessages.push(label + ' cannot be in the past.');
+                    }
                 }
 
                 toggleFieldError($field, hasError);
-
-                if (hasError) {
-                    var label = $field.closest('.tm-field').find('label').first().text().replace('*', '').trim();
-                    missingLabels.push(label);
-                }
             });
+
+            if (invalidMessages.length > 0) {
+                showValidationGrowl(invalidMessages.join(' '));
+                return false;
+            }
 
             if (missingLabels.length > 0) {
                 showValidationGrowl('Please fill: ' + missingLabels.join(', ') + '.');
@@ -66,24 +85,38 @@
         }
 
         function updateAssigneeMeta() {
-            var selected = $('#assigned_to_user_id option:selected');
-            var departmentName = selected.data('department-name') || '-';
-            $('#selectedDepartmentName').val(departmentName);
+            var departments = [];
+            $('#assigned_to_user_id option:selected').each(function () {
+                var departmentName = $(this).data('department-name') || '';
+                if (departmentName && departments.indexOf(departmentName) === -1) {
+                    departments.push(departmentName);
+                }
+            });
+            $('#selectedDepartmentName').val(departments.length ? departments.join(', ') : '-');
         }
 
         $(function () {
             if ($.fn.select2) {
                 $('#assigned_to_user_id').select2({
-                    placeholder: 'Select assignee',
+                    placeholder: 'Select one or more assignees',
                     allowClear: true
                 });
             }
 
             $('#taskManagementCreateForm').on('submit', function (event) {
+                if (isSubmitting) {
+                    event.preventDefault();
+                    return false;
+                }
                 if (!validateCreateForm()) {
                     event.preventDefault();
                     return false;
                 }
+                setSubmitting(true);
+            });
+
+            $(window).on('pageshow', function () {
+                setSubmitting(false);
             });
 
             $('#taskManagementCreateForm').find('input, select, textarea').on('change keyup', function () {

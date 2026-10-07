@@ -1,6 +1,7 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 $schedule_feedback = $this->session->flashdata('schedule_feedback');
+$released_dfs = isset($released_dfs) && is_array($released_dfs) ? $released_dfs : [];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1076,9 +1077,10 @@ $schedule_feedback = $this->session->flashdata('schedule_feedback');
                     <div class="modal-body">
                         <div class="row">
                             <div class="col-md-6 form-group">
-                                <label>Order <span class="text-danger">*</span></label>
+                                <label>Order / DF <span class="text-danger">*</span></label>
                                 <select name="opportunity_id" id="opportunity_id" class="form-control modal-select" required>
-                                    <option value="">Search Won Orders...</option>
+                                    <option value="">Search Won Orders or choose DF...</option>
+                                    <option value="df">Schedule against a DF number</option>
                                     <?php foreach ($pending_orders as $pending_order) : ?>
                                         <option value="<?php echo (int) $pending_order->opportunity_id; ?>">
                                             <?php echo htmlspecialchars($pending_order->op_no . ' | ' . $pending_order->company_name, ENT_QUOTES, 'UTF-8'); ?>
@@ -1095,6 +1097,31 @@ $schedule_feedback = $this->session->flashdata('schedule_feedback');
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                            </div>
+                        </div>
+
+                        <div class="row" id="dfReferenceFields" style="display:none;">
+                            <div class="col-md-6 form-group">
+                                <label>DF Number <span class="text-danger">*</span></label>
+                                <select name="df_id" id="df_id" class="form-control modal-select">
+                                    <option value="">Search DF Number...</option>
+                                    <?php foreach ($released_dfs as $released_df) : ?>
+                                        <option value="<?php echo (int) $released_df->id; ?>">
+                                            <?php
+                                            $df_option_label = trim((string) $released_df->df_no);
+                                            if (trim((string) $released_df->df_description) !== '') {
+                                                $df_option_label .= ' | ' . trim((string) $released_df->df_description);
+                                            }
+                                            echo htmlspecialchars($df_option_label, ENT_QUOTES, 'UTF-8');
+                                            ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                    <option value="other">Other DF (not in PMS)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 form-group" id="manualDfField" style="display:none;">
+                                <label>Other DF Number <span class="text-danger">*</span></label>
+                                <input type="text" name="manual_df_no" id="manual_df_no" class="form-control" maxlength="100" placeholder="Enter DF number">
                             </div>
                         </div>
 
@@ -1170,6 +1197,35 @@ $schedule_feedback = $this->session->flashdata('schedule_feedback');
                 width: '100%'
             });
 
+            function toggleManualDfField() {
+                var showManualDf = $('#opportunity_id').val() === 'df' && $('#df_id').val() === 'other';
+                $('#manualDfField').toggle(showManualDf);
+                $('#manual_df_no').prop('required', showManualDf);
+
+                if (!showManualDf) {
+                    $('#manual_df_no').val('').removeClass('error');
+                    $('#manual_df_no-error').remove();
+                }
+            }
+
+            function toggleDfReferenceFields() {
+                var showDfFields = $('#opportunity_id').val() === 'df';
+                $('#dfReferenceFields').toggle(showDfFields);
+                $('#df_id').prop('required', showDfFields);
+
+                if (!showDfFields) {
+                    $('#df_id').val('').trigger('change.select2').removeClass('error');
+                    $('#df_id').next('.select2-container').removeClass('error');
+                    $('#df_id-error').remove();
+                }
+
+                toggleManualDfField();
+            }
+
+            $('#opportunity_id').on('change', toggleDfReferenceFields);
+            $('#df_id').on('change', toggleManualDfField);
+            toggleDfReferenceFields();
+
             function updateEngineerCount() {
                 var selectedEngineers = $('#engineer_ids').val() || [];
                 var message = 'Select one or more team members.';
@@ -1241,7 +1297,7 @@ $schedule_feedback = $this->session->flashdata('schedule_feedback');
                         title: props.engineer_name,
                         html:
                             '<div style="text-align:left; line-height:1.8;">' +
-                                '<strong>Order:</strong> ' + escapeHtml(props.op_no) + '<br>' +
+                                '<strong>Order / DF:</strong> ' + escapeHtml(props.op_no) + '<br>' +
                                 '<strong>Customer:</strong> ' + escapeHtml(props.customer_name) + '<br>' +
                                 '<strong>Deployment Type:</strong> ' + escapeHtml(props.visit_type) + '<br>' +
                                 '<strong>Status:</strong> ' + escapeHtml(props.visit_status) + '<br>' +
@@ -1357,6 +1413,17 @@ $schedule_feedback = $this->session->flashdata('schedule_feedback');
                 ignore: [],
                 rules: {
                     opportunity_id: 'required',
+                    df_id: {
+                        required: function() {
+                            return $('#opportunity_id').val() === 'df';
+                        }
+                    },
+                    manual_df_no: {
+                        required: function() {
+                            return $('#opportunity_id').val() === 'df' && $('#df_id').val() === 'other';
+                        },
+                        maxlength: 100
+                    },
                     visit_type: 'required',
                     start_date: 'required',
                     end_date: 'required'

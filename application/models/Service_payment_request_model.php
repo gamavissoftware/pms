@@ -31,6 +31,7 @@ class Service_payment_request_model extends CI_Model
                     `service_to_date` DATE DEFAULT NULL,
                     `request_date` DATE NOT NULL,
                     `amount` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+                    `approved_amount` DECIMAL(15,2) DEFAULT NULL,
                     `purpose` LONGTEXT NOT NULL,
                     `extension_reason` TEXT DEFAULT NULL,
                     `attachment` VARCHAR(255) DEFAULT NULL,
@@ -110,6 +111,13 @@ class Service_payment_request_model extends CI_Model
             $this->ensure_field(
                 'request_date',
                 "ALTER TABLE `{$this->table}` ADD `request_date` DATE NOT NULL DEFAULT CURRENT_DATE AFTER `service_to_date`"
+            );
+            // What the HOD actually sanctioned. NULL until the HOD acts, and NULL
+            // means "not revised" rather than zero - `amount` always keeps the
+            // figure the engineer asked for.
+            $this->ensure_field(
+                'approved_amount',
+                "ALTER TABLE `{$this->table}` ADD `approved_amount` DECIMAL(15,2) DEFAULT NULL AFTER `amount`"
             );
             $this->ensure_field(
                 'purpose',
@@ -327,6 +335,16 @@ class Service_payment_request_model extends CI_Model
 
         foreach ($rows as $row) {
             $row->amount = (float) ($row->amount ?? 0);
+            // NULL approved_amount means the HOD has not revised anything, so it
+            // must not collapse to 0.00 - payable_amount is the figure Accounts
+            // pays and amount_revised drives the "HOD changed this" callouts.
+            $raw_approved = property_exists($row, 'approved_amount') ? $row->approved_amount : null;
+            $row->approved_amount = ($raw_approved === null || $raw_approved === '') ? null : (float) $raw_approved;
+            $row->payable_amount = ($row->approved_amount !== null && $row->approved_amount > 0)
+                ? $row->approved_amount
+                : $row->amount;
+            $row->amount_revised = $row->approved_amount !== null
+                && abs($row->approved_amount - $row->amount) > 0.009;
             $row->po_amount = (float) ($row->po_amount ?? 0);
             $row->parent_request_amount = (float) ($row->parent_request_amount ?? 0);
             $row->customer_name = $this->normalize_person_name(
@@ -383,7 +401,7 @@ class Service_payment_request_model extends CI_Model
         $this->ensure_tables();
 
         $this->db->select("
-            SUM(CASE WHEN status = 'Approved' THEN amount ELSE 0 END) as approved_total,
+            SUM(CASE WHEN status = 'Approved' THEN COALESCE(NULLIF(approved_amount, 0), amount) ELSE 0 END) as approved_total,
             SUM(CASE WHEN status = 'Pending HOD Approval' THEN amount ELSE 0 END) as pending_total,
             COUNT(*) as request_count
         ", false);

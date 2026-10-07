@@ -88,9 +88,75 @@
         }
 
         window.tmGrowlBooted = true;
-        var shownNotifications = {};
+
+        /* A toast is an INTERRUPTION, so each update earns exactly one.
+         *
+         * Previously "seen" lived in a page-local object and every unread
+         * notification was re-announced on every page load: somebody with ten
+         * unread updates got ten toasts stacked down the screen on each
+         * navigation, and they only ever cleared by clicking each one. The
+         * ids are now remembered for the browser session, at most three are
+         * on screen at a time, and each one times out on its own - the
+         * navigation badge is the part that persists. */
+        var SEEN_KEY = 'tmSeenNotifications';
+        var MAX_VISIBLE = 3;
+        var AUTO_DISMISS_MS = 12000;
+
+        var shownNotifications = (function () {
+            try {
+                var raw = window.sessionStorage.getItem(SEEN_KEY);
+                var parsed = raw ? JSON.parse(raw) : {};
+                return (parsed && typeof parsed === 'object') ? parsed : {};
+            } catch (e) {
+                return {};   // private mode, blocked storage - degrade to per-page
+            }
+        })();
+
+        function rememberSeen(id) {
+            shownNotifications[id] = 1;
+            try {
+                var ids = Object.keys(shownNotifications);
+                // keep the memory bounded - only recent ids can still arrive
+                if (ids.length > 200) {
+                    var trimmed = {};
+                    ids.slice(-200).forEach(function (key) { trimmed[key] = 1; });
+                    shownNotifications = trimmed;
+                }
+                window.sessionStorage.setItem(SEEN_KEY, JSON.stringify(shownNotifications));
+            } catch (e) { /* nothing to do - the in-memory copy still works */ }
+        }
+
         var fetchUrl = "<?php echo page_url . 'Task_management/fetch_notifications'; ?>";
         var markUrl = "<?php echo page_url . 'Task_management/mark_notification_read'; ?>";
+
+        /* THE NAVIGATION BADGE.
+         *
+         * The badge is rendered server-side by common/nav-menu.php; this keeps
+         * it honest between page loads. Red with a bell while updates are
+         * unread, falling back to the neutral workload count (carried on the
+         * element as data-open-count) once they are cleared. */
+        function setNavBadge(unreadCount) {
+            var badge = document.querySelector('[data-tm-nav-badge]');
+            if (!badge) return;
+
+            var bell = document.querySelector('[data-tm-nav-bell]');
+            var unread = parseInt(unreadCount, 10);
+            if (isNaN(unread) || unread < 0) unread = 0;
+
+            var openCount = parseInt(badge.getAttribute('data-open-count'), 10);
+            if (isNaN(openCount) || openCount < 0) openCount = 0;
+
+            var value = unread > 0 ? unread : openCount;
+            badge.textContent = value > 99 ? '99+' : String(value);
+            badge.style.display = value > 0 ? '' : 'none';
+            badge.className = 'tm-nav-badge' + (unread > 0 ? ' is-alert' : '');
+            badge.title = unread > 0
+                ? unread + ' new update' + (unread === 1 ? '' : 's') + ' on your tasks'
+                : openCount + ' open task' + (openCount === 1 ? '' : 's') + ' assigned to you';
+            if (bell) bell.style.display = unread > 0 ? '' : 'none';
+        }
+
+        window.TaskNav = { setUnread: setNavBadge };
 
         function markRead(notificationId) {
             var body = notificationId ? 'notification_id=' + encodeURIComponent(notificationId) : '';
@@ -103,6 +169,13 @@
                     'X-Requested-With': 'XMLHttpRequest'
                 },
                 body: body
+            }).then(function (response) {
+                return response.json().catch(function () { return null; });
+            }).then(function (payload) {
+                if (payload && typeof payload.unread_count !== 'undefined') {
+                    setNavBadge(payload.unread_count);
+                }
+                return payload;
             }).catch(function () {
                 return null;
             });
@@ -124,7 +197,12 @@
             }
 
             if (options.id) {
-                shownNotifications[options.id] = true;
+                rememberSeen(options.id);
+            }
+
+            // oldest first out, so a burst of updates cannot bury the page
+            while (root.children.length >= MAX_VISIBLE) {
+                root.removeChild(root.firstChild);
             }
 
             var toast = document.createElement('div');
@@ -194,7 +272,10 @@
                 id: notification.id,
                 title: 'Task Management Alert',
                 message: notification.message || 'New task update received.',
-                actionUrl: notification.action_url
+                actionUrl: notification.action_url,
+                // it disappears on its own; the navigation badge is what keeps
+                // the update visible until the task is actually opened
+                autoDismissMs: AUTO_DISMISS_MS
             });
         }
 
@@ -207,10 +288,20 @@
                 }
             })
                 .then(function (response) { return response.json(); })
-                .then(function (items) {
-                    if (!Array.isArray(items)) {
+                .then(function (payload) {
+                    // {items, unread_count} today; a bare array is what the
+                    // endpoint used to answer, and a page cached from before
+                    // this shipped still polls for it
+                    var items = Array.isArray(payload)
+                        ? payload
+                        : (payload && Array.isArray(payload.items) ? payload.items : null);
+                    if (!items) {
                         return;
                     }
+
+                    setNavBadge(payload && typeof payload.unread_count !== 'undefined'
+                        ? payload.unread_count
+                        : items.length);
 
                     items.slice().reverse().forEach(function (notification) {
                         showToast(notification);

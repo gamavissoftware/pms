@@ -2,11 +2,11 @@
 defined('BASEPATH') or exit('No direct script access allowed');
 $company_info = $this->db->select('company_name, colorcode')->from('company_information')->get()->row();
 
-// Currency Detection Logic based on Service Type
-$is_export = ($opportunity->op_type != 1); 
-$curr_symbol = $is_export ? '$' : '₹';
+// Currency detection for quotation and PI values.
+$is_export = ($opportunity->op_type != 1);
+$currency_symbols = ['INR' => '₹', 'USD' => '$', 'EUR' => '€'];
 $pi_currency = !empty($service_pi->currency) ? strtoupper(trim((string) $service_pi->currency)) : ($is_export ? 'USD' : 'INR');
-$pi_curr_symbol = $pi_currency === 'USD' ? '$' : '₹';
+$pi_curr_symbol = $currency_symbols[$pi_currency] ?? $pi_currency;
 $payment_permissions = isset($payment_permissions) && is_array($payment_permissions) ? $payment_permissions : array();
 $can_create_service_payment = !empty($payment_permissions['can_create']);
 
@@ -39,6 +39,7 @@ $is_approved = (strpos(strtolower($opportunity->remarks), 'approved') !== false)
         .approval-card { border-left: 5px solid #f9c851; background-color: #fffcf5; }
         .rejection-alert { border-left: 5px solid #ec1a1a; background-color: #fff5f5; }
         .success-alert { border-left: 5px solid #28a745; background-color: #f6fff8; }
+        .cancelled-alert { border-left: 5px solid #e11d48; background-color: #fff7f8; }
     </style>
 </head>
 <body>
@@ -61,6 +62,36 @@ $is_approved = (strpos(strtolower($opportunity->remarks), 'approved') !== false)
                     <div class="page-header" style="margin-bottom: 15px;">
                         <h2><?php echo htmlspecialchars($opportunity->company_name); ?></h2>
                     </div>
+
+                    <?php if ($this->session->flashdata('success')): ?>
+                        <div class="alert alert-success"><?php echo htmlspecialchars($this->session->flashdata('success')); ?></div>
+                    <?php endif; ?>
+                    <?php if ($this->session->flashdata('error')): ?>
+                        <div class="alert alert-danger"><?php echo htmlspecialchars($this->session->flashdata('error')); ?></div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($is_cancelled_quotation)): ?>
+                    <div class="card-box cancelled-alert">
+                        <h4 class="m-t-0 text-danger"><b><i class="fa fa-calendar-times-o"></i> Quotation Automatically Cancelled</b></h4>
+                        <p>This quotation became inactive after one month without progressing to PO or order stages.</p>
+                        <p class="small text-muted">
+                            Previous stage: <b><?php echo htmlspecialchars($quotation_cancellation->previous_stage_name ?? 'Quotation Followup'); ?></b>
+                            <?php if (!empty($quotation_cancellation->quotation_date)): ?>
+                                | Quotation date: <b><?php echo date('d M Y', strtotime($quotation_cancellation->quotation_date)); ?></b>
+                            <?php endif; ?>
+                        </p>
+                        <?php if (!empty($can_reopen_quotation)): ?>
+                            <form method="post" action="<?php echo page_url; ?>ServiceLeads/reopen_cancelled_quotation/<?php echo (int) $opportunity->opportunity_id; ?>" onsubmit="return confirm('Reopen this quotation at <?php echo htmlspecialchars($quotation_cancellation->previous_stage_name ?? 'its previous stage', ENT_QUOTES, 'UTF-8'); ?>?');">
+                                <input type="hidden" name="return_url" value="<?php echo page_url; ?>ServiceLeads/opportunity_detail/<?php echo (int) $opportunity->opportunity_id; ?>">
+                                <button type="submit" class="btn btn-info btn-sm">
+                                    <i class="fa fa-undo"></i> Reopen at Previous Stage
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <p class="small text-muted m-b-0">The account owner or Service HOD can reopen this quotation when the customer responds.</p>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
 
                     <?php if($opportunity->current_stage_id == 3): ?>
                     <div class="card-box approval-card">
@@ -97,6 +128,7 @@ $is_approved = (strpos(strtolower($opportunity->remarks), 'approved') !== false)
                     </div>
                     <?php endif; ?>
 
+                    <?php if (empty($is_cancelled_quotation)): ?>
                     <div class="card-box" id="progressCard">
                         <div class="clearfix m-b-20">
                             <h4 class="m-t-0 header-title pull-left"><b>Move Pipeline Stage</b></h4>
@@ -139,8 +171,9 @@ $is_approved = (strpos(strtolower($opportunity->remarks), 'approved') !== false)
                             <?php endif; ?>
                         </form>
                     </div>
+                    <?php endif; ?>
 
-                    <?php if ((int) $opportunity->current_stage_id >= 7 || !empty($service_pi)): ?>
+                    <?php if (empty($is_cancelled_quotation) && ((int) $opportunity->current_stage_id >= 7 || !empty($service_pi))): ?>
                     <div class="card-box">
                         <div class="clearfix m-b-15">
                             <h4 class="m-t-0 header-title pull-left"><b>Proforma Invoice</b></h4>
@@ -170,7 +203,7 @@ $is_approved = (strpos(strtolower($opportunity->remarks), 'approved') !== false)
                     </div>
                     <?php endif; ?>
 
-                    <?php if ($can_create_service_payment && (int) $opportunity->current_stage_id >= 7): ?>
+                    <?php if (empty($is_cancelled_quotation) && $can_create_service_payment && (int) $opportunity->current_stage_id >= 7): ?>
                     <div class="card-box">
                         <div class="clearfix m-b-15">
                             <h4 class="m-t-0 header-title pull-left"><b>Payment Requests</b></h4>
@@ -231,10 +264,14 @@ $is_approved = (strpos(strtolower($opportunity->remarks), 'approved') !== false)
                                         <?php foreach ($quotations as $quote): ?>
                                         <tr>
                                             <td><b><?php echo htmlspecialchars($quote->quotation_no); ?></b></td>
-                                            <td class="text-right"><?php echo $curr_symbol.' '.number_format($quote->grand_total, 2); ?></td>
+                                            <?php
+                                            $quote_currency = strtoupper(trim((string) ($quote->currency ?? ($is_export ? 'USD' : 'INR'))));
+                                            $quote_currency_symbol = $currency_symbols[$quote_currency] ?? $quote_currency;
+                                            ?>
+                                            <td class="text-right"><?php echo $quote_currency_symbol . ' ' . number_format($quote->grand_total, 2); ?></td>
                                             <td>
                                                 <a href="<?php echo page_url; ?>ServiceLeads/view_quotation_pdf/<?php echo $quote->id; ?>" target="_blank" class="text-danger"><i class="fa fa-file-pdf-o"></i> View PDF</a>
-                                                <?php if ((int) $quote->id === (int) $quotations[0]->id): ?>
+                                                <?php if (empty($is_cancelled_quotation) && (int) $quote->id === (int) $quotations[0]->id): ?>
                                                     <span class="text-muted"> | </span>
                                                     <a href="<?php echo page_url; ?>ServiceLeads/revise_quotation/<?php echo (int) $opportunity->opportunity_id; ?>" class="text-warning"><i class="fa fa-pencil"></i> Revise</a>
                                                 <?php endif; ?>

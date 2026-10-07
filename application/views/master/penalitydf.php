@@ -1,4 +1,6 @@
 <?php
+$this->load->helper('df_delay');
+$currentDfDelays = df_current_delay_counts($this->db);
 $CIA =& get_instance();
 $CIA->load->model('Task_model');
 
@@ -221,7 +223,7 @@ if ($main_q->num_rows() > 0) {
             $riskClass = 'info';
         }
 
-        if ($maxDays > 0) {
+        if (!empty($currentDfDelays[(int)$dfId])) {
             $totalDelayedDf++;
         }
 
@@ -236,6 +238,7 @@ if ($main_q->num_rows() > 0) {
 
         $rowsData[] = array(
             'id' => $dfId,
+                'has_current_delay' => !empty($currentDfDelays[(int)$dfId]),
             'df_no' => $rows->df_no,
             'df_upload' => $rows->df_upload,
             'company_name' => $rows->company_name,
@@ -755,7 +758,7 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
                                 $riskPillClass = 'pill-info';
                             }
 
-                            $delayStatus = ($row['max_days'] > 0) ? 'Delayed' : 'No Delay';
+                            $delayStatus = (!empty($row['has_current_delay'])) ? 'Delayed' : 'No Delay';
                         ?>
                             <tr 
                                 data-risk="<?php echo $row['risk_level']; ?>"
@@ -872,7 +875,7 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
                                         <i class="fa fa-comments"></i> MOM
                                     </a>
 
-                                    <a href="<?php echo page_url;?>Task/dfgantchartNew/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
+                                    <a href="<?php echo page_url;?>gantt/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
                                         <i class="fa fa-bar-chart"></i> Gantt
                                     </a>
                                 </td>

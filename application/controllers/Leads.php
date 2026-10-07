@@ -18090,6 +18090,22 @@ public function lead_stage_list_pms() {
 			}else{
 				$resonremarks = '';
 			}
+			$quotation_rejection_comment = '';
+			if ((int) $lead_stage === 38) {
+				$latest_rejection_request = $this->latest_quotation_rejection_comment_request($row->leadid);
+				$request_status = '';
+				if ($latest_rejection_request) {
+					if ($latest_rejection_request->status === 'approved') {
+						$request_status = "<br><span class='label label-success'>Comment approved by Shubham Sir</span>";
+					} elseif ($latest_rejection_request->status === 'rejected') {
+						$request_status = "<br><span class='label label-danger'>Comment rejected by Shubham Sir</span>";
+					} else {
+						$request_status = "<br><span class='label label-warning'>Comment pending with Shubham Sir</span>";
+					}
+				}
+				$quotation_rejection_comment = "<br><br><button type='button' class='btn btn-primary btn-xs quote-rejection-comment-btn' data-lead-id='".(int) $row->leadid."' data-opp-no='".htmlspecialchars($row->unique_id, ENT_QUOTES, 'UTF-8')."' data-company='".htmlspecialchars($row->mastercompanyname, ENT_QUOTES, 'UTF-8')."'>Send Comment to Shubham Sir</button>".$request_status;
+			}
+
 			$leadstage = array(39, 36); // Define separately, not as a single string
 
 			$q = $this->db->select('id')
@@ -18125,7 +18141,7 @@ public function lead_stage_list_pms() {
 								'address'=>$this->TextFormatting($row->postal_address),
 								'product'=>"<strong>".$this->TextFormatting($prd_name)."<br/>".$this->TextFormatting($prd_qty)." Nos</strong>",
 								'leadlostreason'=>$this->TextFormatting($leadlostreason)."<br><br>".$this->TextFormatting($row->remarks),
-								'remarks'=>$this->TextFormatting($row->remarks),
+								'remarks'=>$this->TextFormatting($row->remarks).$quotation_rejection_comment,
 								'manager'=>$this->TextFormatting($username),
 								'approvereject'=>$approvereject,
 								'resonremarks'=>$resonremarks,
@@ -18146,6 +18162,194 @@ public function lead_stage_list_pms() {
 							"aaData"=>$lead_data);
 			
 		echo json_encode($results);
+	}
+
+	private function ensure_quotation_rejection_comment_table()
+	{
+		if ($this->db->table_exists('quotation_rejection_comment_request')) {
+			return true;
+		}
+
+		return $this->db->query("CREATE TABLE IF NOT EXISTS `quotation_rejection_comment_request` (
+			`id` int(11) NOT NULL AUTO_INCREMENT,
+			`lead_id` int(11) NOT NULL,
+			`comment` text NOT NULL,
+			`status` varchar(20) NOT NULL DEFAULT 'pending',
+			`decision_token` varchar(64) NOT NULL,
+			`requested_by` int(11) NOT NULL,
+			`requested_at` datetime NOT NULL,
+			`decided_by` int(11) DEFAULT NULL,
+			`decided_at` datetime DEFAULT NULL,
+			PRIMARY KEY (`id`),
+			KEY `idx_qrcr_lead` (`lead_id`),
+			KEY `idx_qrcr_status` (`status`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+	}
+
+	private function latest_quotation_rejection_comment_request($lead_id)
+	{
+		if (!$this->db->table_exists('quotation_rejection_comment_request')) {
+			return null;
+		}
+
+		return $this->db
+			->select('*')
+			->from('quotation_rejection_comment_request')
+			->where('lead_id', (int) $lead_id)
+			->order_by('id', 'desc')
+			->limit(1)
+			->get()
+			->row();
+	}
+
+	private function json_response($payload, $status_code = 200)
+	{
+		return $this->output
+			->set_status_header($status_code)
+			->set_content_type('application/json')
+			->set_output(json_encode($payload));
+	}
+
+	private function send_quotation_rejection_comment_chat($request_id, $lead, $comment)
+	{
+		$this->load->helper('chat_access');
+		$this->load->model('Chat_model', 'chat');
+
+		$me = chat_identity($this);
+		if (!$me) {
+			return false;
+		}
+
+		$conv_id = $this->chat->ensure_direct($me, 139, 'user');
+		if (!$conv_id) {
+			return false;
+		}
+
+		$request = $this->db->select('decision_token')->from('quotation_rejection_comment_request')->where('id', (int) $request_id)->get()->row();
+		if (!$request) {
+			return false;
+		}
+
+		$approve_url = page_url.'Leads/quotation_rejection_comment_decision/'.(int) $request_id.'/approve/'.$request->decision_token;
+		$reject_url = page_url.'Leads/quotation_rejection_comment_decision/'.(int) $request_id.'/reject/'.$request->decision_token;
+		$lead_url = page_url.'Leads/view_detail/'.(int) $lead->id.'/38';
+		$quote_id = $this->salescrm->getRecordID($lead->id);
+		$quote_url = $quote_id ? page_url.'Opportunity/GeneratedQuote/'.$quote_id : '';
+
+		$body = "Quotation rejected comment approval required\n";
+		$body .= "Opportunity: ".$lead->unique_id."\n";
+		$body .= "Company: ".strip_tags((string) $lead->company_name)."\n";
+		$body .= "Comment: ".$comment."\n";
+		$body .= "Lead: ".$lead_url."\n";
+		if ($quote_url !== '') {
+			$body .= "Quotation: ".$quote_url."\n";
+		}
+		$body .= "\nApprove: ".$approve_url."\n";
+		$body .= "Reject: ".$reject_url;
+
+		$msg_id = $this->chat->send_message($conv_id, $me, $body, array('type' => 'text'));
+		$this->chat->tag_record($conv_id, $msg_id, $me, 'lead', (int) $lead->id);
+		$this->chat->notify_conversation($conv_id, $me, $msg_id, 'message', $me['name'], $body);
+		$this->chat->push_event($conv_id, 'message', $me, $msg_id);
+
+		return true;
+	}
+
+	public function submit_quotation_rejection_comment()
+	{
+		$lead_id = (int) $this->input->post('lead_id');
+		$comment = trim((string) $this->input->post('comment', true));
+		$user_id = (int) $_SESSION['logged_in']['user_id'];
+
+		if ($lead_id <= 0 || $comment === '') {
+			return $this->json_response(array('ok' => false, 'message' => 'Please enter a comment.'), 400);
+		}
+
+		$lead = $this->db
+			->select('leads.id, leads.unique_id, COALESCE(customer_detail.company_name, leads.company_name) AS company_name', false)
+			->from('leads')
+			->join('customer_detail', 'customer_detail.id = leads.company_name', 'left')
+			->where('leads.id', $lead_id)
+			->get()
+			->row();
+		if (!$lead) {
+			return $this->json_response(array('ok' => false, 'message' => 'Opportunity not found.'), 404);
+		}
+
+		$current_stage = $this->db
+			->select('lead_status')
+			->from('progress_remarks')
+			->where('lead_id', $lead_id)
+			->order_by('id', 'desc')
+			->limit(1)
+			->get()
+			->row();
+		if (!$current_stage || (int) $current_stage->lead_status !== 38) {
+			return $this->json_response(array('ok' => false, 'message' => 'This option is only available for Quotation Rejected opportunities.'), 400);
+		}
+
+		if (!$this->ensure_quotation_rejection_comment_table()) {
+			return $this->json_response(array('ok' => false, 'message' => 'Could not prepare comment request storage.'), 500);
+		}
+
+		$token = bin2hex(function_exists('random_bytes') ? random_bytes(16) : openssl_random_pseudo_bytes(16));
+		$data = array(
+			'lead_id' => $lead_id,
+			'comment' => $comment,
+			'status' => 'pending',
+			'decision_token' => $token,
+			'requested_by' => $user_id,
+			'requested_at' => date('Y-m-d H:i:s')
+		);
+		$this->db->insert('quotation_rejection_comment_request', $data);
+		$request_id = (int) $this->db->insert_id();
+
+		if (!$this->send_quotation_rejection_comment_chat($request_id, $lead, $comment)) {
+			return $this->json_response(array('ok' => false, 'message' => 'Comment saved, but chat notification could not be sent.'), 500);
+		}
+
+		return $this->json_response(array('ok' => true, 'message' => 'Comment sent to Shubham Sir for approval.'));
+	}
+
+	public function quotation_rejection_comment_decision($request_id = 0, $decision = '', $token = '')
+	{
+		$user_id = (int) $_SESSION['logged_in']['user_id'];
+		if ($user_id !== 139) {
+			$this->session->set_flashdata('message', '<div class="alert alert-danger">Only Shubham Sir can approve or reject this comment.</div>');
+			redirect(page_url.'Leads/lead_stages/38');
+			return;
+		}
+
+		$decision = strtolower(trim((string) $decision));
+		if (!in_array($decision, array('approve', 'reject'), true) || !$this->db->table_exists('quotation_rejection_comment_request')) {
+			$this->session->set_flashdata('message', '<div class="alert alert-danger">Invalid comment approval link.</div>');
+			redirect(page_url.'Leads/lead_stages/38');
+			return;
+		}
+
+		$request = $this->db
+			->select('*')
+			->from('quotation_rejection_comment_request')
+			->where('id', (int) $request_id)
+			->where('decision_token', $token)
+			->get()
+			->row();
+		if (!$request) {
+			$this->session->set_flashdata('message', '<div class="alert alert-danger">Comment request not found.</div>');
+			redirect(page_url.'Leads/lead_stages/38');
+			return;
+		}
+
+		if ($request->status === 'pending') {
+			$this->db->where('id', (int) $request_id)->update('quotation_rejection_comment_request', array(
+				'status' => $decision === 'approve' ? 'approved' : 'rejected',
+				'decided_by' => $user_id,
+				'decided_at' => date('Y-m-d H:i:s')
+			));
+		}
+
+		$this->session->set_flashdata('message', '<div class="alert alert-success">Comment request has been '.($decision === 'approve' ? 'approved' : 'rejected').'.</div>');
+		redirect(page_url.'Leads/lead_stages/38');
 	}
 
 
@@ -19936,8 +20140,8 @@ public function approvalorrejection(){
 	$status = $this->input->post('taskstatus');
 	$remarks = $this->input->post('taskremarks');
 	if($status==1){
-		$stage = 37;
-		$remark_title = 'Quotation Approved.';
+		$stage = $this->salescrm->get_quote_approval_stage_after_won($id, 37);
+		$remark_title = ($stage == 35) ? 'Revised Quotation Approved - Order Won.' : 'Quotation Approved.';
 			$currentDate = new DateTime();
 			$currentDate->modify('+2 days');
 			$futureDate = $currentDate->format('Y-m-d');
@@ -19950,6 +20154,9 @@ public function approvalorrejection(){
 				'added_by'=>$user_id);
 			
 			$this->db->insert('progress_remarks',$data);
+			if($stage == 35){
+				$this->salescrm->notify_revised_quote_approved_for_order_won($id, $remarks);
+			}
 
 			$q = $this->db->select('b.title, b.first_name, b.last_name, contact_number')->from('leads a')->join('system_users b','a.added_by=b.user_id','left')->where('a.id',$id)->get();
 			foreach($q->result() as $row);
@@ -19957,12 +20164,21 @@ public function approvalorrejection(){
 			$usercontact = $row->contact_number;
 			//$usercontact = "9718991797";
 			/*Send WhatsApp Notification*/
+			if($stage == 35){
+			$message="Dear ".$leadownername.",
+
+Your revised quotation which was earlier marked as Order Won has been approved and transferred to the Order Won stage again.
+
+Regards,
+Shubham Pack";
+			}else{
 			$message="Dear ".$leadownername.",
 
 I am pleased to inform you that your quotation has been approved ✅. Kindly proceed with the necessary processing 📝.
 
 Regards,
 Shubham Pack 📦";
+			}
 
 
 /*WhatsApp API*/

@@ -6,8 +6,10 @@ $company_info = $this->db->select('company_name, colorcode')->from('company_info
 $form_code = $part->code ?? '';
 $form_description = $part->description ?? '';
 $form_price = $part->price ?? '0.00';
+$form_available_qty = isset($part->available_qty) ? $part->available_qty : '0.000';
 $form_revision = $part->revision ?? '0';
 $form_status = $part->status ?? '1'; // Default to 'Active'
+$inventory_columns_available = isset($inventory_columns_available) ? $inventory_columns_available : false;
 
 ?>
 <!DOCTYPE html>
@@ -104,6 +106,20 @@ $form_status = $part->status ?? '1'; // Default to 'Active'
                                     <input type="number" class="form-control" id="revision" name="revision" value="<?php echo html_escape($form_revision); ?>">
                                 </div>
                             </div>
+
+                            <?php if ($inventory_columns_available): ?>
+                                <div class="form-group row">
+                                    <label class="col-sm-2 col-form-label" for="available_qty">Available Qty</label>
+                                    <div class="col-sm-4">
+                                        <input type="number" step="0.001" min="0" class="form-control" id="available_qty" name="available_qty" value="<?php echo html_escape($form_available_qty); ?>">
+                                        <small class="text-muted">MRP shortage calculation will use this quantity.</small>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <div class="alert alert-danger">
+                                    Available quantity field is not active yet. Please run <strong>Database/spares_master_inventory_001.sql</strong>.
+                                </div>
+                            <?php endif; ?>
 
                             <div class="form-group row">
                                 <label class="col-sm-2 col-form-label" for="status">Status <span class="text-danger">*</span></label>

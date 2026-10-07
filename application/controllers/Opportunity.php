@@ -1862,6 +1862,7 @@ function getAxisCount()
 
 function deleteLineItem()
 {
+	
 	$id=$this->input->post('id');
 	$this->db->where('id',$id);
 	$this->db->delete('quotation_annexture_4');

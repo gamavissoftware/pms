@@ -318,7 +318,10 @@ if ($multitrack4->num_rows() > 0) {
     $ladder_platform = $spec_rows->ladder_platform;
 }
 
-  $sizepouch = $this->db->select('*')->from('df_form_machine_specification_size_qnty')->where('record_id', $id)->get();
+$pouch_size_remarks = '';
+$quantity_packed_remarks = '';
+
+$sizepouch = $this->db->select('*')->from('df_form_machine_specification_size_qnty')->where('record_id', $id)->get();
 
 
 if($sizepouch->num_rows()>0){
@@ -520,7 +523,7 @@ if($sizepouch->num_rows()>0){
                                     <td class="text-center" rowspan="9" style="vertical-align: middle;">
                                         <input type="text" name="reference_no" class="form-control" value="<?php echo $reference_no; ?>"  style="text-align: center;" required>
 
-                                        <p><b>Reference DF Date:<br><input type="date" class="form-control" value="<?php echo $ref_df_date; ?>" style="text-align: center;" readonly name="ref_df_date" required></b></p>
+                                        <p><b>Reference DF Date:<br><input type="date" class="form-control" value="<?php echo $ref_df_date; ?>" style="text-align: center;" name="ref_df_date" required></b></p>
                                     </td>
                                     <!--<td width="10%">Design:</td>
                                     <td width="25%"><input type="text" class="form-control" name="design" required></td>-->

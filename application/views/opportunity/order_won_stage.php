@@ -702,6 +702,9 @@ if(count($othercharge)>0)
     $insurance='';
 
 }
+$packing_checked = (float) $packing_charges > 0 ? 'checked' : '';
+$forwarding_checked = (float) $forwarding_charges > 0 ? 'checked' : '';
+$insurance_checked = (float) $insurance > 0 ? 'checked' : '';
 ?>
 
     <table class="table table-bordered">
@@ -736,16 +739,16 @@ if(count($othercharge)>0)
 
     <tr>
         <td>Packaging</td>
-        <td><input type="checkbox" name="packagingapplicable" disabled id="packagingapplicable" readonly onchange="packingcheck();" value="1">
+        <td><input type="checkbox" name="packagingapplicable" disabled id="packagingapplicable" readonly onchange="packingcheck();" value="1" <?php echo $packing_checked;?>>
             <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
             
         </td>
-        <td colspan="2"><input type="text" class="form-control" name="packagingpercentage" readonly id="packagingpercentage" disabled placeholder="Packaging Charges"></td>
+        <td colspan="2"><input type="text" class="form-control" name="packagingpercentage" readonly id="packagingpercentage" placeholder="Packaging Charges" value="<?php echo $packing_charges;?>"></td>
     </tr>
 
     <tr>
         <td>Forwarding</td>
-        <td><input type="checkbox" name="forwardingapplicable" id="forwardingapplicable" readonly onchange="forwardingcheck();" disabled value="1">
+        <td><input type="checkbox" name="forwardingapplicable" id="forwardingapplicable" readonly onchange="forwardingcheck();" disabled value="1" <?php echo $forwarding_checked;?>>
             
             <script>
      
@@ -761,12 +764,12 @@ if(count($othercharge)>0)
                 }
             </script>
         </td>
-        <td colspan="2"><input type="text" class="form-control" name="forwardingpercentage" readonly id="forwardingpercentage" disabled placeholder="Forwarding Charges"></td>
+        <td colspan="2"><input type="text" class="form-control" name="forwardingpercentage" readonly id="forwardingpercentage" placeholder="Forwarding Charges" value="<?php echo $forwarding_charges;?>"></td>
     </tr>
 
     <tr>
         <td>Insurance</td>
-        <td><input type="checkbox" disabled name="insuranceapplicable" readonly  id="insuranceapplicable" onchange="insurancecheck();" value="1">
+        <td><input type="checkbox" disabled name="insuranceapplicable" readonly  id="insuranceapplicable" onchange="insurancecheck();" value="1" <?php echo $insurance_checked;?>>
             
             <script>
      

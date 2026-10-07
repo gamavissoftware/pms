@@ -56,6 +56,8 @@ $curr_text = $is_export ? 'USD' : 'INR';
                         <div class="btn-group pull-right">
                             <a href="<?php echo page_url; ?>Spares_execution/dashboard" class="btn btn-default waves-effect waves-light"><i class="fa fa-dashboard"></i> Execution Dashboard</a>
                             <a href="<?php echo page_url; ?>Spares_execution/order/<?php echo $order_details->order_id; ?>" class="btn btn-primary waves-effect waves-light"><i class="fa fa-tasks"></i> Execution Tasks</a>
+                            <a href="<?php echo page_url; ?>Spares_execution/sf_form/<?php echo $order_details->order_id; ?>" class="btn btn-purple waves-effect waves-light"><i class="fa fa-file-text-o"></i> SF Form</a>
+                            <a href="<?php echo page_url; ?>Spares_execution/mrp_shortages/<?php echo $order_details->order_id; ?>" class="btn btn-info waves-effect waves-light"><i class="fa fa-cogs"></i> MRP Report</a>
                             <a href="<?php echo page_url; ?>Spares_execution/gantt/<?php echo $order_details->order_id; ?>" class="btn btn-info waves-effect waves-light"><i class="fa fa-bar-chart"></i> Gantt Chart</a>
                             <a href="<?php echo page_url; ?>Spares/running_orders_list" class="btn btn-default waves-effect waves-light"><i class="fa fa-arrow-left"></i> Back to List</a>
                         </div>

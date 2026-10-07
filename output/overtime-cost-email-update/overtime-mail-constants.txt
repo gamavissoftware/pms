@@ -1,0 +1,8 @@
+/* Overtime module outgoing mail. Point these at whichever automated PMS mailbox should
+   send overtime notifications. Leave overtime_mail_pass set to the app password for that
+   account - the same one application/controllers/Auto_reports.php already uses for the
+   task reports. With it empty, overtime mail is logged as FAILED and nothing else breaks. */
+defined('overtime_mail_host') OR define('overtime_mail_host','ssl://smtp.googlemail.com');
+defined('overtime_mail_port') OR define('overtime_mail_port',465);
+defined('overtime_mail_user') OR define('overtime_mail_user','taskmanagement@shubhampack.com');
+defined('overtime_mail_pass') OR define('overtime_mail_pass','');

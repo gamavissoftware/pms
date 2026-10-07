@@ -3,10 +3,10 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 if (!function_exists('get_amount_in_words')) {
     /**
-     * Converts a number to words (Supports International USD and Indian INR).
+     * Converts a number to words (Supports international USD/EUR and Indian INR).
      *
      * @param float $number The number to convert.
-     * @param string $currency 'INR' or 'USD'.
+     * @param string $currency 'INR', 'USD', or 'EUR'.
      * @return string The number in words.
      */
     function get_amount_in_words(float $number, $currency = 'INR')
@@ -24,7 +24,9 @@ if (!function_exists('get_amount_in_words')) {
             20 => 'Twenty', 30 => 'Thirty', 40 => 'Forty', 50 => 'Fifty', 60 => 'Sixty', 70 => 'Seventy', 80 => 'Eighty', 90 => 'Ninety'
         );
 
-        if (strtoupper($currency) == 'USD') {
+        $currency = strtoupper(trim((string) $currency));
+
+        if (in_array($currency, array('USD', 'EUR'), true)) {
             // --- International Numbering System (Millions/Billions) ---
             $levels = array('', 'Thousand', 'Million', 'Billion', 'Trillion');
             
@@ -67,7 +69,9 @@ if (!function_exists('get_amount_in_words')) {
 
             $SubCurrency = ($decimal > 0) ? "and " . ($decimal < 21 ? $words[(int)$decimal] : $words[floor($decimal / 10) * 10] . " " . $words[$decimal % 10]) . ' Cents' : '';
             
-            return trim($MainCurrency) . ' US Dollars ' . trim($SubCurrency) . " Only";
+            $currency_name = $currency === 'EUR' ? 'Euros' : 'US Dollars';
+
+            return trim($MainCurrency) . ' ' . $currency_name . ' ' . trim($SubCurrency) . " Only";
 
         } else {
             // --- Indian Numbering System (Lakh/Crore) ---

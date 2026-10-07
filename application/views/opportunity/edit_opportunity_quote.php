@@ -346,6 +346,7 @@ $customTerms=$this->salescrm->getCustomTerms($record_id);
     border-radius: 2px;
     padding: 3px 8px;
     }
+
     label {
     display: inline-block;
     max-width: 100%;
@@ -727,6 +728,7 @@ $customTerms=$this->salescrm->getCustomTerms($record_id);
                                                 <option value="Soenoid Type - Electrical" <?php if ($non_viscous_option == 'Soenoid Type - Electrical' || $non_viscous_option == 'Solenoid Filling') { ?> selected <?php } ?>>Solenoid Filling</option>
                                                 <option value="Pnuematic" <?php if ($non_viscous_option == 'Pnuematic') { ?> selected <?php } ?>>Pnuematic</option>
                                                 <option value="flowmeter" <?php if ($non_viscous_option == 'flowmeter') { ?> selected <?php } ?>>flowmeter</option>
+                                                <option value="Peristaltic Pump" <?php if ($non_viscous_option == 'Peristaltic Pump') { ?> selected <?php } ?>>Peristaltic Pump</option>
                                             </select>
                                         </div>
                                         <!---------Non-Viscous--------->
@@ -3508,6 +3510,7 @@ $optional=$this->salescrm->getConsumableData($record_id);
     <tbody>
 
         <?php 
+        $media='';
         // echo "<pre>";print_r($optional); exit;
         if(count($optional)>0)
         {
@@ -3518,6 +3521,7 @@ $optional=$this->salescrm->getConsumableData($record_id);
         $id=$option['id'];
         $media=$option['media'];
         $id=$option['id'];
+
         ?>
            <tr>
               <input type="hidden" name="consumalbleNew" value="0">
@@ -3598,7 +3602,7 @@ $optional=$this->salescrm->getConsumableData($record_id);
 
         var id="<?php echo $id;?>";
         if(confirm('Are you sure you want to delete this file?')){
-
+Upload File (Optional)
         // Remove preview from UI
         event.target.parentElement.remove();
 
@@ -3650,6 +3654,7 @@ $optional=$this->salescrm->getConsumableData($record_id);
             </div>
         </td>
 </tr>
+
 
  <tr>
         <td colspan="2">
@@ -4626,6 +4631,8 @@ $('#addoptionalcharges').click(function() {
 
             function deleteLineItem(id)
             {
+                if(confirm('Are you sure you want to delete this line item? It will be permanently deleted'))
+                {
                  $.ajax({
                         type:"post",
                         url:"<?php echo page_url;?>Opportunity/deleteLineItem",
@@ -4634,6 +4641,7 @@ $('#addoptionalcharges').click(function() {
                         $("#LineItem"+id).remove();
                         }
                         });
+                }
 
             }
 

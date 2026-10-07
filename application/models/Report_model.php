@@ -208,9 +208,10 @@ class Report_model extends CI_Model {
 
         $df_ids = array_map('intval', array_column($base_rows, 'id'));
         $task_rows = $this->get_daily_df_task_rows($df_ids);
-        $task_ids = array_map('intval', array_column($task_rows, 'id'));
-        $history_rows = $this->get_daily_df_history_rows($task_ids, $report_date);
-        $ticket_rows = $this->get_daily_df_ticket_rows($task_ids);
+        // Filter through the joined task table to avoid thousands of task IDs
+        // overflowing CodeIgniter's WHERE-clause regular expression.
+        $history_rows = $this->get_daily_df_history_rows($df_ids, $report_date);
+        $ticket_rows = $this->get_daily_df_ticket_rows($df_ids);
 
         $current_date = date('Y-m-d');
         $active_df_ids = [];
@@ -800,6 +801,194 @@ class Report_model extends CI_Model {
         ];
     }
 
+    public function get_daily_planned_task_report($report_date, $department_ids = [], $user_id = 0, $df_id = 0) {
+        $report_date = $this->normalize_report_date($report_date);
+        if (!is_array($department_ids)) {
+            $department_ids = explode(',', (string) $department_ids);
+        }
+        $department_ids = array_values(array_unique(array_filter(array_map('intval', $department_ids))));
+        $user_id = max(0, (int) $user_id);
+        $df_id = max(0, (int) $df_id);
+
+        $this->db->select('
+            td.id,
+            td.df_id,
+            td.start_date,
+            td.end_date,
+            td.task_status,
+            td.task_completed_on,
+            IFNULL(td.on_hold, 0) as task_on_hold,
+            dr.df_no,
+            dr.df_description,
+            IFNULL(dr.on_hold, 0) as df_on_hold,
+            tm.task_name,
+            d.department_id,
+            d.department,
+            u.user_id,
+            u.title,
+            u.first_name,
+            u.last_name,
+            IFNULL(po.company_name, "") as company_name,
+            IFNULL(po.basic_machine, "") as machine_name
+        ');
+        $this->db->from('task_department_wise_scheduling td');
+        $this->db->join('df_release dr', 'dr.id = td.df_id', 'inner');
+        $this->db->join('task_management tm', 'tm.task_id = td.taskid', 'left');
+        $this->db->join('departments d', 'd.department_id = td.department_id', 'left');
+        $this->db->join('system_users u', 'u.user_id = td.assigned_user', 'left');
+        $this->db->join(
+            '(SELECT p1.* FROM poreceived p1 INNER JOIN (SELECT MAX(id) latest_po_id FROM poreceived GROUP BY df_id) p2 ON p2.latest_po_id = p1.id) po',
+            'po.df_id = dr.id',
+            'left',
+            false
+        );
+        $this->db->where('dr.df_status', 0);
+        $this->db->where('DATE(td.start_date) <=', $report_date);
+        $this->db->where('DATE(td.end_date) >=', $report_date);
+        $this->db->where('td.taskid >', 0);
+
+        if (!empty($department_ids)) {
+            $this->db->where_in('td.department_id', $department_ids);
+        }
+        if ($user_id > 0) {
+            $this->db->where('td.assigned_user', $user_id);
+        }
+        if ($df_id > 0) {
+            $this->db->where('td.df_id', $df_id);
+        }
+
+        $this->db->order_by('td.end_date', 'ASC');
+        $this->db->order_by('dr.df_no', 'ASC');
+        $this->db->order_by('tm.sortorder', 'ASC');
+        $rows = $this->db->get()->result_array();
+
+        $summary = [
+            'total_tasks' => 0,
+            'completed_tasks' => 0,
+            'pending_tasks' => 0,
+            'overdue_tasks' => 0,
+            'on_hold_tasks' => 0,
+            'df_count' => 0,
+            'user_count' => 0,
+            'completion_pct' => 0
+        ];
+        $df_ids = [];
+        $user_ids = [];
+        $today = date('Y-m-d');
+
+        foreach ($rows as &$row) {
+            $row['user_name'] = $this->format_person_name(
+                isset($row['title']) ? $row['title'] : '',
+                isset($row['first_name']) ? $row['first_name'] : '',
+                isset($row['last_name']) ? $row['last_name'] : ''
+            );
+            if ($row['user_name'] === '') {
+                $row['user_name'] = 'Unassigned';
+            } else {
+                $row['user_name'] = $this->format_report_sentence_case($row['user_name']);
+            }
+            $row['department'] = $this->format_report_sentence_case($row['department']);
+
+            $is_completed = (int) $row['task_status'] === 1;
+            $is_on_hold = (int) $row['task_on_hold'] === 1 || (int) $row['df_on_hold'] === 1;
+            $end_date = $this->normalize_report_date($row['end_date']);
+
+            if ($is_completed) {
+                $row['status_key'] = 'completed';
+                $row['status_label'] = 'Completed';
+                $summary['completed_tasks']++;
+            } elseif ($is_on_hold) {
+                $row['status_key'] = 'on_hold';
+                $row['status_label'] = 'On Hold';
+                $summary['on_hold_tasks']++;
+                $summary['pending_tasks']++;
+            } elseif ($end_date !== '' && $end_date < $today) {
+                $row['status_key'] = 'overdue';
+                $row['status_label'] = 'Overdue';
+                $summary['overdue_tasks']++;
+                $summary['pending_tasks']++;
+            } else {
+                $row['status_key'] = 'planned';
+                $row['status_label'] = 'Planned';
+                $summary['pending_tasks']++;
+            }
+
+            $df_ids[(int) $row['df_id']] = true;
+            if ((int) $row['user_id'] > 0) {
+                $user_ids[(int) $row['user_id']] = true;
+            }
+        }
+        unset($row);
+
+        $summary['total_tasks'] = count($rows);
+        $summary['df_count'] = count($df_ids);
+        $summary['user_count'] = count($user_ids);
+        $summary['completion_pct'] = $summary['total_tasks'] > 0
+            ? round(($summary['completed_tasks'] / $summary['total_tasks']) * 100)
+            : 0;
+
+        return [
+            'report_date' => $report_date,
+            'summary' => $summary,
+            'rows' => $rows
+        ];
+    }
+
+    public function get_daily_planned_task_filters() {
+        $departments = $this->db
+            ->select('MIN(department_id) as department_id, GROUP_CONCAT(department_id ORDER BY department_id) as department_ids, department', false)
+            ->from('departments')
+            ->where('department IS NOT NULL', null, false)
+            ->where('TRIM(department) !=', '')
+            ->group_by('UPPER(TRIM(department))', false)
+            ->order_by('department', 'ASC')
+            ->get()
+            ->result_array();
+
+        foreach ($departments as &$department) {
+            $department['department_name'] = $this->format_report_sentence_case($department['department']);
+        }
+        unset($department);
+
+        $users = $this->db
+            ->select('user_id, department_id, title, first_name, last_name')
+            ->from('system_users')
+            ->where('user_status', 1)
+            ->order_by('first_name', 'ASC')
+            ->order_by('last_name', 'ASC')
+            ->get()
+            ->result_array();
+
+        foreach ($users as &$user) {
+            $user['user_name'] = $this->format_person_name(
+                $user['title'],
+                $user['first_name'],
+                $user['last_name']
+            );
+            $user['user_name'] = $this->format_report_sentence_case($user['user_name']);
+        }
+        unset($user);
+
+        $running_dfs = $this->db
+            ->select('id, df_no, df_description')
+            ->from('df_release')
+            ->where('df_status', 0)
+            ->order_by('df_no', 'ASC')
+            ->get()
+            ->result_array();
+
+        return [
+            'departments' => $departments,
+            'users' => $users,
+            'running_dfs' => $running_dfs
+        ];
+    }
+
+    private function format_report_sentence_case($value) {
+        $value = preg_replace('/\s+/', ' ', trim((string) $value));
+        return $value === '' ? '' : ucwords(strtolower($value));
+    }
+
     private function get_daily_df_base_rows($report_date, $scope) {
         $where_sql = 'dr.df_status = 0 OR DATE(dr.completed_on) = ?';
         if ($scope === 'running') {
@@ -894,8 +1083,8 @@ class Report_model extends CI_Model {
         return $this->db->get()->result_array();
     }
 
-    private function get_daily_df_history_rows($task_ids, $report_date) {
-        if (empty($task_ids)) {
+    private function get_daily_df_history_rows($df_ids, $report_date) {
+        if (empty($df_ids)) {
             return [];
         }
 
@@ -916,14 +1105,14 @@ class Report_model extends CI_Model {
         $this->db->join('task_management tm', 'tm.task_id = td.taskid', 'left');
         $this->db->join('departments d', 'd.department_id = td.department_id', 'left');
         $this->db->join('system_users added_by', 'added_by.user_id = h.added_by', 'left');
-        $this->db->where_in('h.recordid', $task_ids);
+        $this->db->where_in('td.df_id', $df_ids);
         $this->db->where('DATE(h.added_on)', $report_date);
         $this->db->order_by('h.added_on', 'DESC');
         return $this->db->get()->result_array();
     }
 
-    private function get_daily_df_ticket_rows($task_ids) {
-        if (empty($task_ids)) {
+    private function get_daily_df_ticket_rows($df_ids) {
+        if (empty($df_ids)) {
             return [];
         }
 
@@ -940,7 +1129,7 @@ class Report_model extends CI_Model {
         $this->db->join('task_department_wise_scheduling td', 'td.id = cts.task_record_id', 'inner');
         $this->db->join('task_management tm', 'tm.task_id = td.taskid', 'left');
         $this->db->join('departments d', 'd.department_id = td.department_id', 'left');
-        $this->db->where_in('cts.task_record_id', $task_ids);
+        $this->db->where_in('td.df_id', $df_ids);
         $this->db->where('cts.ticket_status', 0);
         $this->db->order_by('cts.added_on', 'DESC');
         return $this->db->get()->result_array();

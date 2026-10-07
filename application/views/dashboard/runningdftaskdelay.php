@@ -920,7 +920,7 @@ $avgProgress = ($totalClosedDf > 0) ? round($totalProgress / $totalClosedDf) : 0
                                         <i class="fa fa-comments"></i> MOM
                                     </a>
 
-                                    <a href="<?php echo page_url;?>Task/dfgantchartNew/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
+                                    <a href="<?php echo page_url;?>gantt/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
                                         <i class="fa fa-bar-chart"></i> Gantt
                                     </a>
                                 </td>

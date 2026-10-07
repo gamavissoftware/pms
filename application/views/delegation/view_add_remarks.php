@@ -1,4 +1,4 @@
-test<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 
 <head>
@@ -265,7 +265,7 @@ test<!DOCTYPE html>
                         <div class="btn-group pull-right" style="margin-top:30px">
                         </div>
 
-                        <h4 class="page-title text-center">TASK DELEGATED TO YOU</h4>
+                        <h4 class="page-title text-center">DELEGATED TASK CONVERSATION</h4>
                     </div>
                 </div>
             </div>
@@ -300,7 +300,7 @@ test<!DOCTYPE html>
                         <form id="add_task">
                             <input type="hidden" name="task_id" id="task_id" value="<?php echo $this->uri->segment(3); ?>">
                             <div class="form-group">
-                                <label for="">Progess Update/Remarks</label>
+                                <label for="">Reply / Comment</label>
                                 <span style="color: red;">*</span>
                                 <textarea name="remarks" id="remarks" class="form-control"></textarea>
                             </div>
@@ -310,17 +310,7 @@ test<!DOCTYPE html>
                             </div>
 
                             <div class="form-group">
-                                <label>Task Status</label><br>
-
-                                <label class="switch">
-                                    <input type="checkbox" name="status" id="status" value="1">
-                                    <span class="slider round"></span>
-                                </label>
-                                <span style="    margin-left: 10px;
-    position: absolute;">Mark as Completed</span>
-                            </div>
-                            <div class="form-group">
-                                <button class="btn btn-primary" type="submit">Submit</button>
+                                <button class="btn btn-primary" type="submit">Send Comment</button>
                             </div>
                         </form>
                     </div>
@@ -328,7 +318,7 @@ test<!DOCTYPE html>
 
                 <div class="col-sm-12">
                     <div class="card_box">
-                        <h4>Previous Remarks</h4>
+                        <h4>Complete Conversation</h4>
                         <div class="chat-box" id="remarks_list"></div>
                         <!-- <div id="remarks_list" style="max-height:250px; overflow:auto;"></div> -->
                     </div>

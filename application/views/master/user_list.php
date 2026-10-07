@@ -657,6 +657,28 @@
 
     <div class="form-group">
 
+        <label>Plant Unit</label>
+
+    	<span id="error_plant_unit" style="color:red;">*</span>
+
+    	<select class="form-control" id="plant_unit" name="plant_unit">
+
+    <option value="">--Select Plant Unit--</option>
+
+    <option value="1">Sector 59</option>
+
+    <option value="2">Sector 06</option>
+
+    </select>
+
+    </div>
+
+    </div>
+
+    <div class="col-md-2">
+
+    <div class="form-group">
+
         <label>Business Location</label>
 
     	<span id="error_business_loc" style="color:red;">*</span>
@@ -1162,6 +1184,26 @@
 
     <div class="card-box table-responsive">
 
+    <div class="row" style="margin-bottom:10px;">
+
+    <div class="col-md-3 col-sm-4 col-xs-12">
+
+    <label for="filter_plant_unit">Plant Unit</label>
+
+    <select class="form-control" id="filter_plant_unit">
+
+    <option value="">All Plant Units</option>
+
+    <option value="Sector 59">Sector 59</option>
+
+    <option value="Sector 06">Sector 06</option>
+
+    </select>
+
+    </div>
+
+    </div>
+
     <table id="example" class="table table-striped table-bordered dt-responsive nowrap manglesh" cellspacing="0" width="100%">
 
     <thead>
@@ -1178,7 +1220,7 @@
 
     $user_role =$this->session->userdata['logged_in']['role'];
 
-    if($user_role=='1' || $user_role=='12'){
+    if($user_role=='1' || pms_is_super_admin()){
 
     ?>
 
@@ -1188,7 +1230,7 @@
 
     <th>Email</th>
 
-    <?php if($user_role=='1' || $user_role=='12'){?>
+    <?php if($user_role=='1' || pms_is_super_admin()){?>
 
     <th>Password</th>
 
@@ -1201,6 +1243,8 @@
     <th>Department</th>
 
     <th>Role</th>
+
+    <th class="plant-unit-col">Plant Unit</th>
 
     <!-- <th>Open Lead/Visit Form</th> -->
 
@@ -1366,7 +1410,7 @@
 
     $( document ).ready(function() {
 
-    $('#example').dataTable({
+    var userTable = $('#example').dataTable({
 
     "bProcessing": true,
     dom: 'Bfrtip',
@@ -1395,7 +1439,7 @@
 
     $user_role =$this->session->userdata['logged_in']['role'];
 
-    if($user_role=='1' || $user_role=='12'){
+    if($user_role=='1' || pms_is_super_admin()){
 
     ?>
 
@@ -1409,7 +1453,7 @@
 
     $user_role =$this->session->userdata['logged_in']['role'];
 
-    if($user_role=='1' || $user_role=='12'){
+    if($user_role=='1' || pms_is_super_admin()){
 
     ?>
 
@@ -1425,6 +1469,8 @@
     { mData: 'department' },
 
     { mData: 'user_role' },
+
+    { mData: 'plant_unit' },
 
     // { mData: 'open_lead' },
 
@@ -1448,6 +1494,21 @@
     ]
 
     });   
+
+    // Plant Unit filter. The leading columns of this table are conditional on
+    // the signed-in role, so resolve the column by its header class rather
+    // than hard-coding an index.
+    var plantUnitColumn = $('#example thead th').index($('#example thead th.plant-unit-col'));
+
+    $('#filter_plant_unit').change(function(){
+
+    if(plantUnitColumn < 0){ return; }
+
+    var value = $(this).val();
+
+    userTable.fnFilter(value === '' ? '' : '^' + value + '$', plantUnitColumn, true, false);
+
+    });
 
     });
 
@@ -1613,7 +1674,17 @@
 
 
 
-    if(first_name=='' || last_name==''|| email=='' || contact_number=='' || business_loc=='' || department==''|| user_role=='' || status=='')
+    var plant_unit = $("#plant_unit").val();
+
+    if(plant_unit=='')
+
+    {
+
+    $("#error_plant_unit").html('Required!');
+
+    }
+
+    if(first_name=='' || last_name==''|| email=='' || contact_number=='' || business_loc=='' || department==''|| user_role=='' || status=='' || plant_unit=='')
 
     {
 

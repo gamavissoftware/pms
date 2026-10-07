@@ -32,17 +32,75 @@ class EmailProcessor extends CI_Controller
             $query = $this->db->select('*')->from('queue_emails')->where('status',0)->limit(30)->get();
         $emails =$query->result();
         foreach ($emails as $email) {
-            $this->send_email($email->to_email, $email->subject, $email->message, $email->attachment);
+            // isset(), not ->cc_email: the columns arrive with
+            // Database/queue_emails_001_cc_bcc.sql, and this must keep draining the
+            // queue on an installation where that has not been run yet.
+            $cc  = isset($email->cc_email)  ? $email->cc_email  : '';
+            $bcc = isset($email->bcc_email) ? $email->bcc_email : '';
+
+            $this->send_email($email->to_email, $email->subject, $email->message, $email->attachment, $cc, $bcc);
             $this->db->where('id', $email->id)
                      ->update('queue_emails', ['status' => 1, 'sent_at' => date('Y-m-d H:i:s')]);
         }
     }
 
-private function send_email($to, $subject, $message, $attachment = null)
+    /**
+     * Splits a stored address list into valid, de-duplicated addresses, dropping any
+     * that are already on $exclude (the To line) so nobody is both To and CC.
+     */
+    private function clean_address_list($addresses, $exclude = array())
+    {
+        $excluded = array();
+        foreach ((array) $exclude as $address)
+        {
+            $excluded[strtolower(trim((string) $address))] = TRUE;
+        }
+
+        $clean = array();
+        foreach (explode(',', (string) $addresses) as $address)
+        {
+            $address = trim($address);
+            if ($address === '' OR ! filter_var($address, FILTER_VALIDATE_EMAIL))
+            {
+                continue;
+            }
+
+            $key = strtolower($address);
+            if (isset($excluded[$key]) OR isset($clean[$key]))
+            {
+                continue;
+            }
+
+            $clean[$key] = $address;
+        }
+
+        return array_values($clean);
+    }
+
+private function send_email($to, $subject, $message, $attachment = null, $cc = '', $bcc = '')
 {
-    $attachment_path = UPLOADPATH . 'maintenance/' . $attachment; // Adjust the path as needed
+    // Queue rows written before this change store a bare filename that always lived
+    // in maintenance/. Rows that carry a folder (e.g. 'df_change_control/x.pdf') are
+    // resolved from UPLOADPATH instead, so any module can queue its own attachment.
+    $attachment = trim((string) $attachment);
+    if ($attachment !== '' && strpos($attachment, '/') !== false)
+    {
+        // Never let a queued value climb out of the upload folder.
+        $attachment_path = UPLOADPATH . str_replace('..', '', $attachment);
+    }
+    else
+    {
+        $attachment_path = UPLOADPATH . 'maintenance/' . $attachment;
+    }
 
     $this->load->library('email');
+
+    // MUST be clear(TRUE): CI's own auto-clear after send() calls clear() with no
+    // argument, which resets everything EXCEPT _attachments. Without this, the first
+    // attachment in a process_queue() batch would ride along on every later email in
+    // the same run and reach people it was never meant for.
+    $this->email->clear(TRUE);
+
     $this->email->set_mailtype("html");
     $this->email->from('taskmanagement@shubhampack.com', 'Shubham Pack DF Related Help Ticket');
 
@@ -54,8 +112,20 @@ private function send_email($to, $subject, $message, $attachment = null)
     }
     //$this->email->to('mangleshup@gmail.com');
 
-    // Add CC (if required)
-    $this->email->cc('groupceo@shubhampack.com');
+    // Add CC: the standing management copy, plus whatever the queued row asked for
+    // (for example the person who replaced an ECN / IOM attachment).
+    $to_addresses = is_array($to) ? $to : explode(',', (string) $to);
+    $cc_addresses = $this->clean_address_list('groupceo@shubhampack.com,' . $cc, $to_addresses);
+    if ( ! empty($cc_addresses))
+    {
+        $this->email->cc(implode(',', $cc_addresses));
+    }
+
+    $bcc_addresses = $this->clean_address_list($bcc, array_merge($to_addresses, $cc_addresses));
+    if ( ! empty($bcc_addresses))
+    {
+        $this->email->bcc(implode(',', $bcc_addresses));
+    }
 
     // Set email subject and message
     $this->email->subject($subject);

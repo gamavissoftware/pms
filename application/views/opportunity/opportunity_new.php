@@ -385,6 +385,7 @@ if($permisson==0)
                                                 <option value="Solenoid Filling">Solenoid Filling</option>
                                                 <option value="Pnuematic">Pnuematic</option>
                                                 <option value="flowmeter">flowmeter</option>
+                                                <option value="Peristaltic Pump">Peristaltic Pump</option>
                                             </select>
                                         </div>
 

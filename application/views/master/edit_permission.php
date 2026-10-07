@@ -447,6 +447,22 @@ $permission_save_note = !empty($permission_save_note) ? $permission_save_note : 
             height: 18px;
         }
 
+        /* Two switches where Edit means something; one everywhere else. */
+        .submodule-toggles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .submodule-toggle-edit {
+            padding: 4px 10px;
+            border: 1px solid #f0c36d;
+            border-radius: 999px;
+            background: #fff9ec;
+            color: #8a5a00;
+        }
+
         .empty-module {
             padding: 18px;
             border: 1px dashed #cbd5e1;
@@ -705,7 +721,7 @@ $permission_save_note = !empty($permission_save_note) ? $permission_save_note : 
                                                             <?php echo !empty($submodule_row['description']) ? htmlspecialchars($submodule_row['description'], ENT_QUOTES, 'UTF-8') : 'Allow this submodule to appear in the user flow and related navigation.'; ?>
                                                         </div>
                                                     </div>
-                                                    <div>
+                                                    <div class="submodule-toggles">
                                                         <input type="hidden" name="submodule<?php echo $module_id; ?>[]" value="<?php echo $submodule_id; ?>">
                                                         <label class="submodule-toggle">
                                                             <input
@@ -717,6 +733,18 @@ $permission_save_note = !empty($permission_save_note) ? $permission_save_note : 
                                                             >
                                                             <span>Allow</span>
                                                         </label>
+                                                        <?php if (!empty($submodule_row['can_edit'])) { ?>
+                                                            <label class="submodule-toggle submodule-toggle-edit" title="Allow shows the screen; Can edit lets this user save changes on it.">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    name="edit<?php echo $module_id; ?><?php echo $submodule_id; ?>"
+                                                                    value="1"
+                                                                    class="module-checkbox module-checkbox-<?php echo $module_id; ?>"
+                                                                    <?php if (!empty($submodule_row['edit'])) { ?>checked<?php } ?>
+                                                                >
+                                                                <span>Can edit</span>
+                                                            </label>
+                                                        <?php } ?>
                                                     </div>
                                                 </div>
                                             <?php } ?>

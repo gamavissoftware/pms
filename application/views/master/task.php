@@ -37,32 +37,171 @@
         <![endif]-->
 
         <script src="<?php echo assets_url;?>js/modernizr.min.js"></script>
-		<style>
-			.divheight{
-			padding-top:30px;
-			}
-			#pageloader
-{
-  background: rgba( 255, 255, 255, 0.8 );
-  display: none;
-  height: 100%;
-  position: fixed;
-  width: 100%;
-  z-index: 9999;
-}
-#pageloader img
-{
-  left: 30%;
-  margin-left: -10px;
-  margin-top: -10px;
-  position: absolute;
-  top: 30%;
-}
-		</style>
+			<style>
+				body.task-form-page {
+					background: #f4f7fb;
+					color: #1f2937;
+				}
+				.task-form-page .wrapper {
+					padding-top: 22px;
+				}
+				.task-form-header {
+					align-items: center;
+					background: #ffffff;
+					border: 1px solid #e5ebf2;
+					border-radius: 8px;
+					box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+					display: flex;
+					gap: 18px;
+					justify-content: space-between;
+					margin-bottom: 16px;
+					padding: 16px 18px;
+				}
+				.task-form-title h4 {
+					color: #0f172a;
+					font-size: 22px;
+					font-weight: 700;
+					line-height: 1.2;
+					margin: 0 0 5px;
+				}
+				.task-form-title span {
+					color: #64748b;
+					display: block;
+					font-size: 13px;
+					font-weight: 600;
+				}
+				.task-form-actions {
+					display: flex;
+					flex-wrap: wrap;
+					gap: 10px;
+					justify-content: flex-end;
+				}
+				.task-form-actions .btn,
+				.task-submit-actions .btn {
+					border-radius: 6px;
+					font-weight: 700;
+				}
+				.task-form-card {
+					background: #ffffff;
+					border: 1px solid #e5ebf2;
+					border-radius: 8px;
+					box-shadow: 0 10px 28px rgba(15, 23, 42, 0.07);
+					padding: 20px;
+				}
+				.task-form-page .form-group label {
+					color: #475569;
+					font-size: 12px;
+					font-weight: 800;
+					letter-spacing: 0;
+					margin-bottom: 6px;
+					text-transform: uppercase;
+				}
+				.task-form-page .form-control,
+				.task-form-page .select2-container .select2-selection--single,
+				.task-form-page .select2-container .select2-selection--multiple {
+					border: 1px solid #d8e0ea !important;
+					border-radius: 6px !important;
+					box-shadow: none;
+					min-height: 38px;
+				}
+				.task-form-page .form-control:focus {
+					border-color: #0f6c94 !important;
+					box-shadow: 0 0 0 3px rgba(15, 108, 148, 0.12);
+				}
+				.task-section-title {
+					align-items: center;
+					background: #eef8fb;
+					border: 1px solid #d7eef5;
+					border-radius: 8px;
+					color: #0f5f7f;
+					display: flex;
+					font-size: 15px;
+					font-weight: 800;
+					justify-content: space-between;
+					margin: 12px 0 18px;
+					padding: 12px 14px;
+				}
+				.task-help-text {
+					background: #fff7ed;
+					border: 1px solid #fed7aa;
+					border-radius: 6px;
+					color: #9a3412 !important;
+					display: inline-block;
+					font-size: 12px;
+					font-weight: 700;
+					margin-bottom: 8px;
+					padding: 6px 8px;
+				}
+				.task-submit-actions {
+					border-top: 1px solid #e5ebf2;
+					margin-top: 18px;
+					padding-top: 18px;
+					text-align: right;
+				}
+				.task-field-error {
+					color: #d14343 !important;
+					font-size: 12px;
+					font-weight: 700;
+					margin-left: 4px;
+				}
+				.task-page-loader {
+					align-items: center;
+					background: rgba(248, 250, 252, 0.86);
+					display: none;
+					height: 100%;
+					justify-content: center;
+					left: 0;
+					position: fixed;
+					top: 0;
+					width: 100%;
+					z-index: 9999;
+				}
+				.task-loader-card {
+					align-items: center;
+					background: #ffffff;
+					border: 1px solid #e2e8f0;
+					border-radius: 8px;
+					box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+					display: flex;
+					gap: 13px;
+					min-width: 260px;
+					padding: 16px 18px;
+				}
+				.task-loader-spinner {
+					animation: taskSpin 0.8s linear infinite;
+					border: 3px solid #dbeafe;
+					border-top-color: #0f6c94;
+					border-radius: 50%;
+					height: 30px;
+					width: 30px;
+				}
+				.task-loader-text {
+					color: #0f172a;
+					font-weight: 800;
+				}
+				@keyframes taskSpin {
+					to { transform: rotate(360deg); }
+				}
+				@media (max-width: 767px) {
+					.task-form-header {
+						align-items: stretch;
+						flex-direction: column;
+					}
+					.task-form-actions {
+						justify-content: flex-start;
+					}
+				}
+			</style>
     </head>
 
 
-    <body>
+	    <body class="task-form-page">
+		<div id="taskPageLoader" class="task-page-loader">
+			<div class="task-loader-card">
+				<div class="task-loader-spinner"></div>
+				<div class="task-loader-text" id="taskLoaderText">Saving task...</div>
+			</div>
+		</div>
 
 
         <!-- Navigation Bar-->
@@ -72,34 +211,37 @@
         <!-- End Navigation Bar-->
 
 
-        <div class="wrapper">
-            <div class="container">
+	        <div class="wrapper">
+	            <div class="container-fluid">
 
                 <!-- Page-Title -->
-                <div class="row" style="margin-top:20px;">
-                    <div class="col-sm-12 col-xs-12 col-md-12 col-lg-12">
-                        <div class="page-title-box">
-						 <div class="btn-group pull-right"></div>
-                           <h4 class="text-center" style="background-color:#fbeeee; padding:10px; 10px; 10px; 10px;">Task Master</h4>
-                        </div>
-                    </div>
-                </div>
+	                <div class="row">
+	                    <div class="col-sm-12 col-xs-12 col-md-12 col-lg-12">
+	                        <div class="task-form-header">
+								<div class="task-form-title">
+									<h4>Create Task</h4>
+									<span>Add a task, choose its hierarchy, and define department messages.</span>
+								</div>
+								<div class="task-form-actions">
+									<a href="<?php echo page_url;?>Task/taskmanagement" class="btn btn-primary"><i class="fa fa-list"></i> Task Listing</a>
+									<a href="<?php echo page_url;?>Task/graphStructure" class="btn btn-default"><i class="fa fa-sitemap"></i> Tree View</a>
+								</div>
+	                        </div>
+	                    </div>
+	                </div>
                 <!-- end page title end breadcrumb -->
 <span style="color:red;"><?php echo $this->session->flashdata('message'); ?></span>
 
                <div class="row">
                     <div class="col-xs-12">
-                        <div class="card-box">
-<form method="post" id="loginForm" action="<?php echo page_url;?>Task/add_task" onsubmit="return validation();">
-	 <div id="pageloader">
-        <img src="<?php echo assets_url;?>images/loading.gif" alt="processing..." />
-        </div>
+	                        <div class="card-box task-form-card">
+	<form method="post" id="loginForm" action="<?php echo page_url;?>Task/add_task" onsubmit="return validation();">
                             <div class="row">
                                 <div class="col-sm-12 col-xs-12 col-md-12">
 												<div class="col-md-3">
                                                     <div class="form-group">
                                                         <label for="field-1" class="control-label">Department</label>
-														<span id="error_department" style="color:red;">*</span>
+															<span id="error_department" class="task-field-error">*</span>
 														<select class="form-control" name="department" id="department">
 															<option value="">Select Department</option>
 															<?php 
@@ -133,7 +275,7 @@
                                                 <div class="col-md-3">
                                                     <div class="form-group">
                                                         <label for="field-1" class="control-label">Responsible Person</label>
-														<span id="error_responsibleperson" style="color:red;">*</span>
+															<span id="error_responsibleperson" class="task-field-error">*</span>
 														<select class="form-control" name="responsibleperson" id="responsibleperson">
 															
 														</select>
@@ -146,7 +288,7 @@
 												<div class="col-md-6">
                                                     <div class="form-group">
                                                         <label>Task Name</label>
-														<span id="error_taskname" style="color:red;">*</span>
+															<span id="error_taskname" class="task-field-error">*</span>
 														<input type="text" class="form-control" name="taskname" id="taskname" value="">
                                                     </div>
                                                 </div>
@@ -155,7 +297,7 @@
 												<div class="col-md-2">
 													<div class="form-group">
 														 <label for="field-2" class="control-label">Task Type</label>
-														 <span id="error_task_type" style="color:red;">*</span>
+															 <span id="error_task_type" class="task-field-error">*</span>
 														<select class="form-control" name="task_type" id="task_type">
 															<option value="1">Main Task</option>
 															<option value="2">Sub Task</option>
@@ -165,7 +307,7 @@
 												<div class="col-md-2">
 													<div class="form-group">
 														 <label for="field-2" class="control-label">TAT (in Days)</label>
-														 <span id="error_tat" style="color:red;">*</span>
+															 <span id="error_tat" class="task-field-error">*</span>
 														<input type="number" class="form-control" name="tat" id="tat" value="">
 													</div>
 												</div>
@@ -173,7 +315,7 @@
 												<div class="col-md-2">
 													<div class="form-group">
 														 <label for="field-2" class="control-label">TAT Start From</label>
-														 <span id="error_startfrom" style="color:red;">*</span>
+															 <span id="error_startfrom" class="task-field-error">*</span>
 														<select class="form-control" name="startfrom" id="startfrom"> 
 															<option value="0">Select Option</option>
 															<?php 
@@ -191,7 +333,7 @@
 												<div class="col-md-2">
 													<div class="form-group">
 														 <label for="field-2" class="control-label">Task Frequency</label>
-														 <span id="error_taskfrequency" style="color:red;">*</span>
+															 <span id="error_taskfrequency" class="task-field-error">*</span>
 														<select class="form-control" name="taskfrequency" id="taskfrequency"> 
 															<option value="1">Onetime</option>
 															<option value="2">Recurring Task</option>
@@ -202,7 +344,7 @@
 												<div class="col-md-2">
 													<div class="form-group">
 														 <label for="field-2" class="control-label">Sort Order</label>
-														 <span id="error_sortorder" style="color:red;">*</span>
+															 <span id="error_sortorder" class="task-field-error">*</span>
 														<input type="text" class="form-control" name="sortorder" id="sortorder">
 													</div>
 												</div>
@@ -225,7 +367,7 @@
 													</div>
 												</div> -->
 												<div class="col-md-12">
-													<h4 class="text-center" style="background-color:#f1f1f1; padding:10px; 10px; 10px; 10px;">Define Messages for Departments</h4><hr>
+														<div class="task-section-title"><span>Define Messages for Departments</span><i class="fa fa-comments-o"></i></div>
 												</div>
 										
 												
@@ -234,7 +376,7 @@
 													<div class="form-group">
 														<label>Department</label> 
 														<input type="hidden" name="row[]" value="0">
-														<span style="color: red;" id="error_messagefordepartment">*</span>
+															<span class="task-field-error" id="error_messagefordepartment">*</span>
 												<select class="form-control multipleselect" id="messagefordepartment" name="messagefordepartment0[]" multiple="">
 													
 													<?php
@@ -248,10 +390,10 @@
 												</div>
 												
 												<div class="col-md-7">
-													<span style="color: red; background-color:#f1f1f1;">For DF No, use "df_number". For Department Name, use "department_name". For HOD, use "department_hod". </span><br>
+														<span class="task-help-text">Use tags: df_number, department_name, department_hod</span><br>
 													<label>Message</label>
 
-													<span id="error_message" style="color:red">*</span>
+														<span id="error_message" class="task-field-error">*</span>
 													<div class="form-group">
 														<textarea class="form-control ckeditor" name="definemessage[]" id="definemessage"></textarea>
 													</div>
@@ -268,13 +410,11 @@
 												<div id="dynamictasks1"></div>
 
 											
-												<div class="col-md-12" style="padding-top:30px;"></div><hr>
-												
-												<div class="col-md-12">
-													<div class="form-group pull-right">
-													<input type="submit" class="btn btn-success" name="Save" id="savedata">
-												</div>
-												</div>
+													<div class="col-md-12">
+														<div class="task-submit-actions">
+														<button type="submit" class="btn btn-success" name="Save" id="savedata"><i class="fa fa-save"></i> Save Task</button>
+													</div>
+													</div>
 											
 
                             </div>
@@ -439,10 +579,73 @@ function CKEditorChange(name) {
 	  </script>
 	 
 	  <script src="<?php echo assets_url;?>plugins/newselect2/select2.min.js" type="text/javascript"></script>
-	   <script type="text/javascript">
-            $( document ).ready(function() {
-                    $('.multipleselect').select2();
-            });
-        </script>
-</body>
-</html>
+		   <script type="text/javascript">
+	            $( document ).ready(function() {
+	                    $('.multipleselect').select2();
+	            });
+	        </script>
+	<script type="text/javascript">
+		function setTaskFieldState(selector, valid, messageSelector) {
+			var field = jQuery(selector);
+			if (valid) {
+				field.css("border", "");
+				if (messageSelector) {
+					jQuery(messageSelector).html("*");
+				}
+				return;
+			}
+			field.css("border", "1px solid #d14343");
+			if (messageSelector) {
+				jQuery(messageSelector).html("Required!");
+			}
+		}
+
+		function validation() {
+			if (typeof CKEDITOR !== "undefined") {
+				for (var instanceName in CKEDITOR.instances) {
+					if (CKEDITOR.instances.hasOwnProperty(instanceName)) {
+						CKEDITOR.instances[instanceName].updateElement();
+					}
+				}
+			}
+
+			var department = jQuery("#department").val();
+			var responsibleperson = jQuery("#responsibleperson").val();
+			var taskname = jQuery.trim(jQuery("#taskname").val());
+			var taskType = jQuery("#task_type").val();
+			var tat = jQuery("#tat").val();
+			var startfrom = jQuery("#startfrom").val();
+			var taskfrequency = jQuery("#taskfrequency").val();
+			var sortorder = jQuery.trim(jQuery("#sortorder").val());
+
+			setTaskFieldState("#department", department !== "", "#error_department");
+			setTaskFieldState("#responsibleperson", responsibleperson !== "" && responsibleperson !== null, "#error_responsibleperson");
+			setTaskFieldState("#taskname", taskname !== "", "#error_taskname");
+			setTaskFieldState("#task_type", taskType !== "", "#error_task_type");
+			setTaskFieldState("#tat", tat !== "", "#error_tat");
+			setTaskFieldState("#startfrom", startfrom !== "", "#error_startfrom");
+			setTaskFieldState("#taskfrequency", taskfrequency !== "", "#error_taskfrequency");
+			setTaskFieldState("#sortorder", sortorder !== "", "#error_sortorder");
+
+			return !(department === "" || responsibleperson === "" || responsibleperson === null || taskname === "" || taskType === "" || tat === "" || startfrom === "" || taskfrequency === "" || sortorder === "");
+		}
+
+		function showTaskFormLoader(message) {
+			jQuery("#taskLoaderText").text(message || "Saving task...");
+			jQuery("#taskPageLoader").fadeIn(120);
+		}
+
+		jQuery(function() {
+			jQuery("#loginForm").off("submit.taskLoader").on("submit.taskLoader", function() {
+				if (!validation()) {
+					jQuery("#taskPageLoader").hide();
+					return false;
+				}
+				jQuery("#savedata").prop("disabled", true).html("<i class='fa fa-spinner fa-spin'></i> Saving...");
+				showTaskFormLoader("Saving task...");
+				return true;
+			});
+		});
+	</script>
+	</body>
+	</html>

@@ -19,6 +19,8 @@ if(count($podetails)>0)
     echo "Invalid Details"; exit;
 }
 
+$quote_record_id=$CI->salescrm->getRecordID($lead_id);
+
 $re=$this->db->select('payment_percentage')->from('payment_terms_milestone')->where('payment_term_id',$payment_term)->order_by('id','ASC')->limit(1)->get();
 if($re->num_rows()>0)
 {
@@ -470,9 +472,9 @@ $html = '
         $basic_cost=array();
         $basic_cost[]=0;
         $rest=$this->db->select('*')->from('performa_invoice_items')->where('record_id',$record_id)->get();
+        $t=1;
         if($rest->num_rows()>0)
         {
-            $t=1;
         foreach($rest->result() as $row)
         {
 
@@ -501,6 +503,31 @@ $html = '
         </tr>';
         $t++;
         }
+        }
+
+        $discount_amount=0;
+        $discount=$this->db->select('discount_type, discountvalue')->from('quotation_discount_data')->where('record_id',$quote_record_id)->get()->row();
+        if($discount){
+            if((int)$discount->discount_type===1){
+                $discount_amount=array_sum($basic_cost)*floatval($discount->discountvalue)/100;
+            }else{
+                $discount_amount=floatval($discount->discountvalue);
+            }
+            $discount_amount=min(max(0,$discount_amount),max(0,array_sum($basic_cost)));
+        }
+        if ($discount_amount > 0) {
+            $total_array[] = -$discount_amount;
+            $basic_cost[] = -$discount_amount;
+            $html .= '<tr>
+                    <td>'.$t.'.</td>
+                    <td>Discount</td>
+                    <td></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td></td>
+                    <td>-'.$CI->salescrm->formatIndianNumber($discount_amount).'</td>
+                    </tr>';
+            $t++;
         }
 
  //strtoupper($hsn)

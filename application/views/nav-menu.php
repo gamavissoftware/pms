@@ -418,7 +418,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
                 <ul class="">
 
                     <!-- <li>
-                                <a data-toggle="collapse" href="#username" aria-controls="username" role="button"
+                                <a data-toggle="collapse" data-target="#username" href="javascript:void(0);" aria-controls="username" role="button"
                                     aria-expanded="false" class="right_arrow">
                                     <div>
                                         <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
@@ -472,7 +472,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
 					
 			?>
                     <li>
-                        <a data-toggle="collapse" href="#master" aria-controls="master" role="button"
+                        <a data-toggle="collapse" data-target="#master" href="javascript:void(0);" aria-controls="master" role="button"
                             aria-expanded="false" class="right_arrow">
                             <div>
                                 <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
@@ -742,7 +742,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
 
                         <div class="dash">
 
-                            <a href="<?php echo page_url;?>MIS/index/ALL/<?php echo $st;?>/<?php echo $et;?>/ALL">
+                            <a href="<?php echo page_url;?>MIS/index/ALL/<?php echo date('Y-m-d', strtotime('-1 year +1 day'));?>/<?php echo date('Y-m-d');?>/ALL/ALL">
 
                                 <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
                                         viewBox="0 0 24 24">
@@ -784,7 +784,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
 			if ($module->num_rows() > 0) {?>
 
                     <li>
-                        <a data-toggle="collapse" href="#finance" aria-controls="finance" role="button"
+                        <a data-toggle="collapse" data-target="#finance" href="javascript:void(0);" aria-controls="finance" role="button"
                             aria-expanded="false" class="right_arrow <?php if ($this->uri->segment(1) == 'Accounts') { ?> active <?php } ?>">
                             <div>
                                 <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
@@ -1005,14 +1005,126 @@ if($qry->num_rows()>0){
                         </div>
                     </li>
 
+                <?php } ?>
 
-                <?php }?>
+                    <?php
+                    $design_dashboard_access = $this->db->select('acessid')->from('module_capablity')
+                        ->where('role_id', $user_id)->where('moduleid', '20')->where('submoduleid', '81')
+                        ->where('submodule_access', '1')->limit(1)->get();
+                    if ($design_dashboard_access->num_rows() > 0) { ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(3) == 'design_department_dashboard') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Master/User_management/design_department_dashboard">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
+                                        viewBox="0 0 24 24">
+                                        <path
+                                            d="M22.85,4.56,19.44,1.15a3.94,3.94,0,0,0-5.56,0L1.31,13.72A4.46,4.46,0,0,0,0,16.89V24H7.11a4.46,4.46,0,0,0,3.17-1.31L22.85,10.12a3.94,3.94,0,0,0,0-5.56ZM8.87,21.28A2.48,2.48,0,0,1,7.11,22H2V16.89a2.48,2.48,0,0,1,.72-1.76L13,4.86,19.14,11ZM21.44,8.71l-.89.88L14.41,3.45l.88-.89a1.94,1.94,0,0,1,2.74,0L21.44,6a1.94,1.94,0,0,1,0,2.74ZM5,17H7v2H5Z" />
+                                    </svg>
+                                </div>
+                                <div>Design Department Dashboard</div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php } ?>
+
+                    <?php
+                    $rnd_design_access = $this->db->select('acessid')->from('module_capablity')
+                        ->where('role_id', $user_id)->where('moduleid', '20')->where('submoduleid', '82')
+                        ->where('submodule_access', '1')->limit(1)->get();
+                    if ($rnd_design_access->num_rows() > 0) { ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) == 'Task_management' && $this->uri->segment(2) == 'rnd_design_dashboard') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Task_management/rnd_design_dashboard">
+                                <div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 21h6v-1H9v1Zm3-21C7.59 0 4 3.59 4 8c0 2.94 1.59 5.51 3.95 6.9L8 18h8l.05-3.1A7.98 7.98 0 0 0 20 8c0-4.41-3.59-8-8-8Zm2.63 13.44-.58.31L14.02 16H9.98l-.03-2.25-.58-.31A5.99 5.99 0 0 1 6 8a6 6 0 0 1 12 0 5.99 5.99 0 0 1-3.37 5.44Z"/></svg></div>
+                                <div>R&amp;D Design Dashboard</div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php } ?>
 
 
+
+<?php
+$service_spares_module_visible = false;
+$service_spares_module_access = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '17')->get();
+if ($service_spares_module_access->num_rows() > 0) {
+    foreach ($service_spares_module_access->result() as $service_spares_module);
+    if ($service_spares_module->access == '1') {
+        $service_spares_module_visible = true;
+    }
+}
+
+$spares_execution_mrp_submodule = $this->db->select('id')
+    ->from('submodule')
+    ->where('moduleid', '17')
+    ->where('submodule', 'SPARES EXECUTION PPC MRP SHORTAGES')
+    ->limit(1)
+    ->get()
+    ->row();
+
+$spares_execution_mrp_visible = false;
+if (!empty($spares_execution_mrp_submodule)) {
+    $qry = $this->db->select('id')
+        ->from('module_capablity')
+        ->where('role_id', $user_id)
+        ->where('moduleid', '17')
+        ->where('submoduleid', (int) $spares_execution_mrp_submodule->id)
+        ->where('submodule_access', '1')
+        ->limit(1)
+        ->get();
+
+    if ($qry->num_rows() > 0) {
+        $spares_execution_mrp_visible = true;
+    }
+}
+
+if (!$spares_execution_mrp_visible && !empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+    $spares_execution_mrp_visible = true;
+}
+
+$service_spares_active = ($this->uri->segment(1) == 'Spares_execution' || $this->uri->segment(1) == 'ServiceLeads' || ($this->uri->segment(1) == 'Dashboard' && $this->uri->segment(2) == 'service_spare_dashboard'));
+
+if ($service_spares_module_visible || $spares_execution_mrp_visible) {
+?>
+<li>
+    <a data-toggle="collapse" data-target="#serviceSparesMenu" href="javascript:void(0);" aria-controls="serviceSparesMenu" role="button"
+        aria-expanded="<?php echo $service_spares_active ? 'true' : 'false'; ?>"
+        class="right_arrow <?php echo $service_spares_active ? 'active' : ''; ?>">
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                <path d="M12,12.5h5.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-5.051V4h5.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-6.051V11.5H6.949c-.245-1.692-1.691-3-3.449-3-1.93,0-3.5,1.57-3.5,3.5s1.57,3.5,3.5,3.5c1.758,0,3.204-1.308,3.449-3h4.051v8.5h6.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-5.051v-7.5Z" />
+            </svg>
+        </div>
+        <div style="display: flex; align-items: center;">
+            Service &amp; Spares<svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
+                viewBox="0 0 24 24" class="collapse_arrow">
+                <path d="m10.279,18.342l-.707-.707,5.281-5.281c.094-.095.146-.22.146-.354s-.052-.259-.146-.354l-5.281-5.281.707-.707,5.281,5.281c.283.283.439.66.439,1.061s-.156.777-.439,1.061l-5.281,5.281Z" />
+            </svg>
+        </div>
+    </a>
+    <div class="collapse <?php echo $service_spares_active ? 'in' : ''; ?>" id="serviceSparesMenu">
+        <ul class="nav">
+            <?php if ($service_spares_module_visible) { ?>
+                <li><a href="<?php echo page_url; ?>Dashboard/service_spare_dashboard">
+                    <div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M23.55,13.38l-6.18-6.72-.74,.68,6.12,6.66H2.5c-.83,0-1.5-.67-1.5-1.5V2H0V12.5c0,1.38,1.12,2.5,2.5,2.5H22.76l-6.12,6.66,.74,.68,6.16-6.71c.62-.62,.62-1.64,.01-2.25Z" /></svg></div>
+                    <div>Service &amp; Spares Dashboard</div>
+                </a></li>
+            <?php } ?>
+            <?php if ($spares_execution_mrp_visible) { ?>
+                <li><a <?php if ($this->uri->segment(1) == 'Spares_execution' && $this->uri->segment(2) == 'mrp_shortages') { ?>class="active" <?php } ?> href="<?php echo page_url; ?>Spares_execution/mrp_shortages">
+                    <div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 5h16v2H4V5Zm0 4h10v2H4V9Zm0 4h8v2H4v-2Zm0 4h8v2H4v-2Zm12.6 1.4-3.1-3.1 1.4-1.4 1.7 1.7 3.9-4 1.4 1.4-5.3 5.4Z"/></svg></div>
+                    <div>PPC MRP Shortages</div>
+                </a></li>
+            <?php } ?>
+        </ul>
+    </div>
+</li>
+<?php } ?>
 
                 <?php
             $module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '17')->get();
-            if ($module->num_rows() > 0) {
+            if (false && $module->num_rows() > 0) {
                 foreach ($module->result() as $moddata);
                 if ($moddata->access == '1') {
                     ?>
@@ -1033,6 +1145,51 @@ if($qry->num_rows()>0){
 
                     </li>
                 <?php } } ?>
+
+<?php
+$spares_execution_mrp_submodule = $this->db->select('id')
+    ->from('submodule')
+    ->where('moduleid', '17')
+    ->where('submodule', 'SPARES EXECUTION PPC MRP SHORTAGES')
+    ->limit(1)
+    ->get()
+    ->row();
+
+$spares_execution_mrp_visible = false;
+if (!empty($spares_execution_mrp_submodule)) {
+    $qry = $this->db->select('id')
+        ->from('module_capablity')
+        ->where('role_id', $user_id)
+        ->where('moduleid', '17')
+        ->where('submoduleid', (int) $spares_execution_mrp_submodule->id)
+        ->where('submodule_access', '1')
+        ->limit(1)
+        ->get();
+
+    if ($qry->num_rows() > 0) {
+        $spares_execution_mrp_visible = true;
+    }
+}
+
+if (!$spares_execution_mrp_visible && !empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+    $spares_execution_mrp_visible = true;
+}
+
+if (false && $spares_execution_mrp_visible) {
+?>
+<li>
+    <div class="dash">
+        <a <?php if ($this->uri->segment(1) == 'Spares_execution' && $this->uri->segment(2) == 'mrp_shortages') { ?>class="active" <?php } ?> href="<?php echo page_url; ?>Spares_execution/mrp_shortages">
+            <div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M4 5h16v2H4V5Zm0 4h10v2H4V9Zm0 4h8v2H4v-2Zm0 4h8v2H4v-2Zm12.6 1.4-3.1-3.1 1.4-1.4 1.7 1.7 3.9-4 1.4 1.4-5.3 5.4Z"/>
+                </svg>
+            </div>
+            <div>PPC MRP Shortages</div>
+        </a>
+    </div>
+</li>
+<?php } ?>
 
 <?php
 $service_visit_overview_submodule = $this->db->select('id')
@@ -1362,7 +1519,7 @@ if($qry->num_rows()>0){
                         <div class="col-md-4 col-sm-12 col-xs-12 hidden-xs" id="blink_text">
                             <div style="margin-top: 13px;">
                                 <a style="background-color: #fdf5dd; padding: 10px 10px 10px 10px; font-size:14px; color:#635221;"
-                                    href='<?php echo page_url;?>MIS/index/ALL/<?php echo $st;?>/<?php echo $et;?>/<?php echo $_SESSION['logged_in']['user_id'];?>'
+                                    href='<?php echo page_url;?>MIS/index/ALL/<?php echo date('Y-m-d', strtotime('-1 year +1 day'));?>/<?php echo date('Y-m-d');?>/<?php echo $_SESSION['logged_in']['user_id'];?>/ALL'
                                     target="_blank">Your Work
                                     Pending/Delayed MIS: <span style="color:#635221;font-weight: 600;font-size:17px"
                                         id="blink_text1"><?php echo $total;?>% &nbsp;<span style="font-size:17px;"><?php echo $icon;?></span></span></a>
@@ -1521,7 +1678,52 @@ if($qry->num_rows()>0){
                     </div>
                 </div>
             </div>
-        </header>
+    </header>
+
+<script>
+(function () {
+    if (window.PmsSidebarCollapseFallbackBound) {
+        return;
+    }
+
+    window.PmsSidebarCollapseFallbackBound = true;
+
+    function bindSidebarCollapseFallback() {
+        if (window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.collapse === 'function') {
+            return;
+        }
+
+        var links = document.querySelectorAll('[data-toggle="collapse"][data-target]');
+        for (var i = 0; i < links.length; i++) {
+            links[i].addEventListener('click', function (event) {
+                var selector = this.getAttribute('data-target');
+                var panel = selector ? document.querySelector(selector) : null;
+                if (!panel) {
+                    return;
+                }
+
+                event.preventDefault();
+                var isOpen = panel.className.indexOf('in') !== -1;
+                if (isOpen) {
+                    panel.className = panel.className.replace(/\bin\b/g, '').replace(/\s{2,}/g, ' ');
+                    panel.style.display = 'none';
+                    this.setAttribute('aria-expanded', 'false');
+                } else {
+                    panel.className += ' in';
+                    panel.style.display = 'block';
+                    this.setAttribute('aria-expanded', 'true');
+                }
+            });
+        }
+    }
+
+    if (document.readyState === 'complete') {
+        bindSidebarCollapseFallback();
+    } else {
+        window.addEventListener('load', bindSidebarCollapseFallback);
+    }
+})();
+</script>
 
 
 

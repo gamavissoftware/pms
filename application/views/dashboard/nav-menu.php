@@ -4,7 +4,7 @@ $businesslocation =$this->session->userdata['logged_in']['business_location'];
 $department_id =$this->session->userdata['logged_in']['department_id'];
 if($businesslocation==2){
 $user_id = $this->session->userdata['logged_in']['user_id'];
-$st = date('Y-m-d',strtotime('-30 days'));
+$st = date('Y-m-d',strtotime('-1 year +1 day'));
 $et = date('Y-m-d');
 $dfid = "ALL";
 $assigned_module=array();
@@ -27,8 +27,8 @@ if($totalassigned>0)
 }
 
 
-$totalassigned = $CI->mis_model->allassignedtask($user_id,$et,$dfid);
-$totaldonetask =  $CI->mis_model->totalassignedworkdone($user_id,$et,$dfid);
+$totalassigned = $CI->mis_model->allassignedtask($user_id,$st,$et,$dfid);
+$totaldonetask =  $CI->mis_model->totalassignedworkdone($user_id,$st,$et,$dfid);
 $diff = $totalassigned-$totaldonetask;
 $per2=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -46,8 +46,8 @@ if($totaldonecount>0)
     }
 
 /** help ticket **/
-$totalassigned = $CI->mis_model->allassigneTickets($user_id,$dfid);
-$totaldonetask =  $CI->mis_model->allassigneTicketsDone($user_id,$dfid);
+$totalassigned = $CI->mis_model->allassigneTickets($user_id,$dfid,$st,$et);
+$totaldonetask =  $CI->mis_model->allassigneTicketsDone($user_id,$dfid,$st,$et);
 $diff = $totalassigned-$totaldonetask;
 $per4=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -56,8 +56,8 @@ if($totalassigned>0)
     }
 
 /** CREATED HELP TICKET **/
-$totalassigned = $CI->mis_model->allCreatedTickets($user_id,$dfid);
- $totaldonetask =  $CI->mis_model->allcreatedTicketsDone($user_id,$dfid);
+$totalassigned = $CI->mis_model->allCreatedTickets($user_id,$dfid,$st,$et);
+ $totaldonetask =  $CI->mis_model->allcreatedTicketsDone($user_id,$dfid,$st,$et);
  $diff = $totalassigned-$totaldonetask;
 $per5=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -153,7 +153,8 @@ if($mom_done_this_week>0)
 
 if(array_sum($assigned_module)>0)
     {
-    $total=round(ceil($per2+$per3+$per4+$per5+$per6+$per7+$per8+$per9+$per10)/array_sum($assigned_module));
+    $calculated_total=round(($per2+$per3+$per4+$per5+$per6+$per7+$per8+$per9+$per10)/array_sum($assigned_module));
+    $total=$CI->mis_model->get_appraisal_issue_rate($user_id,$calculated_total);
     }else
     {
         $total=0;
@@ -189,6 +190,18 @@ $endddd = base64_encode($currentweekdates[1]);
 $user_id = $this->session->userdata['logged_in']['user_id'];
 $profile_image = $this->session->userdata['logged_in']['profile_image'];
 $user_role = $this->session->userdata['logged_in']['role'];
+$master_write_access_enabled = true;
+if ($this->db->field_exists('master_write_access', 'user_role')) {
+    $master_access_row = $this->db->select('master_write_access')
+        ->from('user_role')
+        ->where('user_role_id', (int) $user_role)
+        ->limit(1)
+        ->get()
+        ->row();
+    if (!empty($master_access_row) && isset($master_access_row->master_write_access)) {
+        $master_write_access_enabled = ((string) $master_access_row->master_write_access === '1');
+    }
+}
 $first_name = $this->session->userdata['logged_in']['user_name'];
 $last_name = $this->session->userdata['logged_in']['last_name'];
 $department_id = $this->session->userdata['logged_in']['department_id'];
@@ -452,6 +465,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
 
                     </li>
 	<?php
+			if ($master_write_access_enabled) {
 			$module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '1')->get();
 			if ($module->num_rows() > 0) {
 				foreach ($module->result() as $moddata);
@@ -510,7 +524,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
 <?php }?>
 
 							<?php 
-					$submoduleid = array('31', '32','33','34','35');
+					$submoduleid = array('31', '32','33','34','35','67');
 					$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id', $user_id)->where('moduleid', '1')->where_in('submoduleid', $submoduleid)->where('submodule_access', '1')->get();
 					if ($qry->num_rows() > 0) {
 								?>
@@ -521,15 +535,14 @@ $st = date('Y-m-d',strtotime('-30 days'));
                                                     d="M23.55,13.38l-6.18-6.72-.74,.68,6.12,6.66H2.5c-.83,0-1.5-.67-1.5-1.5V2H0V12.5c0,1.38,1.12,2.5,2.5,2.5H22.76l-6.12,6.66,.74,.68,6.16-6.71c.62-.62,.62-1.64,.01-2.25Z" />
                                             </svg></div>
 
-                                        <div>Sales
-                                            Management</div>
+                                        <div>Sales Management</div>
                                     </a></li>
                                     <?php }?>
                                 <!-- Add more items here -->
                             </ul>
                         </div>
                     </li>
-<?php }}?>
+<?php }}}?>
 	<?php
 				$module=$this->db->select('access')->from('module_access')->where('role_id',$user_id)->where('moduleid','15')->get();
 				if($module->num_rows()>0)
@@ -639,7 +652,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
                             <a <?php if ($this->uri->segment(1) == 'Df_change_control') { ?>class="active" <?php } ?> href="<?php echo $df_navigation_url; ?>">
                                 <div>
                                     <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
-                                        <path d="M19.5,0H4.5C2.019,0,0,2.019,0,4.5V19.5C0,21.981,2.019,24,4.5,24H19.5C21.981,24,24,21.981,24,19.5V4.5C24,2.019,21.981,0,19.5,0Zm-9.5,18h-3v-3h3v3Zm0-5h-3v-3h3v3Zm0-5h-3V5h3v3Zm8,10H12v-3h6v3Zm0-5H12v-3h6v3Zm0-5H12V5h6v3Z" />
+                                        <path d="m15,2.338V.5c0-.276-.224-.5-.5-.5s-.5.224-.5.5v1.536c-.163-.023-.33-.036-.5-.036h-2.5V.5c0-.276-.224-.5-.5-.5s-.5.224-.5.5v1.5h-3V.5c0-.276-.224-.5-.5-.5s-.5.224-.5.5v1.5h-2.5c-.17,0-.337.012-.5.036V.5c0-.276-.224-.5-.5-.5s-.5.224-.5.5v1.838c-1.181.563-2,1.769-2,3.162v14c0,2.481,2.019,4.5,4.5,4.5h8c2.481,0,4.5-2.019,4.5-4.5V5.5c0-1.393-.819-2.599-2-3.162Zm1,17.162c0,1.93-1.57,3.5-3.5,3.5H4.5c-1.93,0-3.5-1.57-3.5-3.5V5.5c0-1.379,1.122-2.5,2.5-2.5h10c1.378,0,2.5,1.121,2.5,2.5v14Zm-3-13c0,.276-.224.5-.5.5H4.5c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h8c.276,0,.5.224.5.5Zm0,4c0,.276-.224.5-.5.5H4.5c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h8c.276,0,.5.224.5.5Zm-3,4c0,.276-.224.5-.5.5h-5c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h5c.276,0,.5.224.5.5ZM21.5,0c-1.378,0-2.5,1.121-2.5,2.5v17.758c0,.922.374,1.823,1.025,2.475l1.121,1.121c.098.098.226.146.354.146s.256-.049.354-.146l1.121-1.121c.652-.651,1.025-1.553,1.025-2.475V2.5c0-1.379-1.122-2.5-2.5-2.5Zm1.5,20.258c0,.658-.267,1.303-.732,1.768l-.768.768-.768-.768c-.465-.465-.732-1.109-.732-1.768V2.5c0-.827.673-1.5,1.5-1.5s1.5.673,1.5,1.5v17.758Z" />
                                     </svg>
                                 </div>
                                 <div>DF ECN/ IOM Dashboard</div>
@@ -651,7 +664,39 @@ $st = date('Y-m-d',strtotime('-30 days'));
                             </a>
                         </div>
                     </li>
+
+
 	<?php } ?>
+
+
+     <?php
+            $module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '3')->get();
+            if ($module->num_rows() > 0) {
+                foreach ($module->result() as $moddata);
+                if ($moddata->access == '1') {
+
+                    $submoduleid = array('71');
+                    $qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id', $user_id)->where('moduleid', '3')->where_in('submoduleid', $submoduleid)->where('submodule_access', '1')->get();
+                    if ($qry->num_rows() > 0) {
+            ?>
+
+                     <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) == 'DF_revision') { ?>class="active" <?php } ?> href="<?php echo page_url;?>DF_revision/revision_dashboard">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                                        <path d="m15,2.338V.5c0-.276-.224-.5-.5-.5s-.5.224-.5.5v1.536c-.163-.023-.33-.036-.5-.036h-2.5V.5c0-.276-.224-.5-.5-.5s-.5.224-.5.5v1.5h-3V.5c0-.276-.224-.5-.5-.5s-.5.224-.5.5v1.5h-2.5c-.17,0-.337.012-.5.036V.5c0-.276-.224-.5-.5-.5s-.5.224-.5.5v1.838c-1.181.563-2,1.769-2,3.162v14c0,2.481,2.019,4.5,4.5,4.5h8c2.481,0,4.5-2.019,4.5-4.5V5.5c0-1.393-.819-2.599-2-3.162Zm1,17.162c0,1.93-1.57,3.5-3.5,3.5H4.5c-1.93,0-3.5-1.57-3.5-3.5V5.5c0-1.379,1.122-2.5,2.5-2.5h10c1.378,0,2.5,1.121,2.5,2.5v14Zm-3-13c0,.276-.224.5-.5.5H4.5c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h8c.276,0,.5.224.5.5Zm0,4c0,.276-.224.5-.5.5H4.5c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h8c.276,0,.5.224.5.5Zm-3,4c0,.276-.224.5-.5.5h-5c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h5c.276,0,.5.224.5.5ZM21.5,0c-1.378,0-2.5,1.121-2.5,2.5v17.758c0,.922.374,1.823,1.025,2.475l1.121,1.121c.098.098.226.146.354.146s.256-.049.354-.146l1.121-1.121c.652-.651,1.025-1.553,1.025-2.475V2.5c0-1.379-1.122-2.5-2.5-2.5Zm1.5,20.258c0,.658-.267,1.303-.732,1.768l-.768.768-.768-.768c-.465-.465-.732-1.109-.732-1.768V2.5c0-.827.673-1.5,1.5-1.5s1.5.673,1.5,1.5v17.758Z" />
+                                    </svg>
+                                </div>
+                                <div>DF Revsion Dashboard</div>
+                              
+                            </a>
+                        </div>
+                    </li>
+                <?php } } } ?>
+
+
+
     <?php
 			$module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '2')->get();
 			if ($module->num_rows() > 0) {
@@ -690,15 +735,41 @@ $st = date('Y-m-d',strtotime('-30 days'));
                         </div>
                     </li>
 <?php }}}?>
-	<?php
-			if($_SESSION['logged_in']['adminuser']==1)
+<?php
+$task_management_open_count = 0;
+if ($this->db->table_exists('task_management_items')) {
+    $task_management_open_count = (int) $this->db->select('id')
+        ->from('task_management_items')
+        ->where('assigned_to_user_id', $user_id)
+        ->where('status !=', 'COMPLETED')
+        ->count_all_results();
+}
+?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) == 'Task_management') { ?>class="active" <?php } ?> href="<?php echo page_url; ?>Task_management">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                                        <path d="M19.5,1H4.5C2.019,1,0,3.019,0,5.5v13c0,2.481,2.019,4.5,4.5,4.5h15c2.481,0,4.5-2.019,4.5-4.5V5.5c0-2.481-2.019-4.5-4.5-4.5ZM4.5,2h15c1.93,0,3.5,1.57,3.5,3.5v2.5H1v-2.5c0-1.93,1.57-3.5,3.5-3.5Zm15,20H4.5c-1.93,0-3.5-1.57-3.5-3.5V9H23v9.5c0,1.93-1.57,3.5-3.5,3.5ZM3,5c0-.552,.448-1,1-1s1,.448,1,1-.448,1-1,1-1-.448-1-1Zm3,0c0-.552,.448-1,1-1s1,.448,1,1-.448,1-1,1-1-.448-1-1Zm14,8.5c0,.276-.224,.5-.5,.5h-7c-.276,0-.5-.224-.5-.5s.224-.5,.5-.5h7c.276,0,.5,.224,.5,.5Zm0,5c0,.276-.224,.5-.5,.5h-7c-.276,0-.5-.224-.5-.5s.224-.5,.5-.5h7c.276,0,.5,.224,.5,.5Zm-9.145-2.625c.194,.196,.192,.513-.004,.707l-2.939,2.904c-.345,.34-.797,.511-1.25,.511s-.902-.169-1.246-.506l-1.35-1.324c-.196-.193-.2-.51-.006-.707,.192-.196,.509-.2,.707-.006l1.349,1.323c.301,.295,.792,.295,1.093-.002l2.939-2.904c.197-.194,.514-.191,.707,.004Zm0-5c.194,.197,.192,.513-.004,.707l-2.939,2.904c-.345,.34-.797,.511-1.25,.511s-.902-.169-1.246-.506l-1.35-1.324c-.196-.193-.199-.51-.006-.707,.192-.197,.509-.199,.707-.007l1.349,1.324c.301,.295,.792,.295,1.093-.002l2.939-2.904c.197-.195,.514-.192,.707,.004Z"/>
+                                    </svg>
+                                </div>
+                                <div>Task Management</div>
+                                <?php if ($task_management_open_count > 0) { ?>
+                                    <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24" style="fill: #e82646; position: absolute; right: 10px; margin-top: 4px; width: 16px;"><path d="M20.93,7.3c-.34-1.91-2-3.3-3.94-3.3h-.17c.11-.31,.18-.65,.18-1,0-1.65-1.35-3-3-3h-4c-1.65,0-3,1.35-3,3,0,.35,.07,.69,.18,1h-.17c-1.94,0-3.6,1.39-3.94,3.3L.81,19H23.19l-2.27-11.7ZM9,3c0-.55,.45-1,1-1h4c.55,0,1,.45,1,1s-.45,1-1,1h-4c-.55,0-1-.45-1-1Zm-.86,18h7.72c-.45,1.72-2,3-3.86,3s-3.41-1.28-3.86-3Z"/></svg></div>
+                                    <div style="background: black; color: white; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; border-radius: 50%; position: absolute; right: 9px; top: 8px;"><?php echo $task_management_open_count; ?></div>
+                                <?php } ?>
+                            </a>
+                        </div>
+                    </li>
+	       <?php
+			if($_SESSION['logged_in']['adminuser']==1 || $user_id==67)
 			{
 			?>
                     <li>
 
                         <div class="dash">
 
-                            <a href="<?php echo page_url;?>MIS/index/ALL/<?php echo $st;?>/<?php echo $et;?>/ALL">
+                            <a href="<?php echo page_url;?>MIS/index/ALL/<?php echo date('Y-m-d', strtotime('-1 year +1 day'));?>/<?php echo date('Y-m-d');?>/ALL/ALL">
 
                                 <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
                                         viewBox="0 0 24 24">
@@ -712,28 +783,10 @@ $st = date('Y-m-d',strtotime('-30 days'));
                         </div>
                     </li>
                     	<?php } ?>
-                        <?php
-			$module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '4')->get();
-			if ($module->num_rows() > 0) {?>
-                    <!-- <li>
 
-                        <div class="dash">
 
-                            <a href="<?php echo page_url;?>ExcelImport/bomimport">
-                                <div>
-                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
-                                        viewBox="0 0 24 24">
-                                        <path
-                                            d="m1,2.5c0-.827.673-1.5,1.5-1.5h9.5v7h7v1.766c.308-.202.648-.35,1-.472v-2.001L12.707,0H2.5C1.122,0,0,1.122,0,2.5v21.5h9v-1H1V2.5Zm12-.793l5.293,5.293h-5.293V1.707Zm10.268,10.025c-.943-.944-2.592-.944-3.535,0l-8.732,8.732v3.536h3.536l8.732-8.732c.472-.472.732-1.1.732-1.768s-.26-1.296-.732-1.768Zm-.707,2.828l-8.439,8.439h-2.122v-2.122l8.439-8.439c.566-.566,1.555-.566,2.121,0,.283.283.439.66.439,1.061s-.156.777-.439,1.061Z" />
-                                    </svg>
-                                </div>
-
-                                <div>BOM
-                                    Correction Tool</div>
-                            </a>
-                        </div>
-                    </li> -->
-<?php }?>
+                        
+                       
 
 		<?php
 			$module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '5')->get();
@@ -846,6 +899,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
                             </ul>
                         </div>
                     </li>
+
                 <?php }?>
 
 
@@ -898,6 +952,90 @@ if($qry->num_rows()>0){
                     </li>
 
                 <?php }?>
+
+<?php
+/* ===== CHAT MODULE — sidebar link =====================================
+   Chat is company-wide: chat_can() lets every logged-in user open the
+   messenger, while the privileged actions (create group, manage members,
+   pin, link records) stay gated by the CHAT module in
+   Master > User management.
+
+   Hidden entirely until CHAT_MODULE_VISIBLE is TRUE in
+   application/config/constants.php — see chat_nav_visible(). */
+$this->load->helper('chat_access');
+if (chat_nav_visible($this)):
+?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) === 'Chat') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Chat">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM7 9h10v2H7V9zm7 5H7v-2h7v2zm3-6H7V6h10v2z"/></svg>
+                                </div>
+                                <div style="display:flex;align-items:center;">
+                                    Chat
+                                    <span id="ccChatMenuBadge" style="display:none;margin-left:8px;background:#dc2626;color:#fff;border-radius:9px;font-size:10px;font-weight:700;padding:1px 6px;">0</span>
+                                </div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php if (chat_can_manage_df_groups($this)): ?>
+                    <!-- DF groups are marketing's and administrators' to
+                         manage — see chat_can_manage_df_groups(). Everyone
+                         else still takes part in a DF group once added; they
+                         simply do not create them, so this entry is hidden
+                         rather than shown-and-refused.
+
+                         The page itself backfills DFs released before groups
+                         became automatic. -->
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(2) === 'df_groups' || $this->uri->segment(2) === 'df-groups') { ?>class="active" <?php } ?> href="<?php echo page_url;?>chat/df-groups">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                                </div>
+                                <div>DF Chat Groups</div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php endif; ?>
+<?php endif; ?>
+<!-- ===== END CHAT MODULE — sidebar link ===== -->
+
+<?php
+$df_weekly_meeting_points_count = 0;
+$df_weekly_meeting_points_show_all = false;
+if (!empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+    $df_weekly_meeting_points_show_all = true;
+}
+if (in_array((int) $user_id, array(61, 161, 189, 209), true)) {
+    $df_weekly_meeting_points_show_all = true;
+}
+if ($this->db->table_exists('dfmom_points') && $this->db->field_exists('responsible_person', 'dfmom_points') && $this->db->field_exists('workstatus', 'dfmom_points')) {
+    $this->db->from('dfmom_points');
+    $this->db->where('responsible_person >', 0);
+    $this->db->where('workstatus !=', 1);
+    if (!$df_weekly_meeting_points_show_all) {
+        $this->db->where('responsible_person', $user_id);
+    }
+    $df_weekly_meeting_points_count = (int) $this->db->count_all_results();
+}
+?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) == 'Task' && $this->uri->segment(2) == 'dfweeklymeetingpoints') { ?>class="active" <?php } ?> href="<?php echo page_url; ?>Task/dfweeklymeetingpoints">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                                        <path d="M22,4H2C0.897,4,0,4.897,0,6v12c0,1.103,0.897,2,2,2h20c1.103,0,2-0.897,2-2V6C24,4.897,23.103,4,22,4ZM2,6h20v4H2V6Zm0,12V11h20v7H2ZM5,14h6v1H5v-1Zm9,0h5v1h-5v-1Z"/>
+                                    </svg>
+                                </div>
+                                <div>DF Weekly Meeting Points</div>
+                                <?php if ($df_weekly_meeting_points_count > 0) { ?>
+                                    <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24" style="fill: #e82646; position: absolute; right: 10px; margin-top: 4px; width: 16px;"><path d="M20.93,7.3c-.34-1.91-2-3.3-3.94-3.3h-.17c.11-.31,.18-.65,.18-1,0-1.65-1.35-3-3-3h-4c-1.65,0-3,1.35-3,3,0,.35,.07,.69,.18,1h-.17c-1.94,0-3.6,1.39-3.94,3.3L.81,19H23.19l-2.27-11.7ZM9,3c0-.55,.45-1,1-1h4c.55,0,1,.45,1,1s-.45,1-1,1h-4c-.55,0-1-.45-1-1Zm-.86,18h7.72c-.45,1.72-2,3-3.86,3s-3.41-1.28-3.86-3Z"/></svg></div>
+                                    <div style="background: black; color: white; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; border-radius: 50%; position: absolute; right: 9px; top: 8px;"><?php echo $df_weekly_meeting_points_count; ?></div>
+                                <?php } ?>
+                            </a>
+                        </div>
+                    </li>
 
                     <?php 
 
@@ -961,8 +1099,43 @@ if($qry->num_rows()>0){
                         </div>
                     </li>
 
+                <?php } ?>
 
-                <?php }?>
+                    <?php
+                    $design_dashboard_access = $this->db->select('acessid')->from('module_capablity')
+                        ->where('role_id', $user_id)->where('moduleid', '20')->where('submoduleid', '81')
+                        ->where('submodule_access', '1')->limit(1)->get();
+                    if ($design_dashboard_access->num_rows() > 0) { ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(3) == 'design_department_dashboard') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Master/User_management/design_department_dashboard">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
+                                        viewBox="0 0 24 24">
+                                        <path
+                                            d="M22.85,4.56,19.44,1.15a3.94,3.94,0,0,0-5.56,0L1.31,13.72A4.46,4.46,0,0,0,0,16.89V24H7.11a4.46,4.46,0,0,0,3.17-1.31L22.85,10.12a3.94,3.94,0,0,0,0-5.56ZM8.87,21.28A2.48,2.48,0,0,1,7.11,22H2V16.89a2.48,2.48,0,0,1,.72-1.76L13,4.86,19.14,11ZM21.44,8.71l-.89.88L14.41,3.45l.88-.89a1.94,1.94,0,0,1,2.74,0L21.44,6a1.94,1.94,0,0,1,0,2.74ZM5,17H7v2H5Z" />
+                                    </svg>
+                                </div>
+                                <div>Design Department Dashboard</div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php } ?>
+
+                    <?php
+                    $rnd_design_access = $this->db->select('acessid')->from('module_capablity')
+                        ->where('role_id', $user_id)->where('moduleid', '20')->where('submoduleid', '82')
+                        ->where('submodule_access', '1')->limit(1)->get();
+                    if ($rnd_design_access->num_rows() > 0) { ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) == 'Task_management' && $this->uri->segment(2) == 'rnd_design_dashboard') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Task_management/rnd_design_dashboard">
+                                <div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 21h6v-1H9v1Zm3-21C7.59 0 4 3.59 4 8c0 2.94 1.59 5.51 3.95 6.9L8 18h8l.05-3.1A7.98 7.98 0 0 0 20 8c0-4.41-3.59-8-8-8Zm2.63 13.44-.58.31L14.02 16H9.98l-.03-2.25-.58-.31A5.99 5.99 0 0 1 6 8a6 6 0 0 1 12 0 5.99 5.99 0 0 1-3.37 5.44Z"/></svg></div>
+                                <div>R&amp;D Design Dashboard</div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php } ?>
 
 
 
@@ -990,85 +1163,134 @@ if($qry->num_rows()>0){
                     </li>
                 <?php } } ?>
 
+<?php
+$service_visit_overview_submodule = $this->db->select('id')
+    ->from('submodule')
+    ->where('moduleid', '17')
+    ->where('submodule', 'SERVICE ENGINEER VISIT ASSIGNMENT OVERVIEW')
+    ->limit(1)
+    ->get()
+    ->row();
 
-            <?php
-            $module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '17')->get();
-            if ($module->num_rows() > 0) {
-                foreach ($module->result() as $moddata);
-                if ($moddata->access == '1') {
-                    
-            ?>
-                  <!--   <li>
-                        <a data-toggle="collapse" href="#sparesdashboard" aria-controls="sparesdashboard" role="button"
-                            aria-expanded="false" class="right_arrow">
-                            <div>
-                                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
-                                    viewBox="0 0 24 24">
-                                    <path
-                                        d="M12,12.5h5.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-5.051V4h5.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-6.051V11.5H6.949c-.245-1.692-1.691-3-3.449-3-1.93,0-3.5,1.57-3.5,3.5s1.57,3.5,3.5,3.5c1.758,0,3.204-1.308,3.449-3h4.051v8.5h6.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-5.051v-7.5Zm8.5-3c1.379,0,2.5,1.122,2.5,2.5s-1.121,2.5-2.5,2.5-2.5-1.121-2.5-2.5,1.121-2.5,2.5-2.5Zm0-8.5c1.379,0,2.5,1.122,2.5,2.5s-1.121,2.5-2.5,2.5-2.5-1.122-2.5-2.5,1.121-2.5,2.5-2.5ZM3.5,14.5c-1.379,0-2.5-1.121-2.5-2.5s1.121-2.5,2.5-2.5,2.5,1.122,2.5,2.5-1.121,2.5-2.5,2.5Zm17,3.5c1.379,0,2.5,1.121,2.5,2.5s-1.121,2.5-2.5,2.5-2.5-1.121-2.5-2.5,1.121-2.5,2.5-2.5Z" />
-                                </svg>
-                            </div>
-                            <div style="display: flex; align-items: center;">
-                                Spares Dashboard<svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
-                                    viewBox="0 0 24 24" class="collapse_arrow">
-                                    <path
-                                        d="m10.279,18.342l-.707-.707,5.281-5.281c.094-.095.146-.22.146-.354s-.052-.259-.146-.354l-5.281-5.281.707-.707,5.281,5.281c.283.283.439.66.439,1.061s-.156.777-.439,1.061l-5.281,5.281Z" />
-                                </svg></div>
+$service_visit_overview_visible = false;
+if (!empty($service_visit_overview_submodule)) {
+    $qry = $this->db->select('id')
+        ->from('module_capablity')
+        ->where('role_id', $user_id)
+        ->where('moduleid', '17')
+        ->where('submoduleid', (int) $service_visit_overview_submodule->id)
+        ->where('submodule_access', '1')
+        ->limit(1)
+        ->get();
 
-                        </a> -->
-                       <!--  <div class="collapse" id="sparesdashboard">
-                            <ul class="nav"> -->
-                <?php 
-                    $submoduleid = array('52');
-                    $qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id', $user_id)->where('moduleid', '17')->where_in('submoduleid', $submoduleid)->where('submodule_access', '1')->get();
-                    if ($qry->num_rows() > 0) {
-                                ?>
-                               <!--  <li><a href="<?php echo page_url; ?>Dashboard/sparesdashboard">
-                                        <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
-                                                viewBox="0 0 24 24">
-                                                <path
-                                                    d="M23.55,13.38l-6.18-6.72-.74,.68,6.12,6.66H2.5c-.83,0-1.5-.67-1.5-1.5V2H0V12.5c0,1.38,1.12,2.5,2.5,2.5H22.76l-6.12,6.66,.74,.68,6.16-6.71c.62-.62,.62-1.64,.01-2.25Z" />
-                                            </svg></div>
-                                        <div>Spares CRM</div>
-                                    </a></li> -->
-                                        <?php }?>
+    if ($qry->num_rows() > 0) {
+        $service_visit_overview_visible = true;
+    }
+}
 
-                                        <?php 
-                    $submoduleid = array('63');
-                    $qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id', $user_id)->where('moduleid', '17')->where_in('submoduleid', $submoduleid)->where('submodule_access', '1')->get();
-                    if ($qry->num_rows() > 0) {
-                                ?>
-                               <!--  <li><a href="<?php echo page_url; ?>ServiceMaster">
-                                        <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
-                                                viewBox="0 0 24 24">
-                                                <path
-                                                    d="M23.55,13.38l-6.18-6.72-.74,.68,6.12,6.66H2.5c-.83,0-1.5-.67-1.5-1.5V2H0V12.5c0,1.38,1.12,2.5,2.5,2.5H22.76l-6.12,6.66,.74,.68,6.16-6.71c.62-.62,.62-1.64,.01-2.25Z" />
-                                            </svg></div>
-                                        <div>Service Charges Management</div>
-                                    </a></li> -->
-                                        <?php }?>
+if (!$service_visit_overview_visible && !empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+    $service_visit_overview_visible = true;
+}
 
-                                         <?php 
-                    $submoduleid = array('62');
-                    $qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id', $user_id)->where('moduleid', '17')->where_in('submoduleid', $submoduleid)->where('submodule_access', '1')->get();
-                    if ($qry->num_rows() > 0) {
-                                ?>
-                               <!--  <li><a href="<?php echo page_url; ?>ServiceLeads/dashboard">
-                                        <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
-                                                viewBox="0 0 24 24">
-                                                <path
-                                                    d="M23.55,13.38l-6.18-6.72-.74,.68,6.12,6.66H2.5c-.83,0-1.5-.67-1.5-1.5V2H0V12.5c0,1.38,1.12,2.5,2.5,2.5H22.76l-6.12,6.66,.74,.68,6.16-6.71c.62-.62,.62-1.64,.01-2.25Z" />
-                                            </svg></div>
-                                        <div>Service CRM</div>
-                                    </a></li>
-                                        <?php }?>
-                           
+if ($service_visit_overview_visible) {
+?>
+<li>
+    <div class="dash">
+        <a <?php if ($this->uri->segment(1) == 'ServiceLeads' && $this->uri->segment(2) == 'engineer_assignment_overview') { ?>class="active" <?php } ?> href="<?php echo page_url; ?>ServiceLeads/engineer_assignment_overview">
+            <div>
+                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                    <path d="m18.5,15.5c-1.103,0-2,.897-2,2s.897,2,2,2,2-.897,2-2-.897-2-2-2Zm0,3c-.551,0-1-.449-1-1s.449-1,1-1,1,.449,1,1-.449,1-1,1Zm3.888-4.896c-1.039-1.034-2.419-1.604-3.888-1.604s-2.85.569-3.889,1.604c-1.039,1.035-1.611,2.411-1.611,3.875s.572,2.839,1.626,3.888l1.971,1.813c.512.498,1.188.772,1.903.772s1.391-.274,1.892-.762l1.996-1.837c1.039-1.035,1.611-2.411,1.611-3.875s-.572-2.84-1.611-3.875Zm-.691,7.027l-1.992,1.833c-.647.631-1.752.641-2.421-.01l-1.967-1.81c-.85-.846-1.317-1.97-1.317-3.166s.468-2.32,1.317-3.166c.85-.846,1.98-1.312,3.183-1.312s2.333.466,3.182,1.312c.85.846,1.317,1.97,1.317,3.166s-.468,2.32-1.303,3.152Zm-8.697,2.87c0,.276-.224.5-.5.5H4.5c-2.481,0-4.5-2.019-4.5-4.5V4.5C0,2.019,2.019,0,4.5,0h7c2.481,0,4.5,2.019,4.5,4.5v6c0,.276-.224.5-.5.5s-.5-.224-.5-.5v-6c0-1.93-1.57-3.5-3.5-3.5h-7c-1.93,0-3.5,1.57-3.5,3.5v15c0,1.93,1.57,3.5,3.5,3.5h8c.276,0,.5.224.5.5Zm-6-10c0,.276-.224.5-.5.5h-2c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h2c.276,0,.5.224.5.5Zm5,0c0,.276-.224,.5-.5,.5h-2c-.276,0-.5-.224-.5-.5s.224-.5,.5-.5h2c.276,0,.5,.224,.5,.5Zm-5,4c0,.276-.224.5-.5.5h-2c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h2c.276,0,.5.224.5.5Zm5,0c0,.276-.224.5-.5.5h-2c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h2c.276,0,.5.224.5.5ZM7,5.5c0,.276-.224.5-.5.5h-2c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h2c.276,0,.5.224.5.5Zm5,0c0,.276-.224.5-.5.5h-2c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h2c.276,0,.5.224.5.5Zm-5,4c0,.276-.224.5-.5.5h-2c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h2c.276,0,.5.224.5.5Zm5,0c0,.276-.224.5-.5.5h-2c-.276,0-.5-.224-.5-.5s.224-.5.5-.5h2c.276,0,.5.224.5.5Z"/>
+                </svg>
+            </div>
+            <div>Engineer Visit Assignments</div>
+        </a>
+    </div>
+</li>
+<?php
+    }
+?>
 
-                                
-                            </ul>
-                        </div>
-                    </li> -->
-<?php }}?>
+<?php
+$service_payment_request_visible = false;
+$service_payment_hod_visible = false;
+$service_payment_request_submodule = $this->db->select('id')
+    ->from('submodule')
+    ->where('moduleid', '17')
+    ->where('submodule', 'SERVICE PAYMENT REQUESTS')
+    ->limit(1)
+    ->get()
+    ->row();
+$service_payment_approval_submodule = $this->db->select('id')
+    ->from('submodule')
+    ->where('moduleid', '17')
+    ->where('submodule', 'SERVICE PAYMENT APPROVALS')
+    ->limit(1)
+    ->get()
+    ->row();
+
+if (!empty($service_payment_request_submodule)) {
+    $service_payment_request_visible = $this->db->select('id')
+        ->from('module_capablity')
+        ->where('role_id', $user_id)
+        ->where('moduleid', '17')
+        ->where('submoduleid', (int) $service_payment_request_submodule->id)
+        ->where('submodule_access', '1')
+        ->limit(1)
+        ->get()
+        ->num_rows() > 0;
+}
+
+if (!empty($service_payment_approval_submodule)) {
+    $service_payment_hod_visible = $this->db->select('id')
+        ->from('module_capablity')
+        ->where('role_id', $user_id)
+        ->where('moduleid', '17')
+        ->where('submoduleid', (int) $service_payment_approval_submodule->id)
+        ->where('submodule_access', '1')
+        ->limit(1)
+        ->get()
+        ->num_rows() > 0;
+}
+
+if (!empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+    $service_payment_request_visible = true;
+    $service_payment_hod_visible = true;
+}
+
+if ($service_payment_request_visible) {
+?>
+<li>
+    <div class="dash">
+        <a <?php if ($this->uri->segment(1) == 'ServiceLeads' && in_array($this->uri->segment(2), ['service_payment_request_form', 'service_payment_requests'], true)) { ?>class="active" <?php } ?> href="<?php echo page_url; ?>ServiceLeads/service_payment_requests">
+            <div>
+                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                    <path d="m19.416,16.101l-2.55,2.74c-.188.202-.504.214-.707.025-.202-.188-.213-.505-.025-.707l2.533-2.721c.459-.547.445-1.39-.049-1.94-.267-.298-.634-.475-1.032-.496-.395-.01-.782.113-1.08.38l-3.204,3.239c-.84.849-1.302,1.973-1.302,3.165v3.714c0,.276-.224.5-.5.5s-.5-.224-.5-.5v-3.714c0-1.458.565-2.832,1.591-3.868l3.226-3.26c.52-.467,1.158-.7,1.824-.654.666.036,1.277.33,1.722.826.824.919.848,2.325.054,3.271ZM21.5,0h-5c-1.379,0-2.5,1.121-2.5,2.5v8c0,.276.224.5.5.5s.5-.224.5-.5V2.5c0-.827.673-1.5,1.5-1.5h5c.827,0,1.5.673,1.5,1.5v9c0,.542-.294,1.043-.768,1.31-.24.135-.326.439-.19.681.092.163.261.255.436.255.083,0,.167-.021.245-.064.788-.442,1.277-1.278,1.277-2.181V2.5c0-1.379-1.121-2.5-2.5-2.5Zm-13,23h-4c-1.93,0-3.5-1.57-3.5-3.5V4.5c0-1.93,1.57-3.5,3.5-3.5h8c.276,0,.5-.224.5-.5s-.224-.5-.5-.5H4.5C2.019,0,0,2.019,0,4.5v15c0,2.481,2.019,4.5,4.5,4.5h4c.276,0,.5-.224.5-.5s-.224-.5-.5-.5ZM5.3,5h6.2c.276,0,.5-.224.5-.5s-.224-.5-.5-.5h-6.2c-.717,0-1.3.583-1.3,1.3v1.4c0,.717.583,1.3,1.3,1.3h6.2c.276,0,.5-.224.5-.5s-.224-.5-.5-.5h-6.2c-.165,0-.3-.135-.3-.3v-1.4c0-.165.135-.3.3-.3Zm.2,5h-1c-.276,0-.5.224-.5.5s.224.5.5.5h1c.276,0,.5-.224.5-.5s-.224-.5-.5-.5Zm0,3h-1c-.276,0-.5.224-.5.5s.224.5.5.5h1c.276,0,.5-.224.5-.5s-.224-.5-.5-.5Zm4-3h-1c-.276,0-.5.224-.5.5s.224.5.5.5h1c.276,0,.5-.224.5-.5s-.224-.5-.5-.5Zm0,3h-1c-.276,0-.5.224-.5.5s.224.5.5.5h1c.276,0,.5-.224.5-.5s-.224-.5-.5-.5Zm-4,3h-1c-.276,0-.5.224-.5.5s.224.5.5.5h1c.276,0,.5-.224.5-.5s-.224-.5-.5-.5Zm4,0h-1c-.276,0-.5.224-.5.5s.224.5.5.5h1c.276,0,.5-.224.5-.5s-.224-.5-.5-.5Zm-4,3h-1c-.276,0-.5.224-.5.5s.224.5.5.5h1c.276,0,.5-.224.5-.5s-.224-.5-.5-.5Zm18-4c-.276,0-.5.224-.5.5v1.099c0,1.438-.486,2.855-1.369,3.99l-2.025,2.604c-.17.218-.131.532.088.701.091.071.199.105.307.105.148,0,.296-.066.395-.193l2.025-2.604c1.019-1.309,1.58-2.944,1.58-4.604v-1.099c0-.276-.224-.5-.5-.5Z"/>
+                </svg>
+            </div>
+            <div>Service Payment Requests</div>
+        </a>
+    </div>
+</li>
+<?php
+}
+
+if ($service_payment_hod_visible) {
+?>
+<li>
+    <div class="dash">
+        <a <?php if ($this->uri->segment(1) == 'ServiceLeads' && $this->uri->segment(2) == 'service_payment_approvals') { ?>class="active" <?php } ?> href="<?php echo page_url; ?>ServiceLeads/service_payment_approvals">
+            <div>
+                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                    <path d="M24,5.5c0-1.378-1.121-2.5-2.5-2.5h-5.5V0H0V21c0,1.654,1.346,3,3,3H13c1.654,0,3-1.346,3-3v-5h8V5.5Zm-2.5-.5c0,.275,.224,.5,.5,.5v1.5h-6v-2h5.5Zm-7.5,16c0,.551-.448,1-1,1H3c-.552,0-1-.449-1-1v-3H14v3Zm0-5H2V2H14v14Zm2-2v-5h6v5h-6Zm-10.075-2.575l-2.182-2.268,1.387-1.441,2.216,2.301,3.614-3.703,1.398,1.43-3.607,3.696h.001l-.004,.004c-.744,.744-2.058,.746-2.823-.019Zm4.075,9.575H6v-2h4v2Z"/>
+                </svg>
+            </div>
+            <div>Service Payment Approvals</div>
+        </a>
+    </div>
+</li>
+<?php
+}
+?>
 
 <?php 
 
@@ -1084,9 +1306,9 @@ if($qry->num_rows()>0){
                             <a <?php if ($this->uri->segment(2) == 'team_dashboard' || $this->uri->segment(2)=='team_task_detail') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Dashboard/team_dashboard">
 
                                 <div>
-                                    
-<svg id="Layer_1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" data-name="Layer 1"><path d="m20.5 15c1.103 0 2-.897 2-2s-.897-2-2-2-2 .897-2 2 .897 2 2 2zm0-3c.551 0 1 .448 1 1s-.449 1-1 1-1-.448-1-1 .449-1 1-1zm-17 3c1.103 0 2-.897 2-2s-.897-2-2-2-2 .897-2 2 .897 2 2 2zm0-3c.551 0 1 .448 1 1s-.449 1-1 1-1-.448-1-1 .449-1 1-1zm8.5 7c1.103 0 2-.897 2-2s-.897-2-2-2-2 .897-2 2 .897 2 2 2zm0-3c.551 0 1 .448 1 1s-.449 1-1 1-1-.448-1-1 .449-1 1-1zm7.158-12.525-.316-.949 3-1 .316.949zm2.684 5-3-1 .316-.949 3 1zm-17-5-3-1 .316-.949 3 1zm-2.684 5-.316-.949 3-1 .316.949zm21.842 9.525v2h-1v-2c0-.552-.449-1-1-1h-3c-.551 0-1 .448-1 1v2h-1v-2c0-1.103.897-2 2-2h3c1.103 0 2 .897 2 2zm-8.5 4v2h-1v-2c0-.552-.449-1-1-1h-3c-.551 0-1 .448-1 1v2h-1v-2c0-1.103.897-2 2-2h3c1.103 0 2 .897 2 2zm-8.5-4v2h-1v-2c0-.552-.449-1-1-1h-3c-.551 0-1 .448-1 1v2h-1v-2c0-1.103.897-2 2-2h3c1.103 0 2 .897 2 2zm8.147-16.885c-1.176-.954-2.718-1.316-4.229-1.001-1.998.421-3.548 2.07-3.858 4.104-.311 2.036.631 4.026 2.398 5.069.339.2.542.531.542.886v1.827h4v-1.826c0-.354.204-.687.545-.889 1.538-.91 2.455-2.512 2.455-4.285 0-1.514-.675-2.931-1.853-3.885zm-2.147 9.885h-2v-.827c0-.059-.018-.115-.023-.173h2.047c-.005.059-.024.114-.024.174zm1.036-2.576c-.256.152-.457.354-.623.576h-.912v-3.071c.86-.224 1.5-1 1.5-1.929h-1c0 .552-.449 1-1 1s-1-.448-1-1h-1c0 .929.64 1.705 1.5 1.929v3.071h-.911c-.166-.222-.367-.423-.622-.574-1.414-.834-2.167-2.427-1.918-4.058.244-1.598 1.509-2.945 3.076-3.275 1.214-.255 2.451.035 3.394.799.942.764 1.482 1.897 1.482 3.108 0 1.416-.734 2.696-1.964 3.424z"/></svg>
-
+                                    <svg id="Layer_1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" data-name="Layer 1">
+                                        <path d="m20.5 15c1.103 0 2-.897 2-2s-.897-2-2-2-2 .897-2 2 .897 2 2 2zm0-3c.551 0 1 .448 1 1s-.449 1-1 1-1-.448-1-1 .449-1 1-1zm-17 3c1.103 0 2-.897 2-2s-.897-2-2-2-2 .897-2 2 .897 2 2 2zm0-3c.551 0 1 .448 1 1s-.449 1-1 1-1-.448-1-1 .449-1 1-1zm10.5 5c0-1.103-.897-2-2-2s-2 .897-2 2 .897 2 2 2 2-.897 2-2zm-3 0c0-.552.449-1 1-1s1 .448 1 1-.449 1-1 1-1-.448-1-1zm8.025-14.009c-.087-.263.055-.545.316-.633l2-.666c.265-.089.546.055.633.316.087.263-.055.545-.316.633l-2 .666c-.255.086-.546-.052-.633-.316zm0 4.018c.087-.262.368-.405.633-.316l2 .666c.262.088.403.37.316.633-.087.264-.378.403-.633.316l-2-.666c-.262-.088-.403-.37-.316-.633zm-17-5c.087-.262.369-.405.633-.316l2 .666c.262.088.403.37.316.633-.087.264-.378.403-.633.316l-2-.666c-.262-.088-.403-.37-.316-.633zm0 5.982c-.087-.263.055-.545.316-.633l2-.666c.263-.089.545.055.633.316.087.263-.055.545-.316.633l-2 .666c-.255.086-.546-.052-.633-.316zm21.975 11.509c0 .276-.224.5-.5.5s-.5-.224-.5-.5c0-1.379-1.122-2.5-2.5-2.5s-2.5 1.121-2.5 2.5c0 .276-.224.5-.5.5s-.5-.224-.5-.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5zm-8.5 4c0 .276-.224.5-.5.5s-.5-.224-.5-.5c0-1.379-1.122-2.5-2.5-2.5s-2.5 1.121-2.5 2.5c0 .276-.224.5-.5.5s-.5-.224-.5-.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5zm-8.5-4c0 .276-.224.5-.5.5s-.5-.224-.5-.5c0-1.379-1.122-2.5-2.5-2.5s-2.5 1.121-2.5 2.5c0 .276-.224.5-.5.5s-.5-.224-.5-.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5zm8.147-18.385c-1.176-.954-2.718-1.316-4.229-1.001-1.998.421-3.548 2.07-3.858 4.104-.311 2.036.631 4.026 2.398 5.069.339.2.542.531.542.886v.327c0 .827.673 1.5 1.5 1.5h1c.827 0 1.5-.673 1.5-1.5v-.326c0-.354.204-.687.546-.889 1.537-.91 2.454-2.512 2.454-4.285 0-1.514-.675-2.931-1.853-3.885zm-2.147 9.385c0 .275-.224.5-.5.5h-1c-.276 0-.5-.225-.5-.5 0-.122.006-.384-.023-.5h2.047c-.03.115-.024.379-.024.5zm1.037-2.076c-.256.151-.457.354-.624.576h-.912v-3.075c.667-.159 1.23-.613 1.468-1.249.097-.259-.034-.547-.293-.644-.257-.1-.547.034-.644.292-.151.404-.566.676-1.032.676s-.88-.271-1.032-.676c-.097-.258-.384-.393-.644-.292-.259.097-.39.385-.293.644.239.637.801 1.09 1.468 1.249v3.075h-.911c-.166-.222-.367-.423-.622-.574-1.414-.834-2.167-2.427-1.918-4.058.244-1.598 1.509-2.945 3.076-3.275.289-.061.58-.091.867-.091.92 0 1.809.308 2.527.89.942.764 1.482 1.897 1.482 3.108 0 1.416-.734 2.696-1.963 3.424z"/>
+                                    </svg>
                                 </div>
 
                                 <div>Team Monitoring Dashboard</div>
@@ -1109,12 +1331,12 @@ if($qry->num_rows()>0){
 
                         <div class="dash">
 
-                            <a <?php if ($this->uri->segment(1) == 'Masters') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Masters/manage_jobs">
+                            <a <?php if ($this->uri->segment(1) == 'Masters' && in_array($this->uri->segment(2), array('manage_jobs', 'allocate_job', 'view_job_timeline', 'assembly_machine_report'))) { ?>class="active" <?php } ?> href="<?php echo page_url;?>Masters/manage_jobs">
 
                                 <div>
-                                    
-<svg id="Layer_1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" data-name="Layer 1"><path d="m20.5 15c1.103 0 2-.897 2-2s-.897-2-2-2-2 .897-2 2 .897 2 2 2zm0-3c.551 0 1 .448 1 1s-.449 1-1 1-1-.448-1-1 .449-1 1-1zm-17 3c1.103 0 2-.897 2-2s-.897-2-2-2-2 .897-2 2 .897 2 2 2zm0-3c.551 0 1 .448 1 1s-.449 1-1 1-1-.448-1-1 .449-1 1-1zm8.5 7c1.103 0 2-.897 2-2s-.897-2-2-2-2 .897-2 2 .897 2 2 2zm0-3c.551 0 1 .448 1 1s-.449 1-1 1-1-.448-1-1 .449-1 1-1zm7.158-12.525-.316-.949 3-1 .316.949zm2.684 5-3-1 .316-.949 3 1zm-17-5-3-1 .316-.949 3 1zm-2.684 5-.316-.949 3-1 .316.949zm21.842 9.525v2h-1v-2c0-.552-.449-1-1-1h-3c-.551 0-1 .448-1 1v2h-1v-2c0-1.103.897-2 2-2h3c1.103 0 2 .897 2 2zm-8.5 4v2h-1v-2c0-.552-.449-1-1-1h-3c-.551 0-1 .448-1 1v2h-1v-2c0-1.103.897-2 2-2h3c1.103 0 2 .897 2 2zm-8.5-4v2h-1v-2c0-.552-.449-1-1-1h-3c-.551 0-1 .448-1 1v2h-1v-2c0-1.103.897-2 2-2h3c1.103 0 2 .897 2 2zm8.147-16.885c-1.176-.954-2.718-1.316-4.229-1.001-1.998.421-3.548 2.07-3.858 4.104-.311 2.036.631 4.026 2.398 5.069.339.2.542.531.542.886v1.827h4v-1.826c0-.354.204-.687.545-.889 1.538-.91 2.455-2.512 2.455-4.285 0-1.514-.675-2.931-1.853-3.885zm-2.147 9.885h-2v-.827c0-.059-.018-.115-.023-.173h2.047c-.005.059-.024.114-.024.174zm1.036-2.576c-.256.152-.457.354-.623.576h-.912v-3.071c.86-.224 1.5-1 1.5-1.929h-1c0 .552-.449 1-1 1s-1-.448-1-1h-1c0 .929.64 1.705 1.5 1.929v3.071h-.911c-.166-.222-.367-.423-.622-.574-1.414-.834-2.167-2.427-1.918-4.058.244-1.598 1.509-2.945 3.076-3.275 1.214-.255 2.451.035 3.394.799.942.764 1.482 1.897 1.482 3.108 0 1.416-.734 2.696-1.964 3.424z"/></svg>
-
+                                    <svg id="Layer_1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" data-name="Layer 1">
+                                        <path d="m17.5 0h-8c-2.481 0-4.5 2.019-4.5 4.5v12c0 2.481 2.019 4.5 4.5 4.5h8c2.481 0 4.5-2.019 4.5-4.5v-12c0-2.481-2.019-4.5-4.5-4.5zm3.5 16.5c0 1.93-1.57 3.5-3.5 3.5h-8c-1.93 0-3.5-1.57-3.5-3.5v-12c0-1.93 1.57-3.5 3.5-3.5h8c1.93 0 3.5 1.57 3.5 3.5zm-8.5-4v4c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-4c0-.276.224-.5.5-.5s.5.224.5.5zm-3 2v2c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-2c0-.276.224-.5.5-.5s.5.224.5.5zm6-4v6c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-6c0-.276.224-.5.5-.5s.5.224.5.5zm3 2v4c0 .276-.224.5-.5.5s-.5-.224-.5-.5v-4c0-.276.224-.5.5-.5s.5.224.5.5zm-1-4.5c-.276 0-.5-.224-.5-.5v-1.793l-2.249 2.249c-.401.402-1.101.402-1.502 0l-.705-.705-2.69 2.603c-.195.195-.512.195-.707 0s-.195-.512 0-.707l2.603-2.603c.401-.402 1.101-.402 1.502 0l.705.705 2.325-2.249h-1.781c-.276 0-.5-.224-.5-.5s.224-.5.5-.5h2c.827 0 1.5.673 1.5 1.5v2c0 .276-.224.5-.5.5zm-.5 15.5c0 .276-.224.5-.5.5h-10c-2.481 0-4.5-2.019-4.5-4.5v-14c0-.276.224-.5.5-.5s.5.224.5.5v14c0 1.93 1.57 3.5 3.5 3.5h10c.276 0 .5.224.5.5z"/>
+                                    </svg>
                                 </div>
 
                                 <div>Assembly and Trial Floor Reporting</div>
@@ -1140,8 +1362,9 @@ if($qry->num_rows()>0){
                             <a <?php if ($this->uri->segment(1) == 'Machine') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Machine/machineonfloor">
 
                                 <div>
-                                    <i class="fa fa-machine"></i>
-
+                                    <svg id="Layer_1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" data-name="Layer 1">
+                                        <path d="m6 6h4v4h-4zm8.5 11.5c0 1.381-1.119 2.5-2.5 2.5s-2.5-1.119-2.5-2.5c0-.171.018-.338.05-.5h-3.55v7h12v-7h-3.55c.033.162.05.329.05.5zm6.5-17.5h-18c-1.654 0-3 1.346-3 3v17h4v-5h16v5h4v-17c0-1.654-1.346-3-3-3zm-9 12h-8v-8h8zm4 0h-2v-2h2zm0-3h-2v-2h2zm0-3h-2v-2h2zm4 6h-2v-2h2zm0-3h-2v-2h2zm0-3h-2v-2h2z"/>
+                                    </svg>
                                 </div>
 
                                 <div>Machine on Floor (Accounts)</div>
@@ -1150,7 +1373,31 @@ if($qry->num_rows()>0){
                             </a>
                         </div>
                     </li>
-                <?php }?>
+
+                    <?php }?>
+
+
+                                     <?php 
+
+$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','5')->where('submoduleid','80')->where('submodule_access','1')->get();
+
+if($qry->num_rows()>0){
+
+?>
+
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) == 'Df_dispatch_plan') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Df_dispatch_plan">
+                                <div>
+                                    <svg id="Layer_1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M19 3h-1V1h-2v2H8V1H6v2H5C3.35 3 2 4.35 2 6v13c0 1.65 1.35 3 3 3h14c1.65 0 3-1.35 3-3V6c0-1.65-1.35-3-3-3zm1 16c0 .55-.45 1-1 1H5c-.55 0-1-.45-1-1V9h16v10zM4 7V6c0-.55.45-1 1-1h1v2h2V5h8v2h2V5h1c.55 0 1 .45 1 1v1H4zm3 5h5v5H7v-5zm7 0h3v2h-3v-2zm0 3h3v2h-3v-2z"/>
+                                    </svg>
+                                </div>
+                                <div>DF Dispatch Morning Meeting</div>
+                            </a>
+                        </div>
+                    </li>
+                <?php } ?>
 
                 <?php 
 
@@ -1166,8 +1413,9 @@ if($qry->num_rows()>0){
                             <a <?php if ($this->uri->segment(1) == 'Machine') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Machine/mcsdispatchreport">
 
                                 <div>
-                                    <i class="fa fa-machine"></i>
-
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                                        <path d="M21.5,24c-1.379,0-2.5-1.122-2.5-2.5V13.5c0-.827-.673-1.5-1.5-1.5H6.5c-.827,0-1.5,.673-1.5,1.5v8c0,1.378-1.121,2.5-2.5,2.5s-2.5-1.122-2.5-2.5V9.561c0-1.499,.741-2.893,1.983-3.73L9.483,.77c1.527-1.031,3.504-1.032,5.033,0l7.5,5.061c1.242,.837,1.983,2.232,1.983,3.73v11.939c0,1.378-1.121,2.5-2.5,2.5ZM6.5,11h11c1.379,0,2.5,1.122,2.5,2.5v8c0,.827,.673,1.5,1.5,1.5s1.5-.673,1.5-1.5V9.561c0-1.166-.576-2.25-1.542-2.901L13.958,1.599c-1.189-.803-2.727-.803-3.916,0L2.542,6.66c-.966,.651-1.542,1.736-1.542,2.901v11.939c0,.827,.673,1.5,1.5,1.5s1.5-.673,1.5-1.5V13.5c0-1.378,1.121-2.5,2.5-2.5Zm3.3,13h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Zm1.6-3h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Zm7.6,9h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Z"/>
+                                    </svg>
                                 </div>
 
                                 <div>M/cs Dispatch Report (Accounts)</div>
@@ -1178,6 +1426,34 @@ if($qry->num_rows()>0){
                     </li>
                 <?php }?>
 
+
+
+ <?php 
+
+$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','19')->where('submoduleid','77')->where('submodule_access','1')->get();
+
+if($qry->num_rows()>0){
+
+?>
+ <li>
+
+                        <div class="dash">
+
+                            <a <?php if ($this->uri->segment(1) == 'abom') { ?>class="active" <?php } ?> href="<?php echo page_url;?>abom/generate">
+
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                                        <path d="M21.5,24c-1.379,0-2.5-1.122-2.5-2.5V13.5c0-.827-.673-1.5-1.5-1.5H6.5c-.827,0-1.5,.673-1.5,1.5v8c0,1.378-1.121,2.5-2.5,2.5s-2.5-1.122-2.5-2.5V9.561c0-1.499,.741-2.893,1.983-3.73L9.483,.77c1.527-1.031,3.504-1.032,5.033,0l7.5,5.061c1.242,.837,1.983,2.232,1.983,3.73v11.939c0,1.378-1.121,2.5-2.5,2.5ZM6.5,11h11c1.379,0,2.5,1.122,2.5,2.5v8c0,.827,.673,1.5,1.5,1.5s1.5-.673,1.5-1.5V9.561c0-1.166-.576-2.25-1.542-2.901L13.958,1.599c-1.189-.803-2.727-.803-3.916,0L2.542,6.66c-.966,.651-1.542,1.736-1.542,2.901v11.939c0,.827,.673,1.5,1.5,1.5s1.5-.673,1.5-1.5V13.5c0-1.378,1.121-2.5,2.5-2.5Zm3.3,13h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Zm1.6-3h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Zm7.6,9h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Z"/>
+                                    </svg>
+                                </div>
+
+                                <div>Automation BOM Generator</div>
+
+
+                            </a>
+                        </div>
+                    </li>
+                <?php }?>
                 
 
                 </ul>
@@ -1281,7 +1557,7 @@ if($qry->num_rows()>0){
                         <div class="col-md-4 col-sm-12 col-xs-12 hidden-xs" id="blink_text">
                             <div style="margin-top: 13px;">
                                 <a style="background-color: #fdf5dd; padding: 10px 10px 10px 10px; font-size:14px; color:#635221;"
-                                    href='<?php echo page_url;?>MIS/index/ALL/<?php echo $st;?>/<?php echo $et;?>/<?php echo $_SESSION['logged_in']['user_id'];?>'
+                                    href='<?php echo page_url;?>MIS/index/ALL/<?php echo date('Y-m-d', strtotime('-1 year +1 day'));?>/<?php echo date('Y-m-d');?>/<?php echo $_SESSION['logged_in']['user_id'];?>/ALL'
                                     target="_blank">Your Work
                                     Pending/Delayed MIS: <span style="color:#635221;font-weight: 600;font-size:17px"
                                         id="blink_text1"><?php echo $total;?>% &nbsp;<span style="font-size:17px;"><?php echo $icon;?></span></span></a>
@@ -1303,6 +1579,37 @@ if($qry->num_rows()>0){
   <?php } ?>
                         <div class="col-md-4">
                             <ul class="nav navbar-nav navbar-right pull-right">
+
+<?php
+/* ===== CHAT MODULE — topbar icon, unread badge, notifications, dock =====
+   Nothing here renders while CHAT_MODULE_VISIBLE is FALSE, so there is
+   also no background poll before go-live. */
+$this->load->helper('chat_access');
+if (chat_nav_visible($this)):
+?>
+                                <!-- margin-top:8px centres the 39px icon on the same
+                                     axis as the username and avatar (their centre is
+                                     y=25 in this row). The neighbouring li carries
+                                     margin-top:37px, but that one renders at zero
+                                     height — copying its offset pushed the icon onto
+                                     its own line below the topbar. -->
+                                <li class="dropdown user-box" style="margin-top:8px;">
+                                    <div style="position:relative;">
+                                        <a href="javascript:void(0);" id="ccChatBtn" class="cc-chatbtn" title="Chat" aria-label="Chat" style="display:inline-block;padding:6px 10px;color:#188ae2;font-size:19px;line-height:1;">
+                                            <i class="fa fa-comments-o" aria-hidden="true"></i>
+                                            <span class="cc-chat-badge" id="ccChatBadge">0</span>
+                                        </a>
+                                        <div class="cc-chatpop" id="ccChatPop">
+                                            <h6>Chat notifications
+                                                <a href="<?php echo page_url; ?>Chat"
+                                                   onclick="if(window.ChatDock){event.preventDefault();window.ChatDock.open();this.closest('.cc-chatpop').style.display='none';}">Open chat</a>
+                                            </h6>
+                                            <div class="items" id="ccChatItems"></div>
+                                        </div>
+                                    </div>
+                                </li>
+<?php endif; ?>
+<!-- ===== END CHAT MODULE — topbar icon ===== -->
 
                                 <li class="dropdown user-box saurabh" style="margin-top:37px;">
                                     <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
@@ -1498,3 +1805,22 @@ if($qry->num_rows()>0){
 
 
     </header>
+
+<?php
+/* ===== CHAT MODULE — notification widget + floating dock ==============
+   Deliberately OUTSIDE the topbar's <ul>. Both views emit fixed-position
+   containers and a <style> block; inside a <ul> the HTML parser hoists
+   any non-<li> content out of the list, which moves it somewhere neither
+   view controls. Here they sit at the end of the header, where they are
+   valid and their positioning is their own.
+
+   Nothing renders while CHAT_MODULE_VISIBLE is FALSE. */
+$this->load->helper('chat_access');
+if (chat_nav_visible($this)) {
+    $this->load->view('chatmodule/_navwidget');
+    // Skipped on the Chat page itself, where the full messenger is
+    // already on screen.
+    if ($this->uri->segment(1) !== 'Chat') $this->load->view('chatmodule/_dock');
+}
+?>
+<!-- ===== END CHAT MODULE ===== -->

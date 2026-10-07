@@ -91,6 +91,17 @@ top: 50%;
 
     <div >
     <div class="row">
+<?php
+$this->load->helper('overtime');
+$ot_master_permissions = ot_user_permissions($this->db, (int)$user_id);
+$ot_master_user = $this->db->query('SELECT r.isadmin FROM system_users u JOIN user_role r ON r.user_role_id=u.user_role_id AND r.status=1 WHERE u.user_id=? AND u.user_status=1', array((int)$user_id))->row_array();
+if (!empty($ot_master_user['isadmin'])) {
+    foreach (array('policy'=>array('policy','Overtime Request Limits','fa-clock-o'), 'costs'=>array('cost','Overtime Cost Rates','fa-inr'), 'leaders'=>array('leaders','Overtime Reporting Leaders','fa-users')) as $cap=>$master) {
+        if (empty($ot_master_permissions[$cap])) continue;
+?>
+<div class="col-sm-4 col-md-4 col-lg-2"><a href="<?php echo page_url; ?>Overtime/settings?section=<?php echo $master[0]; ?>"><div class="report-box"><div class="text-center"><i class="fa <?php echo $master[2]; ?>" style="font-size:45px" aria-hidden="true"></i></div><p><?php echo $master[1]; ?></p></div></a></div>
+<?php } } ?>
+
 
    <?php 
 

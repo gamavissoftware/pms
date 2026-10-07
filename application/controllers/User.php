@@ -15,6 +15,7 @@ class User extends CI_Controller {
 		}
 		
 $this->load->model('User_model','user');
+$this->load->model('Salescrm_model','salescrm');
 $this->load->model('Store_model');
 $this->load->library('Master_profile_guard');
 $this->master_profile_guard->block_methods(
@@ -2057,8 +2058,8 @@ function add_workers()
 	$status = 1;
 	$remarks = "Quotation Approved.";
 	if($status==1){
-		$stage = 37;
-		$remark_title = 'Quotation Approved.';
+		$stage = $this->salescrm->get_quote_approval_stage_after_won($id, 37);
+		$remark_title = ($stage == 35) ? 'Revised Quotation Approved - Order Won.' : 'Quotation Approved.';
 			$currentDate = new DateTime();
 			$currentDate->modify('+2 days');
 			$futureDate = $currentDate->format('Y-m-d');
@@ -2071,6 +2072,9 @@ function add_workers()
 				'added_by'=>$user_id);
 			
 			$this->db->insert('progress_remarks',$data);
+			if($stage == 35){
+				$this->salescrm->notify_revised_quote_approved_for_order_won($id, $remarks);
+			}
 
 			$q = $this->db->select('b.title, b.first_name, b.last_name, contact_number')->from('leads a')->join('system_users b','a.added_by=b.user_id','left')->where('a.id',$id)->get();
 			foreach($q->result() as $row);
@@ -2078,12 +2082,21 @@ function add_workers()
 			$usercontact = $row->contact_number;
 			//$usercontact = "9718991797";
 			/*Send WhatsApp Notification*/
+			if($stage == 35){
+			$message="Dear ".$leadownername.",
+
+Your revised quotation which was earlier marked as Order Won has been approved and transferred to the Order Won stage again.
+
+Regards,
+Shubham Pack";
+			}else{
 			$message="Dear ".$leadownername.",
 
 I am pleased to inform you that your quotation has been approved ✅. Kindly proceed with the necessary processing 📝.
 
 Regards,
 Shubham Pack 📦";
+			}
 
 
 /*WhatsApp API*/
@@ -2126,8 +2139,8 @@ public function putremarktoreject(){
 	$user_id = 139;
 	$status = $this->input->post('changestatus');
 	if($status==1){
-			$stage = 37;
-		$remark_title = 'Quotation Approved.';
+			$stage = $this->salescrm->get_quote_approval_stage_after_won($id, 37);
+		$remark_title = ($stage == 35) ? 'Revised Quotation Approved - Order Won.' : 'Quotation Approved.';
 		$remarks = "Quotation Approved.";
 	}else{
 		$stage = 38;
@@ -2149,6 +2162,9 @@ public function putremarktoreject(){
 				'added_by'=>$user_id);
 			
 			$this->db->insert('progress_remarks',$data);
+			if($status==1 && $stage == 35){
+				$this->salescrm->notify_revised_quote_approved_for_order_won($id, $remarks);
+			}
 
 	if($status==1){
 
@@ -2159,12 +2175,21 @@ public function putremarktoreject(){
 			$usercontact = $row->contact_number;
 			//$usercontact = "9718991797";
 			/*Send WhatsApp Notification*/
+			if($stage == 35){
+			$message="Dear ".$leadownername.",
+
+Your revised quotation which was earlier marked as Order Won has been approved and transferred to the Order Won stage again.
+
+Regards,
+Shubham Pack";
+			}else{
 			$message="Dear ".$leadownername.",
 
 I am pleased to inform you that your quotation has been approved ✅. Kindly proceed with the necessary processing 📝.
 
 Regards,
 Shubham Pack 📦";
+			}
 
 
 /*WhatsApp API*/

@@ -7,10 +7,30 @@ class Service_visit_execution_model extends CI_Model
     private $update_table = 'service_visit_daily_updates';
     private $document_table = 'service_visit_completion_documents';
     private $version_table = 'service_visit_schedule_versions';
+    private $change_history_table = 'service_visit_change_history';
+    private $mom_share_table = 'service_visit_mom_shares';
 
     public function ensure_tables()
     {
         if ($this->db->table_exists($this->visit_table)) {
+            $this->ensure_visit_field(
+                'df_id',
+                "ALTER TABLE `{$this->visit_table}` ADD `df_id` INT(11) DEFAULT NULL AFTER `opportunity_id`"
+            );
+            $this->ensure_visit_field(
+                'manual_df_no',
+                "ALTER TABLE `{$this->visit_table}` ADD `manual_df_no` VARCHAR(100) DEFAULT NULL AFTER `df_id`"
+            );
+
+            $opportunity_column = $this->db
+                ->query("SHOW COLUMNS FROM `{$this->visit_table}` LIKE 'opportunity_id'")
+                ->row();
+            if ($opportunity_column && strtoupper((string) $opportunity_column->Null) !== 'YES') {
+                $this->db->query(
+                    "ALTER TABLE `{$this->visit_table}` MODIFY `opportunity_id` INT(11) DEFAULT NULL"
+                );
+            }
+
             $this->ensure_visit_field(
                 'updated_at',
                 "ALTER TABLE `{$this->visit_table}` ADD `updated_at` DATETIME DEFAULT NULL AFTER `created_at`"
@@ -80,6 +100,53 @@ class Service_visit_execution_model extends CI_Model
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
         }
+
+        // Every time the consolidated MOM is sent to the HOD for review and
+        // signature, the archived PDF and the delivery outcome are kept here -
+        // "was it sent, to whom, and which copy did they get" is exactly what
+        // gets asked weeks later.
+        if (!$this->db->table_exists($this->mom_share_table)) {
+            $this->db->query(
+                "CREATE TABLE IF NOT EXISTS `{$this->mom_share_table}` (
+                    `share_id` INT(11) NOT NULL AUTO_INCREMENT,
+                    `visit_id` INT(11) NOT NULL,
+                    `shared_to_user_id` INT(11) DEFAULT NULL,
+                    `shared_to_name` VARCHAR(160) DEFAULT NULL,
+                    `shared_to_email` VARCHAR(190) DEFAULT NULL,
+                    `cc_emails` VARCHAR(500) DEFAULT NULL,
+                    `mom_count` INT(11) NOT NULL DEFAULT 0,
+                    `period_from` DATE DEFAULT NULL,
+                    `period_to` DATE DEFAULT NULL,
+                    `file_name` VARCHAR(255) DEFAULT NULL,
+                    `note` TEXT DEFAULT NULL,
+                    `channel` VARCHAR(30) NOT NULL DEFAULT 'EMAIL',
+                    `status` VARCHAR(20) NOT NULL DEFAULT 'SENT',
+                    `failure_reason` TEXT DEFAULT NULL,
+                    `shared_by` INT(11) DEFAULT NULL,
+                    `created_at` DATETIME NOT NULL,
+                    PRIMARY KEY (`share_id`),
+                    KEY `idx_service_visit_mom_shares_visit` (`visit_id`, `created_at`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
+        }
+
+        if (!$this->db->table_exists($this->change_history_table)) {
+            $this->db->query(
+                "CREATE TABLE IF NOT EXISTS `{$this->change_history_table}` (
+                    `history_id` BIGINT(20) NOT NULL AUTO_INCREMENT,
+                    `visit_id` INT(11) NOT NULL,
+                    `changed_fields` VARCHAR(500) NOT NULL,
+                    `old_values` LONGTEXT DEFAULT NULL,
+                    `new_values` LONGTEXT DEFAULT NULL,
+                    `change_remarks` TEXT NOT NULL,
+                    `changed_by` INT(11) DEFAULT NULL,
+                    `changed_at` DATETIME NOT NULL,
+                    PRIMARY KEY (`history_id`),
+                    KEY `idx_service_visit_change_history_visit` (`visit_id`, `changed_at`),
+                    KEY `idx_service_visit_change_history_user` (`changed_by`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
+        }
     }
 
     public function get_visit_rows($filters = [])
@@ -93,6 +160,8 @@ class Service_visit_execution_model extends CI_Model
         $this->db->select("
             v.visit_id,
             v.opportunity_id,
+            v.df_id,
+            v.manual_df_no,
             v.engineer_id,
             v.start_date,
             v.end_date,
@@ -101,10 +170,21 @@ class Service_visit_execution_model extends CI_Model
             v.completed_on,
             v.completion_notes,
             {$visit_status_select} as visit_status,
-            so.op_no,
-            so.op_date,
+            COALESCE(NULLIF(so.op_no, ''), NULLIF(df.df_no, ''), NULLIF(v.manual_df_no, ''), CONCAT('Visit #', v.visit_id)) as op_no,
+            COALESCE(so.op_date, DATE(df.added_on)) as op_date,
+            CASE
+                WHEN v.opportunity_id IS NOT NULL AND v.opportunity_id > 0 THEN 'Order'
+                WHEN v.df_id IS NOT NULL AND v.df_id > 0 THEN 'DF'
+                ELSE 'Other DF'
+            END as reference_type,
+            df.df_description,
             TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) as engineer_full_name,
-            IFNULL(cm_spares.company_name, cm_marketing.company_name) as customer_name,
+            COALESCE(
+                NULLIF(cm_spares.company_name, ''),
+                NULLIF(cm_marketing.company_name, ''),
+                NULLIF(df_po.company_name, ''),
+                'DF Deployment'
+            ) as customer_name,
             COALESCE(NULLIF(cm_spares.contact_person, ''), NULLIF(cm_marketing.customer_name, ''), '') as customer_contact_name,
             COALESCE(NULLIF(cm_spares.contact_person_no, ''), NULLIF(cm_marketing.contact_no, ''), '') as customer_contact_no,
             COALESCE(NULLIF(cm_spares.email, ''), NULLIF(cm_marketing.email, ''), '') as customer_email,
@@ -135,6 +215,13 @@ class Service_visit_execution_model extends CI_Model
         $this->db->join('service_opportunities so', 'so.opportunity_id = v.opportunity_id', 'left');
         $this->db->join('spares_customers cm_spares', 'cm_spares.customer_id = so.customer_id', 'left');
         $this->db->join('customer_detail cm_marketing', 'cm_marketing.id = so.customer_id', 'left');
+        $this->db->join('df_release df', 'df.id = v.df_id', 'left');
+        $this->db->join(
+            'poreceived df_po',
+            'df_po.id = (SELECT MAX(df_po_latest.id) FROM poreceived df_po_latest WHERE df_po_latest.df_id = v.df_id)',
+            'left',
+            false
+        );
 
         if (!empty($filters['visit_status'])) {
             $this->db->where($visit_status_select . ' = ' . $this->db->escape($filters['visit_status']), null, false);
@@ -384,6 +471,147 @@ class Service_visit_execution_model extends CI_Model
         return array_reverse($rows);
     }
 
+    /** Record one "MOM sent to the HOD" event. Returns the new share id. */
+    public function log_mom_share($data)
+    {
+        $this->ensure_tables();
+
+        $this->db->insert($this->mom_share_table, $data);
+
+        return (int) $this->db->insert_id();
+    }
+
+    /** Newest first, with the name of whoever pressed the button. */
+    public function get_mom_shares($visit_id)
+    {
+        $this->ensure_tables();
+
+        return $this->db->select("
+                s.*,
+                TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) as shared_by_name
+            ")
+            ->from("{$this->mom_share_table} s")
+            ->join('system_users u', 'u.user_id = s.shared_by', 'left')
+            ->where('s.visit_id', (int) $visit_id)
+            ->order_by('s.share_id', 'DESC')
+            ->get()
+            ->result();
+    }
+
+    public function get_visit_change_history($visit_id)
+    {
+        $this->ensure_tables();
+
+        $rows = $this->db->select("\n                history.*,\n                TRIM(CONCAT(COALESCE(user.first_name, ''), ' ', COALESCE(user.last_name, ''))) AS changed_by_name\n            ")
+            ->from("{$this->change_history_table} history")
+            ->join('system_users user', 'user.user_id = history.changed_by', 'left')
+            ->where('history.visit_id', (int) $visit_id)
+            ->order_by('history.changed_at', 'DESC')
+            ->order_by('history.history_id', 'DESC')
+            ->get()
+            ->result();
+
+        $engineer_ids = [];
+        foreach ($rows as $row) {
+            $row->old_values = json_decode((string) $row->old_values, true) ?: [];
+            $row->new_values = json_decode((string) $row->new_values, true) ?: [];
+            $row->changed_by_name = trim((string) $row->changed_by_name);
+            foreach ([$row->old_values, $row->new_values] as $values) {
+                if (!empty($values['engineer_id'])) {
+                    $engineer_ids[] = (int) $values['engineer_id'];
+                }
+            }
+        }
+
+        $engineer_names = [];
+        $engineer_ids = array_values(array_unique(array_filter($engineer_ids)));
+        if (!empty($engineer_ids)) {
+            $engineers = $this->db->select("user_id, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) AS full_name")
+                ->from('system_users')
+                ->where_in('user_id', $engineer_ids)
+                ->get()
+                ->result();
+            foreach ($engineers as $engineer) {
+                $engineer_names[(int) $engineer->user_id] = trim((string) $engineer->full_name);
+            }
+        }
+
+        foreach ($rows as $row) {
+            foreach (['old_values', 'new_values'] as $value_key) {
+                if (!empty($row->{$value_key}['engineer_id'])) {
+                    $engineer_id = (int) $row->{$value_key}['engineer_id'];
+                    $row->{$value_key}['engineer_id'] = !empty($engineer_names[$engineer_id])
+                        ? $engineer_names[$engineer_id]
+                        : 'Engineer #' . $engineer_id;
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    public function modify_visit_assignment($visit_id, array $updates, $change_remarks, $user_id = null)
+    {
+        $this->ensure_tables();
+
+        $visit_id = (int) $visit_id;
+        $change_remarks = trim((string) $change_remarks);
+        $allowed_fields = ['engineer_id', 'start_date', 'end_date', 'visit_type', 'remarks'];
+        $updates = array_intersect_key($updates, array_flip($allowed_fields));
+
+        if ($visit_id <= 0 || $change_remarks === '' || empty($updates)) {
+            return ['success' => false, 'message' => 'A visit change and modification remarks are required.'];
+        }
+
+        $visit = $this->db->select('visit_id, engineer_id, start_date, end_date, visit_type, remarks')
+            ->from($this->visit_table)
+            ->where('visit_id', $visit_id)
+            ->get()
+            ->row_array();
+        if (empty($visit)) {
+            return ['success' => false, 'message' => 'Visit not found.'];
+        }
+
+        $old_values = [];
+        $new_values = [];
+        foreach ($updates as $field => $value) {
+            $old_value = isset($visit[$field]) ? (string) $visit[$field] : '';
+            $new_value = (string) $value;
+            if ($old_value !== $new_value) {
+                $old_values[$field] = $old_value;
+                $new_values[$field] = $new_value;
+            }
+        }
+
+        if (empty($new_values)) {
+            return ['success' => false, 'unchanged' => true, 'message' => 'No visit details were changed.'];
+        }
+
+        $timestamp = date('Y-m-d H:i:s');
+        if ($this->db->field_exists('updated_at', $this->visit_table)) {
+            $updates['updated_at'] = $timestamp;
+        }
+
+        $this->db->trans_start();
+        $this->db->where('visit_id', $visit_id)->update($this->visit_table, $updates);
+        $this->db->insert($this->change_history_table, [
+            'visit_id' => $visit_id,
+            'changed_fields' => implode(', ', array_keys($new_values)),
+            'old_values' => json_encode($old_values),
+            'new_values' => json_encode($new_values),
+            'change_remarks' => $change_remarks,
+            'changed_by' => !empty($user_id) ? (int) $user_id : null,
+            'changed_at' => $timestamp,
+        ]);
+        $this->db->trans_complete();
+
+        if (!$this->db->trans_status()) {
+            return ['success' => false, 'message' => 'The visit could not be modified.'];
+        }
+
+        return ['success' => true, 'message' => 'Visit modified and change history saved.'];
+    }
+
     public function extend_visit_schedule($visit_id, $new_end_date, $reason, $user_id = null)
     {
         $this->ensure_tables();
@@ -479,6 +707,10 @@ class Service_visit_execution_model extends CI_Model
             $visit->document_count = (int) ($visit->document_count ?? 0);
             $visit->schedule_version = max(1, (int) ($visit->schedule_version ?? 0));
             $visit->extension_count = max(0, $visit->schedule_version - 1);
+            $visit->reference_key = strtolower((string) $visit->reference_type) . ':'
+                . ((int) $visit->opportunity_id > 0
+                    ? (int) $visit->opportunity_id
+                    : ((int) $visit->df_id > 0 ? (int) $visit->df_id : strtolower(trim((string) $visit->manual_df_no))));
         }
 
         return $visits;

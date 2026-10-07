@@ -10217,6 +10217,7 @@ function customerpendingforpaymenttermsapproval() {
 
 		$this->db->insert('customer_detail',$dr);
 		$id=$this->db->insert_id();
+		$this->sync_customer_to_sap('marketing', $id);
 		echo $this->db->affected_rows()."~".$id;
 		
 	}
@@ -10318,6 +10319,7 @@ function add_new_ajax_customer_with_multiple_Record()
                 echo "An error occurred while saving data.";
                 $this->db->trans_rollback();
             } else {
+                $this->sync_customer_to_sap('marketing', $customer_id);
                 echo "Data successfully saved.";
             }
         }
@@ -10384,6 +10386,7 @@ function add_new_ajax_customer_with_multiple_Record()
 				//echo "<pre>"; print_r($dr); exit;
 		$this->db->insert('customer_detail',$dr);
 		$id=$this->db->insert_id();
+		$this->sync_customer_to_sap('marketing', $id);
 		
 
 		$this->session->set_flashdata('message','<div class="alert alert-info">Thank you, record successfully added.</div>');
@@ -10392,6 +10395,23 @@ function add_new_ajax_customer_with_multiple_Record()
 		///}
 	}
 	
+	}
+
+	private function sync_customer_to_sap($source, $customer_id)
+	{
+		$customer_id = (int) $customer_id;
+		if ($customer_id <= 0) {
+			return;
+		}
+
+		$this->load->library('Sap_service');
+		$result = $source === 'spares'
+			? $this->sap_service->sync_spares_customer($customer_id)
+			: $this->sap_service->sync_marketing_customer($customer_id);
+
+		if (empty($result['success']) && empty($result['skipped'])) {
+			log_message('error', 'SAP customer sync failed for ' . $source . ' customer ' . $customer_id . ': ' . (isset($result['message']) ? $result['message'] : 'Unknown error'));
+		}
 	}
 	
 	public function viewyourcustomers()
@@ -10591,6 +10611,8 @@ public function addcustomerinformationindb(){
 		);
 
 	$this->db->insert('customer_detail',$data);
+	$customer_id = $this->db->insert_id();
+	$this->sync_customer_to_sap('marketing', $customer_id);
 
 	$this->session->set_flashdata('message','<div class="alert alert-info">Thank you, record successfully updated.</div>');
 redirect(page_url.'Customer/viewyourcustomers');

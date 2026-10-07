@@ -2684,6 +2684,10 @@ function add_export_pi()
 	}
 	}
 
+	$this->load->model('Salescrm_model', 'salescrm');
+	$this->load->helper('export_pi');
+	export_pi_save_commercial($this, $lid);
+
 	redirect(page_url.'Formats/export_performa_invoice/'.$po_id.'/'.$lead_id);
 
 
@@ -2843,7 +2847,7 @@ function update_export_pi()
 		'bill_state'=>$this->input->post('bill_to_state'),
 		'bil_state_code'=>$this->input->post('bill_to_state_code'),
 		'bill_gst'=>$this->input->post('bill_to_gst_no'),
-		'bill_pan'=>$this->input->post('bill_to_pan_no'),
+		'bill_iec'=>$this->input->post('bill_to_iec_no'),
 		'ship_to_name'=>$this->input->post('ship_to_name'),
 		'ship_address'=>$this->input->post('ship_to_address'),
 		'ship_state'=>$this->input->post('ship_to_state'),
@@ -2920,6 +2924,10 @@ function update_export_pi()
 	}
 	}
 	
+	$this->load->model('Salescrm_model', 'salescrm');
+	$this->load->helper('export_pi');
+	export_pi_save_commercial($this, $record_id);
+
 	redirect(page_url.'Formats/export_performa_invoice/'.$po_id.'/'.$lead_id);
 
 

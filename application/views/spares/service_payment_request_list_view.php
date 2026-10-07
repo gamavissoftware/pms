@@ -428,13 +428,20 @@ $can_approve_service_payment = !empty($payment_permissions['can_approve']);
                                         </td>
                                         <td>
                                             <div class="request-code">₹ <?php echo number_format((float) $request->amount, 2); ?></div>
+                                            <?php if (!empty($request->amount_revised)): ?>
+                                                <div class="subtext" style="color:#b45309; font-weight:600;">
+                                                    HOD approved: ₹ <?php echo number_format((float) $request->payable_amount, 2); ?>
+                                                </div>
+                                            <?php elseif (trim((string) $request->status) === 'Approved'): ?>
+                                                <div class="subtext" style="color:#15803d; font-weight:600;">Approved as requested</div>
+                                            <?php endif; ?>
                                             <div class="subtext">PO Value: ₹ <?php echo number_format((float) $request->po_amount, 2); ?></div>
                                         </td>
                                         <td>
                                             <div class="subtext text-limit text-limit-3" title="<?php echo htmlspecialchars($request->purpose); ?>"><?php echo nl2br(htmlspecialchars($request->purpose)); ?></div>
                                             <?php if (!empty($request->extension_reason)): ?>
                                                 <div class="subtext text-limit text-limit-3" style="margin-top:8px;" title="<?php echo htmlspecialchars($request->extension_reason); ?>">
-                                                    <strong>Linked Request Note:</strong><br>
+                                                    <strong><?php echo !empty($request->parent_request_code) ? 'Linked Request Note' : 'Extension Reason'; ?>:</strong><br>
                                                     <?php echo nl2br(htmlspecialchars($request->extension_reason)); ?>
                                                 </div>
                                             <?php endif; ?>
@@ -476,10 +483,10 @@ $can_approve_service_payment = !empty($payment_permissions['can_approve']);
                                                     </a>
                                                 <?php endif; ?>
                                                 <?php if ($can_approve_service_payment && !empty($is_approval_view) && trim((string) $request->status) === 'Pending HOD Approval'): ?>
-                                                    <button type="button" class="btn btn-success btn-xs approval-btn" data-id="<?php echo (int) $request->request_id; ?>" data-action="approved">
+                                                    <button type="button" class="btn btn-success btn-xs approval-btn" data-id="<?php echo (int) $request->request_id; ?>" data-action="approved" data-amount="<?php echo number_format((float) $request->amount, 2, '.', ''); ?>" data-code="<?php echo htmlspecialchars($request->request_code); ?>">
                                                         <i class="fa fa-check"></i> Approve
                                                     </button>
-                                                    <button type="button" class="btn btn-danger btn-xs approval-btn" data-id="<?php echo (int) $request->request_id; ?>" data-action="rejected">
+                                                    <button type="button" class="btn btn-danger btn-xs approval-btn" data-id="<?php echo (int) $request->request_id; ?>" data-action="rejected" data-amount="<?php echo number_format((float) $request->amount, 2, '.', ''); ?>" data-code="<?php echo htmlspecialchars($request->request_code); ?>">
                                                         <i class="fa fa-times"></i> Reject
                                                     </button>
                                                 <?php endif; ?>
@@ -506,6 +513,17 @@ $can_approve_service_payment = !empty($payment_permissions['can_approve']);
                     <div class="modal-body">
                         <input type="hidden" name="request_id" id="approval_request_id">
                         <input type="hidden" name="action" id="approval_action">
+                        <!--
+                            The HOD decides the figure, not just the yes/no. The box opens
+                            pre-filled with what was asked for, so approving unchanged is
+                            still one click; a changed figure is stored as the approved
+                            amount and the requested amount is kept beside it.
+                        -->
+                        <div class="form-group" id="approvalAmountWrap">
+                            <label>Approved Amount (₹)</label>
+                            <input type="number" class="form-control" name="approved_amount" id="approval_amount" min="0.01" step="0.01">
+                            <p class="subtext" id="approvalAmountHint" style="margin-bottom:0;"></p>
+                        </div>
                         <div class="form-group">
                             <label>Remarks</label>
                             <textarea class="form-control" name="remarks" id="approval_remarks" rows="4" placeholder="Add approval note or rejection reason"></textarea>
@@ -542,15 +560,30 @@ $can_approve_service_payment = !empty($payment_permissions['can_approve']);
                 $('.dataTables_filter input').addClass('form-control input-sm');
             }
 
+            var requestedAmount = 0;
+
+            function formatAmount(amount) {
+                return '₹ ' + Number(amount || 0).toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
+
             $('.approval-btn').on('click', function() {
                 var requestId = $(this).data('id');
                 var action = $(this).data('action');
                 var isReject = action === 'rejected';
+                requestedAmount = parseFloat($(this).data('amount')) || 0;
 
                 $('#approval_request_id').val(requestId);
                 $('#approval_action').val(action);
                 $('#approval_remarks').val('');
-                $('#approvalHelpText').text(isReject ? 'Rejection remarks are required so the requester knows what to fix.' : 'Approval remarks are optional but helpful for audit clarity.');
+                // Rejecting does not sanction a figure, so the amount box is only
+                // part of the approve decision.
+                $('#approvalAmountWrap').toggle(!isReject);
+                $('#approval_amount').val(isReject ? '' : requestedAmount.toFixed(2));
+                $('#approvalAmountHint').text(isReject ? '' : 'Requested: ' + formatAmount(requestedAmount) + '. Change this to approve a different amount.');
+                $('#approvalHelpText').text(isReject ? 'Rejection remarks are required so the requester knows what to fix.' : 'Approval remarks are optional, but required if you change the amount.');
                 $('#approvalSubmitBtn')
                     .removeClass('btn-primary btn-danger btn-success')
                     .addClass(isReject ? 'btn-danger' : 'btn-success')
@@ -567,6 +600,19 @@ $can_approve_service_payment = !empty($payment_permissions['can_approve']);
                 if (action === 'rejected' && remarks === '') {
                     alert('Please enter rejection remarks.');
                     return;
+                }
+
+                if (action === 'approved') {
+                    var approvedAmount = parseFloat($('#approval_amount').val());
+                    if (!(approvedAmount > 0)) {
+                        alert('Please enter an approved amount greater than zero.');
+                        return;
+                    }
+
+                    if (Math.abs(approvedAmount - requestedAmount) > 0.009 && remarks === '') {
+                        alert('Please add remarks explaining the revised amount.');
+                        return;
+                    }
                 }
 
                 $.ajax({

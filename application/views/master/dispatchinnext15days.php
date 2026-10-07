@@ -1,4 +1,6 @@
 <?php
+$this->load->helper('df_delay');
+$currentDfDelays = df_current_delay_counts($this->db);
 $CIA =& get_instance();
 $CIA->load->model('Task_model');
 
@@ -233,12 +235,12 @@ if ($main_q->num_rows() > 0) {
 
         $show = 1;
         if ($reportid != '') {
-            $show = ($delayPercent > 0) ? 1 : 0;
+            $show = !empty($currentDfDelays[(int)$dfId]) ? 1 : 0;
         }
 
         if ($show == 1) {
 
-            if ($delayPercent > 0) {
+            if (!empty($currentDfDelays[(int)$dfId])) {
                 $totalDelayedDf++;
             }
 
@@ -253,6 +255,7 @@ if ($main_q->num_rows() > 0) {
 
             $rowsData[] = array(
                 'id' => $dfId,
+                'has_current_delay' => !empty($currentDfDelays[(int)$dfId]),
                 'df_no' => $rows->df_no,
                 'df_upload' => $rows->df_upload,
                 'company_name' => $rows->company_name,
@@ -907,7 +910,7 @@ $avgProgress = ($totalDf > 0) ? round($totalProgress / $totalDf) : 0;
                                         </a>
                                     <?php } ?>
 
-                                    <a href="<?php echo page_url;?>Task/dfgantchartNew/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
+                                    <a href="<?php echo page_url;?>gantt/<?php echo $row['id'];?>" target="_blank" class="btn btn-warning btn-xs btn-action">
                                         <i class="fa fa-bar-chart"></i> Gantt
                                     </a>
                                 </td>

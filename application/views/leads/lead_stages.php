@@ -865,6 +865,32 @@ foreach($q->result() as $LOGO);
 </form>
 </div>
 
+<?php if ((int) $lead_stage === 38) { ?>
+<div id="quotationRejectionCommentModal" class="modal fade" role="dialog">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title" style="font-weight:bold;">Send Comment to Shubham Sir</h4>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="qrLeadId" value="">
+                <div class="alert alert-info" id="qrContext" style="margin-bottom:15px;"></div>
+                <div class="form-group">
+                    <label>Comment <span style="color:red;">*</span></label>
+                    <textarea id="qrComment" class="form-control" rows="5" placeholder="Mention why this rejected quotation should be reviewed."></textarea>
+                </div>
+                <div id="qrMessage"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="sendQrComment">Send to Shubham Sir</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php } ?>
+
 <script type="text/javascript">
 function approvalwindow(id){
 $("#updateprogress").modal('show');
@@ -999,6 +1025,55 @@ dom: 'lBfrtip',
             todayHighlight: true,
             format: 'dd-mm-yyyy'
         });
+
+        <?php if ((int) $lead_stage === 38) { ?>
+        $(document).on('click', '.quote-rejection-comment-btn', function () {
+            $('#qrLeadId').val($(this).data('lead-id'));
+            $('#qrComment').val('');
+            $('#qrMessage').html('');
+            $('#qrContext').html('<strong>Opportunity:</strong> ' + ($(this).data('opp-no') || '') + '<br><strong>Company:</strong> ' + ($(this).data('company') || ''));
+            $('#quotationRejectionCommentModal').modal('show');
+        });
+
+        $('#sendQrComment').on('click', function () {
+            var btn = $(this);
+            var comment = $.trim($('#qrComment').val());
+            if (comment === '') {
+                $('#qrMessage').html('<div class="alert alert-danger">Please enter a comment.</div>');
+                return;
+            }
+            btn.prop('disabled', true).text('Sending...');
+            $.ajax({
+                url: '<?php echo page_url; ?>Leads/submit_quotation_rejection_comment',
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    lead_id: $('#qrLeadId').val(),
+                    comment: comment,
+                    '<?php echo $this->security->get_csrf_token_name(); ?>': '<?php echo $this->security->get_csrf_hash(); ?>'
+                },
+                success: function (res) {
+                    if (res && res.ok) {
+                        $('#qrMessage').html('<div class="alert alert-success">' + res.message + '</div>');
+                        $('#example').DataTable().ajax.reload(null, false);
+                        setTimeout(function () {
+                            $('#quotationRejectionCommentModal').modal('hide');
+                        }, 900);
+                    } else {
+                        $('#qrMessage').html('<div class="alert alert-danger">' + ((res && res.message) ? res.message : 'Could not send comment.') + '</div>');
+                    }
+                },
+                error: function (xhr) {
+                    var msg = 'Could not send comment.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    $('#qrMessage').html('<div class="alert alert-danger">' + msg + '</div>');
+                },
+                complete: function () {
+                    btn.prop('disabled', false).text('Send to Shubham Sir');
+                }
+            });
+        });
+        <?php } ?>
 
 });
 

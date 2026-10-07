@@ -12,12 +12,16 @@ $upcoming_followup = $DI->Dashboard_model->getServiceFollowupCounts(3);
 $payment_permissions = isset($payment_permissions) && is_array($payment_permissions) ? $payment_permissions : array();
 $can_create_service_payment = !empty($payment_permissions['can_create']);
 $can_approve_service_payment = !empty($payment_permissions['can_approve']);
+$company_orders = isset($company_orders) && is_array($company_orders) ? $company_orders : array();
+$company_order_counts = array_map('intval', array_column($company_orders, 'value'));
+$company_order_max = !empty($company_order_counts) ? max($company_order_counts) : 0;
+$company_order_total = array_sum($company_order_counts);
 
 if (!function_exists('get_service_status_color')) {
     function get_service_status_color($name) {
         $name = strtolower($name);
         if (strpos($name, 'won') !== false) return 'kpi-status-won';
-        if (strpos($name, 'rejected') !== false) return 'kpi-status-lost';
+        if (strpos($name, 'rejected') !== false || strpos($name, 'cancelled') !== false) return 'kpi-status-lost';
         if (strpos($name, 'approval') !== false) return 'kpi-status-progress';
         return 'kpi-status-active';
     }
@@ -27,6 +31,7 @@ if (!function_exists('get_service_icon')) {
     function get_service_icon($name) {
         $name = strtolower($name);
         if (strpos($name, 'new') !== false) return 'fa-star';
+        if (strpos($name, 'cancelled') !== false) return 'fa-ban';
         if (strpos($name, 'quotation') !== false) return 'fa-file-text-o';
         if (strpos($name, 'approval') !== false) return 'fa-check-square-o';
         if (strpos($name, 'won') !== false) return 'fa-trophy';
@@ -72,6 +77,15 @@ if (!function_exists('get_service_icon')) {
 
         .sidebar-kpi { display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 10px; background: #fff; border-left: 4px solid var(--primary); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-decoration: none !important; }
         .chart-container { position: relative; height: 280px; width: 100%; }
+        .company-ranking { height: 280px; overflow-y: auto; padding-right: 6px; }
+        .company-rank-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 38px; gap: 9px; align-items: center; padding: 8px 0; border-bottom: 1px solid #eef2f7; }
+        .company-rank-row:last-child { border-bottom: 0; }
+        .company-rank-number { width: 25px; height: 25px; border-radius: 7px; background: #edf4ff; color: #3971c1; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+        .company-rank-name { color: #34495e; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+        .company-rank-track { height: 7px; background: #edf1f6; border-radius: 8px; overflow: hidden; }
+        .company-rank-fill { height: 100%; min-width: 6px; background: linear-gradient(90deg, #4a81d4, #65a5f5); border-radius: 8px; }
+        .company-rank-count { background: #e8f8ef; color: #16824b; border-radius: 12px; padding: 4px 5px; text-align: center; font-size: 11px; font-weight: 700; }
+        .company-ranking-empty { height: 250px; display: flex; align-items: center; justify-content: center; color: #8392a5; font-size: 12px; }
         
         /* Dashboard Calendar Small Version */
         #dashCalendar { font-size: 11px; max-height: 500px; }
@@ -116,9 +130,33 @@ if (!function_exists('get_service_icon')) {
                     <div class="row">
                         <div class="col-md-6">
                             <div class="modern-card">
-                                <h5 style="font-weight: 700;"><i class="fa fa-bar-chart text-primary"></i> Engineer Earning (WON)</h5>
-                                <div class="chart-container">
-                                    <canvas id="engineerBarChart"></canvas>
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <h5 style="font-weight: 700;"><i class="fa fa-building-o text-primary"></i> Company-wise Won Orders</h5>
+                                    <span class="badge badge-primary"><?php echo (int) $company_order_total; ?> Orders</span>
+                                </div>
+                                <div class="company-ranking">
+                                    <?php if (!empty($company_orders)): ?>
+                                        <?php foreach ($company_orders as $index => $company_order): ?>
+                                            <?php
+                                            $order_count = (int) $company_order->value;
+                                            $bar_width = $company_order_max > 0 ? round(($order_count / $company_order_max) * 100) : 0;
+                                            ?>
+                                            <div class="company-rank-row">
+                                                <div class="company-rank-number"><?php echo $index + 1; ?></div>
+                                                <div>
+                                                    <div class="company-rank-name" title="<?php echo html_escape($company_order->label); ?>">
+                                                        <?php echo html_escape($company_order->label); ?>
+                                                    </div>
+                                                    <div class="company-rank-track">
+                                                        <div class="company-rank-fill" style="width: <?php echo (int) $bar_width; ?>%;"></div>
+                                                    </div>
+                                                </div>
+                                                <div class="company-rank-count"><?php echo $order_count; ?></div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <div class="company-ranking-empty">No won orders available.</div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                            
@@ -245,23 +283,7 @@ if (!function_exists('get_service_icon')) {
         });
         calendar.render();
 
-        // 2. Engineer Earning Bar Chart
-        const barCtx = document.getElementById('engineerBarChart').getContext('2d');
-        new Chart(barCtx, {
-            type: 'bar',
-            data: {
-                labels: <?php echo json_encode(array_column($engineer_earnings ?? array(), 'label')); ?>,
-                datasets: [{
-                    label: 'Revenue Won',
-                    data: <?php echo json_encode(array_column($engineer_earnings ?? array(), 'value')); ?>,
-                    backgroundColor: '#4a81d4',
-                    borderRadius: 4
-                }]
-            },
-            options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
-        });
-
-        // 3. Business Split Pie Chart
+        // 2. Business Split Pie Chart
         const pieCtx = document.getElementById('businessPieChart').getContext('2d');
         new Chart(pieCtx, {
             type: 'doughnut',

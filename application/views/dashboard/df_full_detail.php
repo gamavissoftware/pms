@@ -760,6 +760,15 @@
             .ticket-summary{ grid-template-columns: 1fr; }
         }
 
+        /* The overtime tab shows a fourth card when the viewer may see cost. */
+        .ticket-summary.ot-kpis{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @media (max-width: 1199px){
+            .ticket-summary.ot-kpis{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 767px){
+            .ticket-summary.ot-kpis{ grid-template-columns: 1fr; }
+        }
+
         .ticket-card{
             border-radius: 22px;
             border: 1px solid #e8eef8;
@@ -933,6 +942,13 @@
                                 </svg>
                                 <span class="nav-text">Help Tickets</span>
                             </button>
+
+                            <button class="tab-button" data-tab="dfOvertime" type="button">
+                                <svg class="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span class="nav-text">Approved Overtime</span>
+                            </button>
                         </nav>
                     </aside>
 
@@ -1049,6 +1065,16 @@
                                 </div>
                             </div>
                             <div id="helpTicketsContent"></div>
+                        </div>
+
+                        <div id="dfOvertime" class="content-section">
+                            <div class="section-head">
+                                <div>
+                                    <div class="section-title">Approved Overtime</div>
+                                    <div class="section-subtitle">Overtime approved against this DF, one row per person, with the day-wise rollup. Pending and rejected requests are not shown.</div>
+                                </div>
+                            </div>
+                            <div id="dfOvertimeContent"></div>
                         </div>
                     </section>
                 </div>
@@ -1261,6 +1287,7 @@
             $('#dfDownloadContent').html('<div class="skeleton h-72 w-full mt-5"></div>');
             $('#poDownloadContent').html('<div class="skeleton h-72 w-full mt-5"></div>');
             $('#helpTicketsContent').html('<div class="skeleton h-72 w-full mt-5"></div>');
+            $('#dfOvertimeContent').html('<div class="skeleton h-72 w-full mt-5"></div>');
         }
 
         function applyVarianceFilter() {
@@ -1463,7 +1490,7 @@
             }
 
             var actionButtons = '';
-            actionButtons += '<a href="' + pageBaseUrl + 'Task/finalgantchartWithDetails/' + parseInt(dfInfo.id || 0, 10) + '" target="_blank" class="ghost-btn">Open Gantt</a>';
+            actionButtons += '<a href="' + pageBaseUrl + 'gantt/' + parseInt(dfInfo.id || 0, 10) + '" target="_blank" class="ghost-btn">Open Gantt</a>';
             actionButtons += dfInfo.df_download_url
                 ? '<a href="' + escapeHtml(dfInfo.df_download_url) + '" target="_blank" class="ghost-btn">DF File</a>'
                 : '<span class="ghost-btn disabled">DF File Missing</span>';
@@ -1758,7 +1785,7 @@
             html += '      <div class="section-title" style="font-size:20px;">Quick Actions</div>';
             html += '      <div class="section-subtitle">Open related views or supporting files from one place.</div>';
             html += '      <div class="flex flex-col gap-3 mt-5">';
-            html += '          <a href="' + pageBaseUrl + 'Task/finalgantchartWithDetails/' + parseInt(dfInfo.id || 0, 10) + '" target="_blank" class="primary-btn" style="height:48px;justify-content:flex-start;">Open Gantt View</a>';
+            html += '          <a href="' + pageBaseUrl + 'gantt/' + parseInt(dfInfo.id || 0, 10) + '" target="_blank" class="primary-btn" style="height:48px;justify-content:flex-start;">Open Gantt View</a>';
             html += dfInfo.df_download_url
                 ? '          <a href="' + escapeHtml(dfInfo.df_download_url) + '" target="_blank" class="ghost-btn" style="justify-content:flex-start;">Download DF File</a>'
                 : '          <span class="ghost-btn disabled" style="justify-content:flex-start;">DF Attachment Not Available</span>';
@@ -1864,6 +1891,93 @@
             $('#helpTicketsContent').html(html);
         }
 
+        function overtimeHours(minutes) {
+            return (parseInt(minutes || 0, 10) / 60).toFixed(2);
+        }
+
+        // Indian digit grouping, matching the overtime module's own totals.
+        function overtimeMoney(amount) {
+            var value = Math.round((parseFloat(amount) || 0) * 100) / 100;
+            var negative = value < 0;
+            var parts = Math.abs(value).toFixed(2).split('.');
+            var whole = parts[0];
+            if (whole.length > 3) {
+                var last = whole.slice(-3);
+                whole = whole.slice(0, -3).replace(/\B(?=(\d{2})+$)/g, ',') + ',' + last;
+            }
+            return (negative ? '-' : '') + whole + '.' + parts[1];
+        }
+
+        function renderOvertime(data) {
+            var overtime = data.overtime || {};
+            var rows = overtime.rows || [];
+            var byDay = overtime.by_day || [];
+            var summary = overtime.summary || {};
+            var showCost = !!overtime.show_cost;
+            var html = '';
+
+            if (!overtime.available) {
+                $('#dfOvertimeContent').html('<div class="empty-state mt-5">The overtime module is not installed on this server yet.</div>');
+                return;
+            }
+
+            html += '<div class="ticket-summary' + (showCost ? ' ot-kpis' : '') + '">';
+            html += '  <div class="kpi-card"><div class="kpi-label">Overtime Occasions</div><div class="kpi-value text-sky-600">' + escapeHtml(String(parseInt(summary.occasions || 0, 10))) + '</div><div class="kpi-sub">Separate approved requests</div></div>';
+            html += '  <div class="kpi-card"><div class="kpi-label">People Engaged</div><div class="kpi-value text-teal-600">' + escapeHtml(String(parseInt(summary.people_entries || 0, 10))) + '</div><div class="kpi-sub">One entry per person per request</div></div>';
+            html += '  <div class="kpi-card"><div class="kpi-label">Approved Person-Hours</div><div class="kpi-value text-emerald-600">' + escapeHtml(overtimeHours(summary.person_minutes)) + '</div><div class="kpi-sub">4 people x 2 hours = 8 hours</div></div>';
+            if (showCost) {
+                html += '  <div class="kpi-card"><div class="kpi-label">Overhead Cost</div><div class="kpi-value text-amber-600">&#8377; ' + escapeHtml(overtimeMoney(summary.total_cost)) + '</div><div class="kpi-sub">At the rate stored on each row</div></div>';
+            }
+            html += '</div>';
+
+            if (!rows.length) {
+                html += '<div class="empty-state mt-5">No approved overtime is recorded against this DF.</div>';
+                $('#dfOvertimeContent').html(html);
+                return;
+            }
+
+            html += '<div class="section-head mt-6"><div><div class="section-title" style="font-size:18px;">Day-wise Overtime</div><div class="section-subtitle">How often overtime was run on this DF, and what it added up to.</div></div></div>';
+            html += '<div class="table-shell"><div class="table-scroll"><table class="report-table"><thead><tr>';
+            html += '<th>Date</th><th>Occasions</th><th>People</th><th>Person-Hours</th>' + (showCost ? '<th>Cost</th>' : '') + '</tr></thead><tbody>';
+            byDay.forEach(function (day) {
+                html += '<tr>';
+                html += '<td>' + formatDate(day.day) + '</td>';
+                html += '<td>' + escapeHtml(String(parseInt(day.occasions || 0, 10))) + '</td>';
+                html += '<td>' + escapeHtml(String(parseInt(day.people_entries || 0, 10))) + '</td>';
+                html += '<td>' + escapeHtml(overtimeHours(day.person_minutes)) + '</td>';
+                if (showCost) html += '<td>&#8377; ' + escapeHtml(overtimeMoney(day.total_cost)) + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table></div></div>';
+
+            html += '<div class="section-head mt-6"><div><div class="section-title" style="font-size:18px;">Person-wise Detail</div><div class="section-subtitle">Every person approved for overtime on this DF' + (summary.last_approved_at ? ', last approved ' + escapeHtml(formatDateTime(summary.last_approved_at)) : '') + '.</div></div></div>';
+            html += '<div class="table-shell"><div class="table-scroll"><table class="report-table"><thead><tr>';
+            html += '<th>Request</th><th>Person</th><th>Department</th><th>Overtime Period</th><th>Hours</th>' + (showCost ? '<th>Cost</th>' : '') + '<th>Requested By</th><th>Approved By</th></tr></thead><tbody>';
+            rows.forEach(function (row) {
+                html += '<tr>';
+                html += '<td>' + escapeHtml(row.request_code || '') + (row.work_reference ? '<br><span class="text-[11px] text-slate-400">' + escapeHtml(row.work_reference) + '</span>' : '') + '</td>';
+                html += '<td>' + escapeHtml(row.person_name || '') + '<br><span class="text-[11px] text-slate-400">' + escapeHtml(row.person_type || '') + '</span></td>';
+                html += '<td>' + textOrDefault(row.department, 'N/A') + '</td>';
+                html += '<td>' + formatDateTime(row.start_at) + '<br><span class="text-[11px] text-slate-400">to ' + formatDateTime(row.end_at) + '</span></td>';
+                html += '<td>' + escapeHtml(overtimeHours(row.minutes)) + '</td>';
+                if (showCost) {
+                    html += '<td>' + (parseFloat(row.hourly_rate || 0) > 0
+                        ? '&#8377; ' + escapeHtml(overtimeMoney(row.cost_amount)) + '<br><span class="text-[11px] text-slate-400">@ &#8377;' + escapeHtml(overtimeMoney(row.hourly_rate)) + '/hr</span>'
+                        : '<span class="text-slate-400">No rate</span>') + '</td>';
+                }
+                html += '<td>' + textOrDefault(row.requested_by, 'N/A') + '</td>';
+                html += '<td>' + textOrDefault(row.approved_by, 'N/A') + '<br><span class="text-[11px] text-slate-400">' + formatDateTime(row.approved_at) + '</span></td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table></div></div>';
+
+            if (!showCost) {
+                html += '<div class="section-subtitle mt-4">Overtime cost is hidden here because your account does not hold the Overtime Reports or Overtime Cost Rates permission.</div>';
+            }
+
+            $('#dfOvertimeContent').html(html);
+        }
+
         function updateTopKpis(data, selectedLabel) {
             var metrics = data.metrics || {};
             var summary = data.summary || {};
@@ -1913,6 +2027,7 @@
                     renderDfDocument(data);
                     renderPoStatus(data);
                     renderHelpTickets(data);
+                    renderOvertime(data);
                 },
                 error: function () {
                     destroyCharts();
@@ -1922,6 +2037,7 @@
                     $('#dfDownloadContent').html('<div class="empty-state mt-5">Document panel could not be loaded.</div>');
                     $('#poDownloadContent').html('<div class="empty-state mt-5">PO panel could not be loaded.</div>');
                     $('#helpTicketsContent').html('<div class="empty-state mt-5">Ticket panel could not be loaded.</div>');
+                    $('#dfOvertimeContent').html('<div class="empty-state mt-5">Overtime panel could not be loaded.</div>');
                     $('#overallTimelineLabel').text('Timeline not available');
                     $('#overallTimelineMeta').text('—');
                     $('#overallTimelineStart').text('—');

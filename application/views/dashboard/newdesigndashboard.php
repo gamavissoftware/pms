@@ -2,6 +2,15 @@
 $loggedinuserdepartment = $this->session->userdata['logged_in']['department_id'];
 $user_id = $this->session->userdata['logged_in']['user_id'];
 
+// PO download visibility: MARKETING (9), ADMINISTRATOR (10) and ACCOUNTS (20)
+// departments only, plus the explicitly allowed user ids. Everyone else gets the
+// DF download only. Used by both the "All Running DFs" table and the
+// "Running DF Task-Wise Delay Report" table.
+$po_download_department_ids = array(9, 10, 20);
+$po_download_user_ids       = array(139);
+$can_download_po = in_array((int) $loggedinuserdepartment, $po_download_department_ids, true)
+                || in_array((int) $user_id, $po_download_user_ids, true);
+
 $dynachem_id = $this->session->userdata['logged_in']['dynachem_id'];
 $is_admin = 0;
 $user_role = $this->session->userdata['logged_in']['role'];
@@ -204,7 +213,7 @@ $today = date('Y-m-d');
 $next15Date = date('Y-m-d', strtotime('+15 days'));
 $currentUserId = $this->session->userdata['logged_in']['user_id'];
 $currentDepartmentId = $this->session->userdata['logged_in']['department_id'];
-$dfDashboardAdminUserIds = array(161, 139, 61, 162, 167);
+$dfDashboardAdminUserIds = array(161, 114, 139, 61, 162, 167);
 $isDfDashboardAdmin = in_array((int) $currentUserId, $dfDashboardAdminUserIds, true);
 
 $visibleDepartmentIds = array();
@@ -311,39 +320,26 @@ if ($usertyp == 1) {
     }
 }
 
-/* Running DF Count */
+/* Running DF Count - company-wide for every dashboard account */
 $this->db->select('df.id');
 $this->db->from('df_release df');
 $this->db->where('df.on_hold', 0);
 $this->db->where('df.df_status', 0);
-
-if (!$isDfDashboardAdmin) {
-    // Keep this card in sync with Task/dfreleasedashboard: a marketing user
-    // sees only DFs owned by them, not other owners' DFs with assigned tasks.
-    $this->db->join('poreceived po', 'po.df_id = df.id', 'inner');
-    $this->db->where('po.added_by', $currentUserId);
-    $this->db->group_by('df.id');
-}
-
 $kpi_running_df = $this->db->get()->num_rows();
 
-/* Delayed DF Count */
-$this->db->select('DISTINCT(df.id) as df_id');
+/* Delayed DF Count - company-wide for every dashboard account */
+$this->db->select('DISTINCT(df.id) AS df_id', false);
 $this->db->from('df_release df');
 $this->db->join('task_department_wise_scheduling t', 't.df_id = df.id', 'inner');
 $this->db->where('df.on_hold', 0);
 $this->db->where('df.df_status', 0);
-$this->db->where('t.on_hold', 0);
-$this->db->where('t.task_status', 0);
-$this->db->where('t.end_date <', $today);
+$this->load->helper('df_delay');
+$this->db->where(df_open_overdue_sql($this->db, 't', $today), null, false);
 
-if ($usertyp == 2 && !empty($visibleDepartmentIds)) {
-    $this->db->where_in('t.department_id', $visibleDepartmentIds);
-} elseif ($usertyp == 3) {
-    $this->db->where_in('t.assigned_user', $taskDashboardVisibleUserIds, false);
-}
-
-$kpi_delayed_df = $this->db->get()->num_rows();
+// Reuse this exact set for the portfolio count and row health badges.
+$dashboardDelayedDfRows = $this->db->get()->result_array();
+$dashboardDelayedDfIds = array_fill_keys(array_map('intval', array_column($dashboardDelayedDfRows, 'df_id')), true);
+$kpi_delayed_df = count($dashboardDelayedDfIds);
 
 /* Closed DF Count */
 $this->db->select('df.id');
@@ -510,6 +506,7 @@ $healthHelpTicketCap = 20;
 $healthOverdueDeduction = min($healthOverdueCap, ($kpi_overdue_tasks * $healthOverdueMultiplier));
 $healthDelayedDfDeduction = min($healthDelayedDfCap, ($kpi_delayed_df * $healthDelayedDfMultiplier));
 $healthHelpTicketDeduction = min($healthHelpTicketCap, ($kpi_help_tickets * $healthHelpTicketMultiplier));
+$healthMinimumScore = max(0, $healthBaseScore - $healthOverdueCap - $healthDelayedDfCap - $healthHelpTicketCap);
 $healthTotalDeduction = $healthOverdueDeduction + $healthDelayedDfDeduction + $healthHelpTicketDeduction;
 
 $healthScore = $healthBaseScore - $healthTotalDeduction;
@@ -521,7 +518,7 @@ $healthBreakdownRows = array(
     array(
         'metric' => 'Overdue Tasks',
         'count' => $kpi_overdue_tasks,
-        'rule' => 'Count x ' . $healthOverdueMultiplier,
+        'multiplier' => $healthOverdueMultiplier,
         'cap' => $healthOverdueCap,
         'deduction' => $healthOverdueDeduction,
         'note' => 'Open tasks whose due date is already crossed.'
@@ -529,7 +526,7 @@ $healthBreakdownRows = array(
     array(
         'metric' => 'Delayed DF',
         'count' => $kpi_delayed_df,
-        'rule' => 'Count x ' . $healthDelayedDfMultiplier,
+        'multiplier' => $healthDelayedDfMultiplier,
         'cap' => $healthDelayedDfCap,
         'deduction' => $healthDelayedDfDeduction,
         'note' => 'Running DFs having at least one delayed open task.'
@@ -537,7 +534,7 @@ $healthBreakdownRows = array(
     array(
         'metric' => 'Help Tickets',
         'count' => $kpi_help_tickets,
-        'rule' => 'Count x ' . $healthHelpTicketMultiplier,
+        'multiplier' => $healthHelpTicketMultiplier,
         'cap' => $healthHelpTicketCap,
         'deduction' => $healthHelpTicketDeduction,
         'note' => 'Open help tickets visible in your dashboard scope.'
@@ -701,7 +698,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <script>
       $(document).ready(function () {
-    var activeDfDelayRows = <?php echo json_encode(isset($active_dfs_delay_report) && is_array($active_dfs_delay_report) ? $active_dfs_delay_report : array()); ?>;
+    <?php
+    $activeDfDelayRowsForJs = (isset($active_dfs_delay_report) && is_array($active_dfs_delay_report))
+        ? $active_dfs_delay_report
+        : array();
+
+    // Drop the PO file name entirely rather than hiding the button in JS, so the
+    // name never reaches the page source for users without PO download rights.
+    if (!$can_download_po) {
+        foreach ($activeDfDelayRowsForJs as $delayRowIndex => $delayRow) {
+            unset($activeDfDelayRowsForJs[$delayRowIndex]['po_attachment']);
+        }
+        unset($delayRowIndex, $delayRow);
+    }
+    ?>
+    var activeDfDelayRows = <?php echo json_encode($activeDfDelayRowsForJs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
     // Function to convert text to uppercase
     function toUpperCase(str) {
@@ -713,14 +724,16 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!date || date === '0000-00-00' || date === '0000-00-00 00:00:00') {
             return '';
         }
-        var d = new Date(date);
-        if (isNaN(d.getTime())) {
+        var match = String(date).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!match) {
             return '';
         }
-        var day = ("0" + d.getDate()).slice(-2);
-        var month = ("0" + (d.getMonth() + 1)).slice(-2);
-        var year = d.getFullYear();
-        return day + '-' + month + '-' + year;
+        return match[3] + '-' + match[2] + '-' + match[1];
+    }
+
+    function parseLocalDate(date) {
+        var match = String(date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
     }
 
     // Initialize DataTable
@@ -728,11 +741,25 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
+    var delayedDfCount = 0;
+    var overdueTaskCount = 0;
+    var pendingApprovalCount = 0;
+    $.each(activeDfDelayRows, function (_, dfRow) {
+        var overdue = parseInt(dfRow.overdue_task_count || 0, 10);
+        if (overdue > 0) { delayedDfCount++; }
+        overdueTaskCount += overdue;
+        pendingApprovalCount += parseInt(dfRow.pending_approval_count || 0, 10);
+    });
+    $('#delayReportDfCount').text(activeDfDelayRows.length);
+    $('#delayReportAtRiskCount').text(delayedDfCount);
+    $('#delayReportTaskCount').text(overdueTaskCount);
+    $('#delayReportApprovalCount').text(pendingApprovalCount);
+
     var table = $('#dfTablealldata').DataTable({
         data: activeDfDelayRows,
         columns: [
-            { data: "df_no", render: toUpperCase }, // Convert to uppercase
-            { data: "df_description", render: toUpperCase }, // Convert to uppercase
+            { data: "df_no", render: function(data) { return '<strong>' + toUpperCase(data) + '</strong>'; } },
+            { data: "df_description", render: function(data) { return data ? $('<div>').text(data).html() : '-'; } },
             {
                 data: "added_on",
                 render: function (data) {
@@ -741,34 +768,51 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
             },
             {
-                data: "po_attachment",
-                render: function (data) {
-                    if (data) {
-                        return '<a href="https://pms.shubhampack.in/image_bank/Taskdocument/' + data + '" class="btn btn-warning btn-xs" target="_blank" download>PO DOWNLOAD</a>';
-                    } else {
-                        return 'NO PO';
-                    }
-                },
-                orderable: false,
-            },
-            {
-                data: "df_upload",
-                render: function (data) {
-                    if (data) {
-                        return '<a href="https://pms.shubhampack.in/image_bank/Taskdocument/dfattachment/' + data + '" class="btn btn-success btn-xs" target="_blank" download>DF DOWNLOAD</a>';
-                    }
-                    return 'NO DF';
-                },
-                orderable: false,
+                data: null,
+                render: function(data, type, row) {
+                    if (type !== 'display') { return parseInt(row.max_delay_days || 0, 10); }
+                    if (parseInt(row.on_hold || 0, 10) === 1) { return '<span class="df-health-badge df-health-hold">On Hold</span>'; }
+                    if (parseInt(row.overdue_task_count || 0, 10) > 0) { return '<span class="df-health-badge df-health-critical">Needs Attention</span>'; }
+                    if (parseInt(row.pending_approval_count || 0, 10) > 0) { return '<span class="df-health-badge df-health-watch">Approval Pending</span>'; }
+                    return '<span class="df-health-badge df-health-ontrack">On Track</span>';
+                }
             },
             {
                 data: null,
-                defaultContent:
-                    '<button class="btn btn-primary btn-xs view-all-tasks">CLICK HERE TO VIEW TASKS DELAY</button>',
+                render: function(data, type, row) {
+                    var open = parseInt(row.open_task_count || 0, 10);
+                    var overdue = parseInt(row.overdue_task_count || 0, 10);
+                    return type === 'display' ? '<strong>' + open + '</strong> open / <span class="df-delay-count">' + overdue + ' delayed</span>' : overdue;
+                }
+            },
+            {
+                data: 'max_delay_days',
+                render: function(data, type) {
+                    var days = parseInt(data || 0, 10);
+                    return type === 'display' ? (days > 0 ? '<span class="df-delay-count">' + days + ' days</span>' : '—') : days;
+                }
+            },
+            {
+                data: 'next_due_date',
+                render: function(data) { return formatDateToDMY(data) || '—'; }
+            },
+            {
+                data: null,
+                render: function(data, type, row) {
+                    if (type !== 'display') { return ''; }
+                    var html = row.po_attachment ? '<a href="<?php echo sfdocument; ?>Taskdocument/' + encodeURIComponent(row.po_attachment) + '" class="btn btn-warning btn-xs" target="_blank"><i class="fa fa-file-text-o"></i> PO</a> ' : '';
+                    html += row.df_upload ? '<a href="<?php echo sfdocument; ?>Taskdocument/dfattachment/' + encodeURIComponent(row.df_upload) + '" class="btn btn-success btn-xs" target="_blank"><i class="fa fa-file-pdf-o"></i> DF</a>' : '';
+                    return html || '—';
+                }, orderable:false
+            },
+            {
+                data: null,
+                defaultContent:'<button class="btn btn-primary btn-xs view-all-tasks"><i class="fa fa-list"></i> View Tasks</button>',
                 orderable: false,
             },
         ],
-        order: [[0, 'asc']],
+        order: [[5, 'desc'], [4, 'desc']],
+        pageLength: 25,
     });
 
     // Handle task details popup
@@ -794,76 +838,53 @@ document.addEventListener('DOMContentLoaded', function() {
                         return leftOrder - rightOrder;
                     });
 
+                    if (!tasks.length) {
+                        row.child('<div class="alert alert-info" style="margin:8px 0;">No scheduled tasks were found for this DF.</div>').show();
+                        tr.addClass('shown');
+                        return;
+                    }
+
                     var taskHtml =
-                        '<table class="table table-bordered tasks-table">';
+                        '<table class="table table-bordered tasks-table df-task-child">';
                     taskHtml +=
-                        '<thead><tr><th>DEPARTMENT</th><th>TASK NAME</th><th>DUE DATE</th><th>COMPLETED ON</th><th>ASSIGNED TO</th><th>DELAY (DAYS)</th><th>REMARKS</th></tr></thead>';
+                        '<thead><tr><th>Department</th><th>Task</th><th>Due Date</th><th>Completed On</th><th>Assigned To</th><th>Status / Delay</th><th>Remarks</th></tr></thead>';
                     taskHtml += '<tbody>';
 
                     tasks.forEach(function (task) {
                         var rowClass = '';
-                        var delay = '';
-                        var today = new Date();
-                        var endDate = new Date(task.end_date).toISOString().split('T')[0];
-                        var endDateFormatted = toUpperCase(formatDateToDMY(task.end_date));
-                        var customMessage = '';
-
-                        if (task.task_status == 1) {
-                            if (task.task_completed_on === '0000-00-00 00:00:00') {
-                                var endDateObj = new Date(endDate);
-                                if (today > endDateObj) {
-                                    rowClass = 'overdue';
-                                    delay = 'TASK NOT STARTED YET (RUNNING LATE)';
-                                } else {
-                                    delay = 'TASK NOT STARTED YET';
-                                }
+                        var today = new Date(); today.setHours(0,0,0,0);
+                        var dueDate = parseLocalDate(task.end_date);
+                        var completedDate = parseLocalDate(task.task_completed_on);
+                        var statusHtml = '';
+                        var taskStatus = parseInt(task.task_status || 0, 10);
+                        if (taskStatus === 0) {
+                            if (dueDate && dueDate < today) {
+                                var overdueDays = Math.floor((today - dueDate) / 86400000);
+                                rowClass = 'overdue';
+                                statusHtml = '<span class="task-state task-state-overdue">Open · ' + overdueDays + ' days overdue</span>';
                             } else {
-                                var completionDate = new Date(
-                                    task.task_completed_on
-                                ).toISOString().split('T')[0];
-                                var completionDateFormatted = toUpperCase(formatDateToDMY(task.task_completed_on));
-                                var completionDateObj = new Date(completionDate);
-                                var endDateObj = new Date(endDate);
-                                if (completionDateObj > endDateObj) {
-                                    rowClass = 'late';
-                                    delay =
-                                        Math.ceil(
-                                            (completionDateObj - endDateObj) /
-                                                (1000 * 60 * 60 * 24)
-                                        ) + ' DAYS LATE';
-                                } else {
-                                    rowClass = 'on-time';
-                                }
+                                statusHtml = '<span class="task-state task-state-open">Open</span>';
                             }
-                        } else if (task.task_status == 2) {
+                        } else if (taskStatus === 2) {
                             rowClass = 'preclosure-pending';
-                            customMessage = ' (PENDING FOR APPROVAL)';
+                            statusHtml = '<span class="task-state task-state-approval">Pending Approval</span>';
+                        } else if (completedDate && dueDate && completedDate > dueDate) {
+                            var lateDays = Math.floor((completedDate - dueDate) / 86400000);
+                            rowClass = 'late';
+                            statusHtml = '<span class="task-state task-state-late">Completed · ' + lateDays + ' days late</span>';
+                        } else {
+                            rowClass = 'on-time';
+                            statusHtml = '<span class="task-state task-state-completed">Completed On Time</span>';
                         }
-
-                        if (task.remarks == null) {
-                            task.remarks = '';
-                        }
-
-                        taskHtml += `<tr class="${rowClass}" style="${
-                            rowClass === 'overdue'
-                                ? 'background-color: #FF8C00;'
-                                : rowClass === 'preclosure-pending'
-                                ? 'background-color: #FFD700; font-weight: bold;'
-                                : ''
-                        }">
-                            <td>${toUpperCase(task.department_name)}</td>
-                            <td>${toUpperCase(task.task_name)}${customMessage}</td>
-                            <td>${endDateFormatted}</td>
-                            <td>${
-                                task.task_completed_on !== '0000-00-00 00:00:00'
-                                    ? toUpperCase(formatDateToDMY(task.task_completed_on))
-                                    : 'NOT STARTED YET'
-                            }</td>
-                            <td>${toUpperCase(
-                                task.first_name + ' ' + task.last_name
-                            )}</td>
-                            <td>${toUpperCase(delay)}</td>
-                            <td>${toUpperCase(task.remarks)}</td>
+                        var assignee = $.trim((task.first_name || '') + ' ' + (task.last_name || '')) || 'Unassigned';
+                        taskHtml += `<tr class="${rowClass}">
+                            <td>${$('<div>').text(task.department_name || 'Unmapped').html()}</td>
+                            <td><strong>${$('<div>').text(task.task_name || '').html()}</strong></td>
+                            <td>${formatDateToDMY(task.end_date) || '—'}</td>
+                            <td>${formatDateToDMY(task.task_completed_on) || '—'}</td>
+                            <td>${$('<div>').text(assignee.toLowerCase().replace(/\b\w/g, function(c){return c.toUpperCase();})).html()}</td>
+                            <td>${statusHtml}</td>
+                            <td>${$('<div>').text(task.remarks || '—').html()}</td>
                         </tr>
                        `;
                     });
@@ -874,7 +895,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     tr.addClass('shown');
                 },
                 error: function (xhr, status, error) {
-                    console.error('Error fetching tasks:', status, error);
+                    row.child('<div class="alert alert-danger" style="margin:8px 0;">Unable to load task details. Please retry.</div>').show();
+                    tr.addClass('shown');
                 },
             });
         }
@@ -929,6 +951,84 @@ document.addEventListener('DOMContentLoaded', function() {
             border-radius: 50%;
             background: rgba(255,255,255,0.08);
         }
+
+        .admin-income-panel {
+            margin: 0 0 22px;
+            padding: 22px;
+            background: #fff;
+            border: 1px solid #dfe7f1;
+            border-radius: 14px;
+            box-shadow: 0 8px 24px rgba(30, 55, 90, .08);
+        }
+        .admin-income-head { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin-bottom:18px; }
+        .admin-income-title { margin:0 0 5px; font-size:21px; font-weight:700; color:#183153; }
+        .admin-income-subtitle { margin:0; color:#68778b; font-size:13px; }
+        .admin-income-filter { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; }
+        .admin-income-filter label { display:block; margin-bottom:4px; color:#53657d; font-size:11px; font-weight:700; text-transform:uppercase; }
+        .admin-income-filter .form-control { min-width:155px; height:36px; }
+        .admin-income-grid { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:12px; }
+        .admin-income-card { padding:17px; border-radius:12px; border:1px solid #e3eaf3; background:#f8fafc; }
+        .admin-income-card.total { color:#fff; border-color:#2454a6; background:linear-gradient(135deg, #173f7a, #2871d5); }
+        .admin-income-label { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; opacity:.82; }
+        .admin-income-value { margin:7px 0 5px; font-size:22px; line-height:1.2; font-weight:800; white-space:nowrap; }
+        .admin-income-note { font-size:12px; opacity:.76; }
+        .admin-income-machine-rows { margin-top:9px; border-top:1px solid #e0e7f0; }
+        .admin-income-machine-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #e8edf4; }
+        .admin-income-machine-row:last-child { border-bottom:0; }
+        .admin-income-machine-label { color:#66788b; font-size:11px; font-weight:700; }
+        .admin-income-machine-label small { display:block; margin-top:2px; color:#94a3b2; font-weight:500; }
+        .admin-income-machine-value { color:#173f7a; font-size:15px; font-weight:800; white-space:nowrap; }
+        .df-delay-panel { background:#fff; border:1px solid #dfe7f1; border-radius:16px; overflow:hidden; box-shadow:0 10px 28px rgba(31,65,108,.08); }
+        .df-delay-head { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; padding:18px 20px; color:#fff; background:linear-gradient(135deg,#173f7a,#2871d5); }
+        .df-delay-head h3 { margin:0 0 4px; color:#fff; font-size:18px; font-weight:800; }
+        .df-delay-head p { margin:0; color:rgba(255,255,255,.82); font-size:11px; }
+        .df-delay-kpis { display:flex; flex-wrap:wrap; gap:8px; }
+        .df-delay-kpi { min-width:92px; padding:7px 10px; border:1px solid rgba(255,255,255,.25); border-radius:10px; background:rgba(255,255,255,.12); text-align:center; }
+        .df-delay-kpi strong { display:block; color:#fff; font-size:18px; line-height:20px; }
+        .df-delay-kpi span { color:rgba(255,255,255,.78); font-size:9px; text-transform:uppercase; letter-spacing:.4px; }
+        .df-delay-table-wrap { padding:14px; }
+        .df-health-badge { display:inline-block; padding:4px 8px; border-radius:12px; font-size:9px; font-weight:800; text-transform:uppercase; }
+        .df-health-critical { background:#fee2e2; color:#b91c1c; }
+        .df-health-watch { background:#fef3c7; color:#92400e; }
+        .df-health-ontrack { background:#dcfce7; color:#166534; }
+        .df-health-hold { background:#e2e8f0; color:#475569; }
+        .df-delay-count { color:#b91c1c; font-weight:800; }
+        .df-task-child { margin:8px 0 !important; background:#fbfdff; }
+        .df-task-child th { background:#eaf1fb !important; color:#3a536d !important; }
+        .task-state { display:inline-block; padding:3px 7px; border-radius:10px; font-size:9px; font-weight:700; }
+        .task-state-overdue,.task-state-late { background:#fee2e2; color:#b91c1c; }
+        .task-state-open { background:#dbeafe; color:#1d4ed8; }
+        .task-state-completed { background:#dcfce7; color:#166534; }
+        .task-state-approval { background:#fef3c7; color:#92400e; }
+        .running-portfolio-panel { background:#fff; border:1px solid #dfe7f1; border-radius:16px; overflow:hidden; box-shadow:0 10px 28px rgba(31,65,108,.08); }
+        .running-portfolio-head { padding:18px 20px; background:linear-gradient(135deg,#123c69,#1f6fae); color:#fff; }
+        .running-portfolio-head h3 { margin:0 0 4px; color:#fff; font-size:18px; font-weight:800; }
+        .running-portfolio-head p { margin:0; color:rgba(255,255,255,.8); font-size:11px; }
+        .running-portfolio-kpis { display:grid; grid-template-columns:repeat(4,minmax(120px,1fr)); gap:10px; padding:14px; background:#f5f8fc; border-bottom:1px solid #e4ebf3; }
+        .running-portfolio-kpi { padding:10px 12px; background:#fff; border:1px solid #e1e8f0; border-radius:10px; }
+        .running-portfolio-kpi span { display:block; color:#7b8da0; font-size:9px; font-weight:700; text-transform:uppercase; }
+        .running-portfolio-kpi strong { display:block; margin-top:2px; color:#193a5b; font-size:20px; }
+        .running-portfolio-table { padding:14px; }
+        .portfolio-progress { min-width:95px; }
+        .portfolio-progress-bar { height:6px; margin-top:4px; background:#e7edf4; border-radius:8px; overflow:hidden; }
+        .portfolio-progress-fill { height:100%; border-radius:8px; background:linear-gradient(90deg,#2f80ed,#56cc9d); }
+        .portfolio-delay { display:inline-block; padding:4px 8px; border-radius:12px; font-size:9px; font-weight:800; }
+        .portfolio-delay.late { background:#fee2e2; color:#b91c1c; }
+        .portfolio-delay.clear { background:#dcfce7; color:#166534; }
+        @media(max-width:767px){.df-delay-head{display:block}.df-delay-kpis{margin-top:12px}}
+        @media(max-width:767px){.running-portfolio-kpis{grid-template-columns:repeat(2,1fr)}}
+        .admin-income-label-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+        .admin-income-info { position:relative; display:inline-flex; }
+        .admin-income-info-trigger { display:inline-flex; align-items:center; justify-content:center; width:23px; height:23px; padding:0; border:1px solid #c9d6e5; border-radius:50%; background:#fff; color:#2454a6; cursor:help; }
+        .admin-income-tooltip { position:absolute; z-index:30; top:31px; right:0; width:245px; padding:12px 14px; border-radius:10px; background:#17324f; color:#fff; box-shadow:0 12px 28px rgba(20,47,77,.24); opacity:0; visibility:hidden; transform:translateY(-4px); transition:opacity .15s ease, transform .15s ease; pointer-events:none; text-transform:none; letter-spacing:0; font-size:12px; font-weight:500; }
+        .admin-income-tooltip:before { content:""; position:absolute; top:-6px; right:6px; border-width:0 6px 6px; border-style:solid; border-color:transparent transparent #17324f; }
+        .admin-income-tooltip-row { display:flex; justify-content:space-between; gap:12px; padding:5px 0; }
+        .admin-income-tooltip-row + .admin-income-tooltip-row { border-top:1px solid rgba(255,255,255,.16); }
+        .admin-income-tooltip-row strong { white-space:nowrap; }
+        .admin-income-info:hover .admin-income-tooltip, .admin-income-info:focus-within .admin-income-tooltip { opacity:1; visibility:visible; transform:translateY(0); }
+        @media (max-width:1199px) { .admin-income-grid { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+        @media (max-width:991px) { .admin-income-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } .admin-income-head { align-items:flex-start; flex-direction:column; } }
+        @media (max-width:575px) { .admin-income-grid { grid-template-columns:1fr; } }
 
         .world-dashboard-title {
             margin: 0;
@@ -1195,6 +1295,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         .health-report-modal .modal-title {
+            color: #fff;
             font-weight: 800;
             letter-spacing: .3px;
         }
@@ -1459,11 +1560,163 @@ document.addEventListener('DOMContentLoaded', function() {
             .world-kpi-card { min-height: auto; }
             .world-health-card { margin-top: 18px; }
         }
+
+        .dashboard-page-loader {
+            position: fixed;
+            inset: 0;
+            z-index: 100000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at 18% 20%, rgba(35, 176, 96, .13), transparent 30%),
+                radial-gradient(circle at 82% 78%, rgba(43, 105, 205, .11), transparent 32%),
+                rgba(247, 250, 252, .98);
+            opacity: 1;
+            visibility: visible;
+            transition: opacity .38s ease, visibility .38s ease;
+        }
+
+        .dashboard-page-loader.is-loaded {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .dashboard-loader-card {
+            width: min(360px, 100%);
+            padding: 34px 30px 30px;
+            text-align: center;
+            background: rgba(255, 255, 255, .94);
+            border: 1px solid rgba(216, 226, 236, .9);
+            border-radius: 22px;
+            box-shadow: 0 24px 65px rgba(25, 45, 70, .14);
+        }
+
+        .dashboard-loader-mark {
+            position: relative;
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 22px;
+        }
+
+        .dashboard-loader-ring {
+            position: absolute;
+            inset: 0;
+            border: 4px solid #e3f4ea;
+            border-top-color: #1cab5e;
+            border-right-color: #2575c7;
+            border-radius: 50%;
+            animation: dashboardLoaderSpin .9s linear infinite;
+        }
+
+        .dashboard-loader-icon {
+            position: absolute;
+            inset: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            background: linear-gradient(135deg, #168a4a, #20ad60);
+            border-radius: 50%;
+            box-shadow: 0 7px 18px rgba(22, 138, 74, .25);
+            font-size: 21px;
+        }
+
+        .dashboard-loader-title {
+            margin: 0 0 7px;
+            color: #203047;
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .dashboard-loader-message {
+            margin: 0;
+            color: #718096;
+            font-size: 13px;
+        }
+
+        .dashboard-loader-dots {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            margin-top: 18px;
+        }
+
+        .dashboard-loader-dots span {
+            width: 7px;
+            height: 7px;
+            background: #1cab5e;
+            border-radius: 50%;
+            animation: dashboardLoaderPulse 1.2s ease-in-out infinite;
+        }
+
+        .dashboard-loader-dots span:nth-child(2) { animation-delay: .15s; }
+        .dashboard-loader-dots span:nth-child(3) { animation-delay: .3s; }
+
+        @keyframes dashboardLoaderSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes dashboardLoaderPulse {
+            0%, 70%, 100% { opacity: .3; transform: translateY(0); }
+            35% { opacity: 1; transform: translateY(-5px); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .dashboard-loader-ring,
+            .dashboard-loader-dots span {
+                animation: none;
+            }
+        }
     </style>
 </head>
 
 
 <body>
+
+    <div id="dashboardPageLoader" class="dashboard-page-loader" role="status" aria-live="polite" aria-label="Dashboard is loading">
+        <div class="dashboard-loader-card">
+            <div class="dashboard-loader-mark" aria-hidden="true">
+                <span class="dashboard-loader-ring"></span>
+                <span class="dashboard-loader-icon"><i class="fa fa-line-chart"></i></span>
+            </div>
+            <p class="dashboard-loader-title">Preparing your dashboard</p>
+            <p class="dashboard-loader-message">Loading the latest tasks and insights...</p>
+            <div class="dashboard-loader-dots" aria-hidden="true">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+    </div>
+    <noscript><style>#dashboardPageLoader { display: none; }</style></noscript>
+    <script>
+        (function () {
+            var loaderStartedAt = Date.now();
+
+            function hideDashboardLoader() {
+                var loader = document.getElementById('dashboardPageLoader');
+                if (!loader || loader.classList.contains('is-loaded')) return;
+
+                var minimumDisplayTime = 450;
+                var remainingTime = Math.max(0, minimumDisplayTime - (Date.now() - loaderStartedAt));
+                window.setTimeout(function () {
+                    loader.classList.add('is-loaded');
+                    window.setTimeout(function () {
+                        loader.setAttribute('aria-hidden', 'true');
+                    }, 400);
+                }, remainingTime);
+            }
+
+            window.addEventListener('load', hideDashboardLoader);
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) hideDashboardLoader();
+            });
+
+            // Never leave the interface blocked if a third-party asset stalls.
+            window.setTimeout(hideDashboardLoader, 8000);
+        })();
+    </script>
 
 
     <!-- Navigation Bar-->
@@ -1760,6 +2013,7 @@ $(document).ready(function () {
         </style>
 
         <div class="container-fluid">
+            <?php $this->load->view('df_change_control/_approval_queue'); ?>
 
             <!-- WORLD CLASS COMMAND CENTER - ADDITIVE PERMISSION SAFE SECTION -->
             <div class="world-dashboard-hero">
@@ -1815,6 +2069,134 @@ $(document).ready(function () {
                 </div>
             </div>
 
+            <?php
+            // Temporarily hidden by management request. Set to true to restore the income panel.
+            $show_admin_income_panel = false;
+            ?>
+            <?php if ($show_admin_income_panel && ($usertyp === 1 || (int) $user_role === 1) && isset($admin_income_total_inr)):
+                $income_department = isset($admin_income_department) ? $admin_income_department : 'all';
+                $income_marketing = isset($admin_income_marketing) && is_array($admin_income_marketing) ? $admin_income_marketing : array();
+                $income_marketing_df = isset($admin_income_marketing_df) && is_array($admin_income_marketing_df) ? $admin_income_marketing_df : array();
+                $income_spares = isset($admin_income_spares) && is_array($admin_income_spares) ? $admin_income_spares : array();
+                $income_spares_breakdown = isset($admin_income_spares_breakdown) && is_array($admin_income_spares_breakdown) ? $admin_income_spares_breakdown : array();
+                $income_service = isset($admin_income_service) && is_array($admin_income_service) ? $admin_income_service : array();
+                $income_service_breakdown = isset($admin_income_service_breakdown) && is_array($admin_income_service_breakdown) ? $admin_income_service_breakdown : array();
+                $income_service_inr = isset($income_service['INR']) ? $income_service['INR'] : array();
+                $income_service_usd = isset($income_service['USD']) ? $income_service['USD'] : array();
+                $income_fy_label = !empty($admin_income_financial_year_details['label']) ? $admin_income_financial_year_details['label'] : $admin_income_financial_year;
+            ?>
+            <section class="admin-income-panel">
+                <div class="admin-income-head">
+                    <div>
+                        <h3 class="admin-income-title"><i class="fa fa-money"></i> Total Income — All Departments</h3>
+                        <p class="admin-income-subtitle">Confirmed Marketing, Spares and Service orders for <?php echo htmlspecialchars($income_fy_label, ENT_QUOTES, 'UTF-8'); ?>.</p>
+                    </div>
+                    <form method="get" action="<?php echo page_url; ?>Dashboard" class="admin-income-filter">
+                        <div>
+                            <label for="income_financial_year">Financial Year</label>
+                            <select id="income_financial_year" name="income_financial_year" class="form-control">
+                                <?php foreach ($admin_income_financial_year_options as $income_fy_option): ?>
+                                    <option value="<?php echo htmlspecialchars($income_fy_option['value'], ENT_QUOTES, 'UTF-8'); ?>" <?php echo $admin_income_financial_year === $income_fy_option['value'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($income_fy_option['label'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="income_department">Department</label>
+                            <select id="income_department" name="income_department" class="form-control">
+                                <option value="all" <?php echo $income_department === 'all' ? 'selected' : ''; ?>>All Departments</option>
+                                <option value="marketing" <?php echo $income_department === 'marketing' ? 'selected' : ''; ?>>Marketing Sales</option>
+                                <option value="spares" <?php echo $income_department === 'spares' ? 'selected' : ''; ?>>Spares Income</option>
+                                <option value="service" <?php echo $income_department === 'service' ? 'selected' : ''; ?>>Service Income</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary"><i class="fa fa-filter"></i> Show</button>
+                    </form>
+                </div>
+                <div class="admin-income-grid">
+                    <div class="admin-income-card total">
+                        <div class="admin-income-label">Overall INR Income</div>
+                        <div class="admin-income-value">Rs <?php echo number_format((float) $admin_income_total_inr, 0); ?></div>
+                        <div class="admin-income-note">Running Marketing DFs + Spares + INR Service; hold DFs excluded</div>
+                    </div>
+                    <?php if ($income_department === 'all' || $income_department === 'marketing'): ?>
+                    <div class="admin-income-card">
+                        <div class="admin-income-label-row">
+                            <div class="admin-income-label">Marketing - Running DF</div>
+                            <span class="admin-income-info">
+                                <button type="button" class="admin-income-info-trigger" aria-label="Show Running and Hold DF values by Domestic and International type"><i class="fa fa-info"></i></button>
+                                <span class="admin-income-tooltip" role="tooltip">
+                                    <span class="admin-income-tooltip-row"><span>Running - Domestic (<?php echo (int) ($income_marketing_df['running_domestic_orders'] ?? 0); ?>)</span><strong>Rs <?php echo number_format((float) ($income_marketing_df['running_domestic_value'] ?? 0), 0); ?></strong></span>
+                                    <span class="admin-income-tooltip-row"><span>Running - International (<?php echo (int) ($income_marketing_df['running_international_orders'] ?? 0); ?>)</span><strong>Rs <?php echo number_format((float) ($income_marketing_df['running_international_value'] ?? 0), 0); ?></strong></span>
+                                    <span class="admin-income-tooltip-row"><span>Selected FY Active (<?php echo (int) ($income_marketing_df['running_current_fy_orders'] ?? 0); ?>)</span><strong>Rs <?php echo number_format((float) ($income_marketing_df['running_current_fy_value'] ?? 0), 0); ?></strong></span>
+                                    <?php if (!empty($income_marketing_df['is_current_financial_year'])): ?><span class="admin-income-tooltip-row"><span>Carry Forward Active (<?php echo (int) ($income_marketing_df['running_carry_forward_orders'] ?? 0); ?>)</span><strong>Rs <?php echo number_format((float) ($income_marketing_df['running_carry_forward_value'] ?? 0), 0); ?></strong></span><?php endif; ?>
+                                    <span class="admin-income-tooltip-row"><span>Hold - Domestic (<?php echo (int) ($income_marketing_df['hold_domestic_orders'] ?? 0); ?>)</span><strong>Rs <?php echo number_format((float) ($income_marketing_df['hold_domestic_value'] ?? 0), 0); ?></strong></span>
+                                    <span class="admin-income-tooltip-row"><span>Hold - International (<?php echo (int) ($income_marketing_df['hold_international_orders'] ?? 0); ?>)</span><strong>Rs <?php echo number_format((float) ($income_marketing_df['hold_international_value'] ?? 0), 0); ?></strong></span>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="admin-income-machine-rows">
+                            <div class="admin-income-machine-row">
+                                <div class="admin-income-machine-label">Running Machine Value<small><?php echo (int) ($income_marketing_df['running_total_orders'] ?? 0); ?> active DFs</small></div>
+                                <div class="admin-income-machine-value">Rs <?php echo number_format((float) ($income_marketing_df['running_total_value'] ?? 0), 0); ?></div>
+                            </div>
+                            <div class="admin-income-machine-row">
+                                <div class="admin-income-machine-label">Dispatched Machine Value<small><?php echo (int) ($income_marketing_df['dispatched_total_orders'] ?? 0); ?> dispatched in <?php echo htmlspecialchars($income_fy_label, ENT_QUOTES, 'UTF-8'); ?></small></div>
+                                <div class="admin-income-machine-value">Rs <?php echo number_format((float) ($income_marketing_df['dispatched_total_value'] ?? 0), 0); ?></div>
+                            </div>
+                        </div>
+                        <div class="admin-income-note">
+                            <?php if (!empty($income_marketing_df['is_current_financial_year'])): ?>
+                                Active DFs: <?php echo (int) ($income_marketing_df['running_current_fy_orders'] ?? 0); ?> selected FY + <?php echo (int) ($income_marketing_df['running_carry_forward_orders'] ?? 0); ?> carry forward = <?php echo (int) ($income_marketing_df['running_total_orders'] ?? 0); ?> total.
+                            <?php else: ?>
+                                <?php echo (int) ($income_marketing_df['running_total_orders'] ?? 0); ?> active DFs belonging to <?php echo htmlspecialchars($income_fy_label, ENT_QUOTES, 'UTF-8'); ?>. Carry-forward machines are not included for historical FY filters.
+                            <?php endif; ?>
+                            Hold value is available in the tooltip.
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($income_department === 'all' || $income_department === 'spares'): ?>
+                    <div class="admin-income-card">
+                        <div class="admin-income-label-row">
+                            <div class="admin-income-label">Spares Income (INR)</div>
+                            <span class="admin-income-info">
+                                <button type="button" class="admin-income-info-trigger" aria-label="Show Domestic and International Spares values"><i class="fa fa-info"></i></button>
+                                <span class="admin-income-tooltip" role="tooltip">
+                                    <span class="admin-income-tooltip-row"><span>Domestic (<?php echo (int) ($income_spares_breakdown['domestic_orders'] ?? 0); ?>)</span><strong>Rs <?php echo number_format((float) ($income_spares_breakdown['domestic_value'] ?? 0), 0); ?></strong></span>
+                                    <span class="admin-income-tooltip-row"><span>International (<?php echo (int) ($income_spares_breakdown['international_orders'] ?? 0); ?>)</span><strong>$<?php echo number_format((float) ($income_spares_breakdown['international_value'] ?? 0), 0); ?></strong></span>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="admin-income-value">Rs <?php echo number_format((float) ($income_spares_breakdown['domestic_value'] ?? 0), 0); ?></div>
+                        <div class="admin-income-note"><?php echo (int) ($income_spares_breakdown['domestic_orders'] ?? 0); ?> domestic finalized orders</div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($income_department === 'all' || $income_department === 'service'): ?>
+                    <div class="admin-income-card">
+                        <div class="admin-income-label-row">
+                            <div class="admin-income-label">Service Income (INR)</div>
+                            <span class="admin-income-info">
+                                <button type="button" class="admin-income-info-trigger" aria-label="Show Domestic and International Service values"><i class="fa fa-info"></i></button>
+                                <span class="admin-income-tooltip" role="tooltip">
+                                    <span class="admin-income-tooltip-row"><span>Domestic (<?php echo (int) ($income_service_breakdown['domestic_orders'] ?? 0); ?>)</span><strong>Rs <?php echo number_format((float) ($income_service_breakdown['domestic_value'] ?? 0), 0); ?></strong></span>
+                                    <span class="admin-income-tooltip-row"><span>International (<?php echo (int) ($income_service_breakdown['international_orders'] ?? 0); ?>)</span><strong>$<?php echo number_format((float) ($income_service_breakdown['international_value'] ?? 0), 0); ?></strong></span>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="admin-income-value">Rs <?php echo number_format(!empty($income_service_inr['total_order_value']) ? (float) $income_service_inr['total_order_value'] : 0, 0); ?></div>
+                        <div class="admin-income-note"><?php echo !empty($income_service_inr['total_orders']) ? (int) $income_service_inr['total_orders'] : 0; ?> won orders</div>
+                    </div>
+                    <?php if (!empty($income_service_usd['total_order_value'])): ?>
+                    <div class="admin-income-card">
+                        <div class="admin-income-label">Service Income (USD)</div>
+                        <div class="admin-income-value">$<?php echo number_format((float) $income_service_usd['total_order_value'], 0); ?></div>
+                        <div class="admin-income-note">Shown separately; not added to the INR total</div>
+                    </div>
+                    <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            </section>
+            <?php endif; ?>
+
             <div class="row">
 
                 <div class="col-md-3 col-sm-6">
@@ -1823,7 +2205,7 @@ $(document).ready(function () {
                             <div class="world-kpi-icon"><i class="fa fa-folder-open"></i></div>
                             <h3><?php echo $kpi_running_df; ?></h3>
                             <p>Running DF</p>
-                            <small>Active execution files in your allowed scope</small>
+                            <small>All active execution files company-wide</small>
                         </a>
                     </div>
                 </div>
@@ -1834,7 +2216,7 @@ $(document).ready(function () {
                             <div class="world-kpi-icon"><i class="fa fa-warning"></i></div>
                             <h3><?php echo $kpi_delayed_df; ?></h3>
                             <p>Delayed DF</p>
-                            <small>DFs impacted by delayed tasks</small>
+                            <small>All DFs impacted by delayed tasks company-wide</small>
                         </a>
                     </div>
                 </div>
@@ -1992,6 +2374,7 @@ $(document).ready(function () {
                 </div>
 
             </div>
+
             <!-- END WORLD CLASS COMMAND CENTER -->
 
 
@@ -2010,7 +2393,7 @@ $(document).ready(function () {
              <?php }?>
              <!----************************=================================*******************----->
             <?php
-            if ($this->session->userdata['logged_in']['role'] == 12 || $this->session->userdata['logged_in']['role']==27 || $this->session->userdata['logged_in']['user_id'] == 139 || $this->session->userdata['logged_in']['user_id'] == 209) {
+            if (pms_is_super_admin() || $this->session->userdata['logged_in']['role']==27 || $this->session->userdata['logged_in']['user_id'] == 139 || $this->session->userdata['logged_in']['user_id'] == 209) {
 
                 $year = date('Y');
                 $month = date('m');
@@ -2029,6 +2412,7 @@ $(document).ready(function () {
 
                     <div class="neo-badge-group">
                         <a href="<?php echo page_url; ?>Dashboard/daily_df_progress_report" target="_blank" class="neo-action-btn neo-action-blue">Daily DF Progress</a>
+                        <a href="<?php echo page_url; ?>Dashboard/daily_planned_task_report" target="_blank" class="neo-action-btn neo-action-blue">Daily Planned Tasks</a>
                         <a href="<?php echo page_url; ?>Dashboard/closeddf" target="_blank" class="neo-action-btn neo-action-red">Closed DF</a>
                         <a href="<?php echo page_url; ?>Dashboard/df_full_detail" target="_blank" class="neo-action-btn neo-action-blue">Filter Information by DF</a>
                     </div>
@@ -3284,15 +3668,23 @@ $(document).ready(function () {
 
                    
                     <?php
-                    if ($this->session->userdata['logged_in']['role'] == 12  || $this->session->userdata['logged_in']['role']==27|| $user_id == 139 || $this->session->userdata('logged_in')['user_id'] == 209) {
+                    if (pms_is_super_admin()  || $this->session->userdata['logged_in']['role']==27|| $user_id == 139 || $this->session->userdata('logged_in')['user_id'] == 209) {
                     ?>
                      <div class="margin_btw"></div>
-                    <div>
-                        <h3 class="global_heading text-center"> RUNNING DF TASK WISE DELAY REPORT
-                           
-                        </h3><hr>
-                        <div class=" card_box">
-
+                    <section class="df-delay-panel">
+                        <div class="df-delay-head">
+                            <div>
+                                <h3><i class="fa fa-clock-o"></i> Running DF Task-Wise Delay Report</h3>
+                                <p>Live attention view of open overdue tasks, pending approvals and the next committed task date for every running DF.</p>
+                            </div>
+                            <div class="df-delay-kpis">
+                                <div class="df-delay-kpi"><strong id="delayReportDfCount">0</strong><span>Running DFs</span></div>
+                                <div class="df-delay-kpi"><strong id="delayReportAtRiskCount">0</strong><span>Delayed DFs</span></div>
+                                <div class="df-delay-kpi"><strong id="delayReportTaskCount">0</strong><span>Overdue Tasks</span></div>
+                                <div class="df-delay-kpi"><strong id="delayReportApprovalCount">0</strong><span>Approvals</span></div>
+                            </div>
+                        </div>
+                        <div class="df-delay-table-wrap">
                             <div class="table-responsive">
                                 <table id="dfTablealldata" class="table table-striped table-bordered pretty5"
                                     style="width:100%">
@@ -3301,17 +3693,18 @@ $(document).ready(function () {
                                             <th>DF NO</th>
                                             <th>DF DESCRIPTION</th>
                                             <th>DF RELEASE DATE</th>
-                                            <th>DOWNLOAD PO</th>
-                                            <th>DOWNLOAD DF</th>
-                                            <th>CLICK TO VIEW</th>
+                                            <th>HEALTH</th>
+                                            <th>OPEN / DELAYED</th>
+                                            <th>MAX DELAY</th>
+                                            <th>NEXT DUE</th>
+                                            <th>DOCUMENTS</th>
+                                            <th>TASK DETAILS</th>
                                         </tr>
                                     </thead>
                                 </table>
                             </div>
-
-
                         </div>
-                    </div>
+                    </section>
                     <?php
                     }
                     ?>
@@ -3319,7 +3712,7 @@ $(document).ready(function () {
 
                     
                       <?php
-                    if ($this->session->userdata['logged_in']['role'] == 12 || $this->session->userdata['logged_in']['role']==27 || $this->session->userdata('logged_in')['user_id'] == 209) {
+                    if (pms_is_super_admin() || $this->session->userdata['logged_in']['role']==27 || $this->session->userdata('logged_in')['user_id'] == 209) {
 
                     ?>
                     <div class="margin_btw"></div>
@@ -3331,6 +3724,10 @@ $(document).ready(function () {
 $grand_total_running_loss = 0;
 $running_table_rows_html = '';
 $m = 1;
+$running_df_total = 0;
+$running_df_delayed = 0;
+$running_df_on_track = 0;
+$running_progress_sum = 0;
 
 // 2. Main Query for Running DFs 
 // UPDATE: Added 'DISTINCT' to the subquery to prevent duplicate designer names
@@ -3342,6 +3739,7 @@ $q = $this->db->select('a.id, a.df_no, a.added_on, a.df_upload, b.title, b.first
              ->from('df_release a')
              ->join('system_users b', 'a.added_by=b.user_id', 'left')
              ->where('a.df_status', 0) // Running DFs
+             ->where('a.on_hold', 0) // Exclude hold DFs
              ->order_by('a.id', 'desc')
              ->get();
 
@@ -3376,7 +3774,9 @@ if ($q->num_rows() > 0) {
         if ($q5->num_rows() > 0) {
             $row5 = $q5->row();
             $podate = ($row5->podate && strtotime($row5->podate)) ? date('d-m-Y', strtotime($row5->podate)) : '';
-            $po_attachment = '<a href="' . sfdocument . 'Taskdocument/' . $row5->po_attachment . '" download><span class="btn btn-warning btn-xs">Click to download PO</span></a>';
+            if ($can_download_po && !empty($row5->po_attachment)) {
+                $po_attachment = '<a href="' . sfdocument . 'Taskdocument/' . $row5->po_attachment . '" download><span class="btn btn-warning btn-xs">Click to download PO</span></a>';
+            }
             $order_value = (float)$row5->order_value;
         }
 
@@ -3398,6 +3798,14 @@ if ($q->num_rows() > 0) {
 
         // --- Get Projected Delay ---
         $maxdays = $CIA->Task_model->workDelayed($rows->id, 0);
+        $running_df_total++;
+        $running_progress_sum += (int) $percetage;
+        $hasCurrentDelay = isset($dashboardDelayedDfIds[(int)$rows->id]);
+        if ($hasCurrentDelay) {
+            $running_df_delayed++;
+        } else {
+            $running_df_on_track++;
+        }
 
         // --- Calculate Projected Completion Date ---
         $nextcompletiondate = '--';
@@ -3455,13 +3863,13 @@ $grand_total_running_loss += $loss_amount;
         if (!empty($rows->designer_names)) {
             $designer_html .= '<hr style="margin: 5px 0; border-top: 1px solid #ccc;">';
             $designer_html .= '<span style="font-size: 11px; font-weight: bold; color: #555;">DESIGNER</span><hr>';
-            $designer_html .= '<span style="color: #000;">' . strtoupper($rows->designer_names) . '</span>';
+            $designer_html .= '<span style="color: #000;">' . htmlspecialchars(ucwords(strtolower($rows->designer_names)), ENT_QUOTES, 'UTF-8') . '</span>';
         }
 
         // --- Build HTML row ---
         $running_table_rows_html .= '<tr>';
         $running_table_rows_html .= '<td>' . $m . '</td>';
-        $running_table_rows_html .= '<td>' . strtoupper($rows->df_no) . '</td>';
+        $running_table_rows_html .= '<td><strong style="color:#1f5f9f;">' . htmlspecialchars(strtoupper($rows->df_no), ENT_QUOTES, 'UTF-8') . '</strong></td>';
         $running_table_rows_html .= '<td>
                                         <a href="' . sfdocument . 'Taskdocument/dfattachment/' . $rows->df_upload . '" download>
                                             <span class="btn btn-primary btn-xs">DOWNLOAD DF</span>
@@ -3471,7 +3879,7 @@ $grand_total_running_loss += $loss_amount;
         
         // Updated Marketing Person Cell with Designer Info
         $running_table_rows_html .= '<td>' 
-                                    . strtoupper($dfowner) 
+                                    . htmlspecialchars(ucwords(strtolower(trim($dfowner))), ENT_QUOTES, 'UTF-8')
                                     . $designer_html 
                                     . '<br><br>
                                     <a href="' . page_url . 'Task/viewdfmeetingmom/' . $rows->id . '">
@@ -3482,18 +3890,18 @@ $grand_total_running_loss += $loss_amount;
         $running_table_rows_html .= '<td>' . date('d-m-Y', strtotime($rows->added_on)) . '</td>';
         $running_table_rows_html .= '<td>' . $planneddate_display . '</td>';
         $running_table_rows_html .= '<td>' . $nextcompletiondate . '</td>';
-        $running_table_rows_html .= '<td>' . $percetage . '%</td>';
+        $running_table_rows_html .= '<td><div class="portfolio-progress"><strong>' . (int) $percetage . '%</strong><div class="portfolio-progress-bar"><div class="portfolio-progress-fill" style="width:' . max(0, min(100, (int) $percetage)) . '%;"></div></div></div></td>';
         $running_table_rows_html .= '<td>';
-        if ($maxdays > 0) {
-            $running_table_rows_html .= "<strong style='color:red; font-weight:bold;'>" . $maxdays . " DAYS</strong>";
+        if ($hasCurrentDelay) {
+            $running_table_rows_html .= '<span class="portfolio-delay late">Delayed — overdue tasks</span>';
         } else {
-            $running_table_rows_html .= "0 DAYS";
+            $running_table_rows_html .= '<span class="portfolio-delay clear"><i class="fa fa-check"></i> On track</span>';
         }
         $running_table_rows_html .= '</td>';
         //$running_table_rows_html .= '<td>' . $loss_display . '</td>'; 
         $running_table_rows_html .= '<td>
-                                        <a href="' . page_url . 'Task/finalgantchartWithDetails/' . $rows->id . '" target="_blank">
-                                            <span class="btn btn-warning btn-xs">GANTT CHART</span>
+                                        <a href="' . page_url . 'gantt/' . $rows->id . '" target="_blank">
+                                            <span class="btn btn-warning btn-xs"><i class="fa fa-bar-chart"></i> Gantt</span>
                                         </a>
                                     </td>';
         $running_table_rows_html .= '</tr>';
@@ -3503,41 +3911,35 @@ $grand_total_running_loss += $loss_amount;
 }
 ?>
 
-<div class="row ">
+<?php $running_average_progress = $running_df_total > 0 ? round($running_progress_sum / $running_df_total) : 0; ?>
+<div class="row">
     <div class="col-sm-12">
-        
-        <div class="page-title-box" style="padding-bottom: 10px;">
-            <!--  <div class="btn-group pull-right">
-                <div style="text-align: right; border: 2px solid #f0ad4e; padding: 5px 10px; border-radius: 8px;">
-                    <h5 style="margin: 0; color: #555;">Consolidated Running Loss:</h5>
-                    <h3 style="margin: 0; color: #f0ad4e; font-weight: 700;">
-                        <i class="fa fa-inr"></i> <?php echo $CIA->Task_model->formatIndianCurrency($grand_total_running_loss); ?>
-                    </h3>
-                </div>
-            </div> -->
-            <h3 class="global_heading text-center" style="margin-top: 0;">
-                ALL RUNNING DFS
-            </h3>
-        </div>
-        <hr style="margin-top: 0;">
-        
-        <div class="card_box">
-            <div class="table-responsive">
+        <section class="running-portfolio-panel">
+            <div class="running-portfolio-head">
+                <h3><i class="fa fa-cogs"></i> All Running DFs</h3>
+                <p>Portfolio view of schedule commitment, completion progress and ownership. Delay status uses current overdue pending tasks, matching the dashboard total.</p>
+            </div>
+            <div class="running-portfolio-kpis">
+                <div class="running-portfolio-kpi"><span>Running DFs</span><strong><?php echo (int) $running_df_total; ?></strong></div>
+                <div class="running-portfolio-kpi"><span>On Track</span><strong style="color:#15803d;"><?php echo (int) $running_df_on_track; ?></strong></div>
+                <div class="running-portfolio-kpi"><span>Delayed</span><strong style="color:#b91c1c;"><?php echo (int) $running_df_delayed; ?></strong></div>
+                <div class="running-portfolio-kpi"><span>Average Progress</span><strong><?php echo (int) $running_average_progress; ?>%</strong></div>
+            </div>
+            <div class="running-portfolio-table table-responsive">
                 <table id="example5" class="table pretty5 table-striped table-bordered ">
                     <thead>
                         <tr>
                             <th>S. NO.</th>
                             <th>DF No.</th>
-                            <th>DOWNLOAD</th>
+                            <th>DOCUMENTS</th>
                             <th>PO DATE</th>
                             <th>MARKETING/DESIGN PERSON</th>
                             <th>DF RELEASE DATE</th>
-                            <th>PROJECTED COMPLETION DATE</th>
-                            <th>ACTUAL COMPLETION DATE</th>
-                            <th>DF STATUS</th>
-                            <th>DF DELAYED</th>
-                            <!-- <th>LOSS AGAINST DF</th> -->
-                            <th>VIEW GANTT CHART</th>
+                            <th>DISPATCH PLAN DATE</th>
+                            <th>FORECAST COMPLETION</th>
+                            <th>PROGRESS</th>
+                            <th>SCHEDULE HEALTH</th>
+                            <th>PLANNING</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3548,7 +3950,7 @@ $grand_total_running_loss += $loss_amount;
                     </tbody>
                 </table>
             </div>
-        </div>
+        </section>
     </div>
 </div>
 
@@ -3920,7 +4322,7 @@ $grand_total_running_loss = 0;
                     </td> -->
 
                     <td>
-                        <a href="<?php echo page_url; ?>Task/dfgantchartNew/<?php echo $df_id; ?>" target="_blank">
+                        <a href="<?php echo page_url; ?>gantt/<?php echo $df_id; ?>" target="_blank">
                             <span class="btn btn-warning btn-xs">GANTT CHART</span>
                         </a>
                     </td>
@@ -4031,22 +4433,161 @@ $grand_total_running_loss = 0;
             </div>  
 
 
-            <div id="updateprogress" class="modal fade" role="dialog">
+            <style>
+                /* Update Task Status modal: scoped to avoid changing other dashboard modals. */
+                #updateprogress .task-status-dialog {
+                    width: min(620px, calc(100% - 30px));
+                    margin: 48px auto;
+                }
+
+                #updateprogress .task-status-content {
+                    overflow: hidden;
+                    border: 0;
+                    border-radius: 16px;
+                    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+                }
+
+                #updateprogress .task-status-header {
+                    position: relative;
+                    padding: 22px 72px 20px 28px;
+                    color: #ffffff;
+                    border: 0;
+                    background: linear-gradient(135deg, #168a4a 0%, #20ad60 100%);
+                }
+
+                #updateprogress .task-status-header .modal-title {
+                    margin: 0;
+                    color: #ffffff;
+                    font-size: 21px;
+                    font-weight: 700;
+                    line-height: 1.35;
+                    text-align: left;
+                }
+
+                #updateprogress .task-status-close {
+                    position: absolute;
+                    top: 50%;
+                    right: 22px;
+                    display: flex;
+                    width: 36px;
+                    height: 36px;
+                    padding: 0;
+                    align-items: center;
+                    justify-content: center;
+                    transform: translateY(-50%);
+                    color: #ffffff;
+                    background: rgba(255, 255, 255, 0.16);
+                    border: 1px solid rgba(255, 255, 255, 0.42);
+                    border-radius: 50%;
+                    font-family: Arial, sans-serif;
+                    font-size: 27px;
+                    font-weight: 400;
+                    line-height: 1;
+                    opacity: 1;
+                    text-shadow: none;
+                    transition: background-color .2s ease, transform .2s ease;
+                }
+
+                #updateprogress .task-status-close:hover,
+                #updateprogress .task-status-close:focus {
+                    color: #ffffff;
+                    background: rgba(255, 255, 255, 0.28);
+                    opacity: 1;
+                    outline: 2px solid rgba(255, 255, 255, 0.75);
+                    outline-offset: 2px;
+                    transform: translateY(-50%) scale(1.06);
+                }
+
+                #updateprogress .task-status-body {
+                    padding: 26px 30px 30px;
+                    background: #ffffff;
+                }
+
+                #updateprogress .task-status-body .form-group {
+                    margin-bottom: 20px;
+                }
+
+                #updateprogress .task-status-body label {
+                    margin-bottom: 8px;
+                    color: #334155;
+                    font-size: 13px;
+                    font-weight: 700;
+                    letter-spacing: .02em;
+                }
+
+                #updateprogress .task-status-body .form-control {
+                    min-height: 46px;
+                    padding: 10px 14px;
+                    color: #1e293b;
+                    background-color: #f8fafc;
+                    border: 1px solid #dbe3ec;
+                    border-radius: 9px;
+                    box-shadow: none;
+                    transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+                }
+
+                #updateprogress .task-status-body .form-control:focus {
+                    background-color: #ffffff;
+                    border-color: #1baa5d;
+                    box-shadow: 0 0 0 3px rgba(27, 170, 93, 0.13);
+                }
+
+                #updateprogress .task-status-body textarea.form-control {
+                    min-height: 112px;
+                    resize: vertical;
+                }
+
+                #updateprogress .task-status-submit {
+                    width: 100%;
+                    min-height: 44px;
+                    color: #ffffff;
+                    background: linear-gradient(135deg, #168a4a 0%, #20ad60 100%);
+                    border: 0;
+                    border-radius: 9px;
+                    box-shadow: 0 8px 18px rgba(22, 138, 74, 0.22);
+                    font-size: 15px;
+                    font-weight: 700;
+                    transition: transform .2s ease, box-shadow .2s ease;
+                }
+
+                #updateprogress .task-status-submit:hover,
+                #updateprogress .task-status-submit:focus {
+                    color: #ffffff;
+                    transform: translateY(-1px);
+                    box-shadow: 0 10px 22px rgba(22, 138, 74, 0.3);
+                }
+
+                @media (max-width: 767px) {
+                    #updateprogress .task-status-dialog {
+                        margin: 20px auto;
+                    }
+
+                    #updateprogress .task-status-header {
+                        padding: 18px 64px 18px 22px;
+                    }
+
+                    #updateprogress .task-status-body {
+                        padding: 22px 20px 24px;
+                    }
+                }
+            </style>
+
+            <div id="updateprogress" class="modal fade" role="dialog" aria-labelledby="updateTaskStatusTitle">
                 <form id="updateprogressform" method="post"
                     action="<?php echo page_url; ?>Task/updatetaskremarks"
                     enctype="multipart/form-data">
                     <div id="pageloader1">
                         <img src="<?php echo assets_url; ?>images/loading.gif" alt="processing..." />
                     </div>
-                    <div class="modal-dialog">
+                    <div class="modal-dialog task-status-dialog">
                         <!-- Modal content-->
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <button type="button" class="close" data-dismiss="modal">&times;</button>
-                                <h4 class="modal-title" style="font-weight: bold; text-align:center;">Update Task Status
+                        <div class="modal-content task-status-content">
+                            <div class="modal-header task-status-header">
+                                <button type="button" class="close task-status-close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                <h4 class="modal-title" id="updateTaskStatusTitle">Update Task Status
                                 </h4>
                             </div>
-                            <div class="modal-body">
+                            <div class="modal-body task-status-body">
                                 <div class="row">
 
                                     <div class="col-md-12">
@@ -4179,8 +4720,8 @@ $grand_total_running_loss = 0;
                                 <div class="row">
                                     <div class="col-md-4"></div>
                                     <div class="col-md-4">
-                                        <input type="submit" style="width: 100%;" name=""
-                                            onclick="taskupdationvalidation();" value="Submit" class="btn btn-success">
+                                        <input type="submit" name=""
+                                            onclick="taskupdationvalidation();" value="Submit" class="btn btn-success task-status-submit">
                                     </div>
                                 </div>
 
@@ -4451,10 +4992,21 @@ $grand_total_running_loss = 0;
     <script src="https://cdn.fusioncharts.com/fusioncharts/latest/fusioncharts.js"></script>
 
     <script>
+        var exampleAjaxUrl = "<?php echo page_url; ?>Task/ongoingtasklist";
         var example2AjaxUrl = "<?php echo page_url; ?>Task/outdatedtask";
         var example3AjaxUrl = "<?php echo page_url; ?>Task/completeddf";
         var example8AjaxUrl = "<?php echo page_url; ?>Task/completeddfpendingforapproval";
         var example9AjaxUrl = "<?php echo page_url; ?>Df_change_control/dashboard_assigned_tasks";
+
+        // A table whose data could not be fetched must never throw an alert at
+        // the user. The loader below retries quietly and logs to the console.
+        if ($.fn.dataTable) {
+            $.fn.dataTable.ext.errMode = 'none';
+        }
+
+        $(document).on('error.dt', function(e, settings, techNote, message) {
+            console.error('DataTables error', techNote, message);
+        });
 
         function getDashboardTableRows(parsedResponse) {
             if (parsedResponse && $.isArray(parsedResponse.aaData)) {
@@ -4472,7 +5024,51 @@ $grand_total_running_loss = 0;
             return [];
         }
 
-        function loadDashboardTableSafely(tableId, ajaxUrl, callback, afterLoad) {
+        // Every dashboard table used to fire its request the moment the page
+        // loaded, so one dashboard opened six database connections at once.
+        // With several people on the dashboard together the server starts
+        // refusing connections, the request comes back as an HTML error page
+        // instead of JSON, and DataTables shows its "Ajax error" warning.
+        // Run at most two of these requests at a time to keep that from
+        // happening, and retry the ones that still fail.
+        var dashboardAjaxQueue = {
+            active: 0,
+            maxActive: 2,
+            waiting: [],
+
+            add: function(job) {
+                this.waiting.push(job);
+                this.run();
+            },
+
+            run: function() {
+                var self = this;
+
+                while (self.active < self.maxActive && self.waiting.length > 0) {
+                    var job = self.waiting.shift();
+                    self.active++;
+
+                    job(function() {
+                        self.active--;
+                        self.run();
+                    });
+                }
+            }
+        };
+
+        var DASHBOARD_TABLE_MAX_ATTEMPTS = 3;
+
+        function retryDashboardTable(tableId, ajaxUrl, attempt, done) {
+            // Back off, and stagger the retry so that every browser sitting on
+            // the dashboard does not hit the server again at the same moment.
+            var waitFor = (1200 * attempt) + Math.floor(Math.random() * 800);
+
+            setTimeout(function() {
+                requestDashboardTable(tableId, ajaxUrl, attempt + 1, done);
+            }, waitFor);
+        }
+
+        function requestDashboardTable(tableId, ajaxUrl, attempt, done) {
             $.ajax({
                 url: ajaxUrl,
                 method: "GET",
@@ -4484,21 +5080,40 @@ $grand_total_running_loss = 0;
                 try {
                     parsedResponse = JSON.parse(responseText);
                 } catch (error) {
-                    console.error(tableId + ' invalid JSON response', error, responseText);
+                    console.error(tableId + ' invalid JSON response (attempt ' + attempt + ')', error);
                 }
 
-                callback({
-                    data: getDashboardTableRows(parsedResponse)
-                });
-            }).fail(function(xhr, status, error) {
-                console.error(tableId + ' ajax failed', status, error);
-                callback({
-                    data: []
-                });
-            }).always(function() {
-                if (typeof afterLoad === 'function') {
-                    afterLoad();
+                if (parsedResponse === null && attempt < DASHBOARD_TABLE_MAX_ATTEMPTS) {
+                    retryDashboardTable(tableId, ajaxUrl, attempt, done);
+                    return;
                 }
+
+                done(getDashboardTableRows(parsedResponse));
+            }).fail(function(xhr, status, error) {
+                console.error(tableId + ' ajax failed (attempt ' + attempt + ')', status, error);
+
+                if (attempt < DASHBOARD_TABLE_MAX_ATTEMPTS) {
+                    retryDashboardTable(tableId, ajaxUrl, attempt, done);
+                    return;
+                }
+
+                done([]);
+            });
+        }
+
+        function loadDashboardTableSafely(tableId, ajaxUrl, callback, afterLoad) {
+            dashboardAjaxQueue.add(function(jobDone) {
+                requestDashboardTable(tableId, ajaxUrl, 1, function(rows) {
+                    jobDone();
+
+                    callback({
+                        data: rows
+                    });
+
+                    if (typeof afterLoad === 'function') {
+                        afterLoad();
+                    }
+                });
             });
         }
 
@@ -4541,7 +5156,9 @@ $grand_total_running_loss = 0;
 
                 "bProcessing": true,
                 "pagination": true,
-                "sAjaxSource": "<?php echo page_url; ?>Task/ongoingtasklist/",
+                "ajax": function(data, callback) {
+                    loadDashboardTableSafely('example', exampleAjaxUrl, callback);
+                },
                 stateSave: true,
                 "aoColumns": [
 
@@ -4880,29 +5497,7 @@ $grand_total_running_loss = 0;
                     processing: true,
                     paging: true,
                     ajax: function(data, callback) {
-                        $.ajax({
-                            url: "<?php echo page_url; ?>Task/pendingtoassigndf",
-                            method: "GET",
-                            dataType: "text",
-                            cache: false
-                        }).done(function(responseText) {
-                            var parsedResponse = null;
-
-                            try {
-                                parsedResponse = JSON.parse(responseText);
-                            } catch (error) {
-                                console.error('example4 invalid JSON response', error, responseText);
-                            }
-
-                            callback({
-                                data: parsedResponse && $.isArray(parsedResponse.aaData) ? parsedResponse.aaData : []
-                            });
-                        }).fail(function(xhr, status, error) {
-                            console.error('example4 ajax failed', status, error);
-                            callback({
-                                data: []
-                            });
-                        });
+                        loadDashboardTableSafely('example4', "<?php echo page_url; ?>Task/pendingtoassigndf", callback);
                     },
                     columns: [{
                             data: 'sr_no',
@@ -5179,29 +5774,32 @@ $grand_total_running_loss = 0;
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal" aria-hidden="true">x</button>
-                    <h4 class="modal-title" id="dashboardHealthReportModalLabel">Dashboard Health Calculation Report</h4>
+                    <h4 class="modal-title" id="dashboardHealthReportModalLabel">How is your dashboard health score calculated?</h4>
                 </div>
                 <div class="modal-body">
                     <div class="health-report-summary">
                         <div class="health-report-formula">
-                            Score Formula: <?php echo $healthBaseScore; ?> - <?php echo $healthOverdueDeduction; ?> - <?php echo $healthDelayedDfDeduction; ?> - <?php echo $healthHelpTicketDeduction; ?> = <?php echo $healthScore; ?>%
+                            Your score: <?php echo $healthBaseScore; ?> - <?php echo $healthOverdueDeduction; ?> - <?php echo $healthDelayedDfDeduction; ?> - <?php echo $healthHelpTicketDeduction; ?> = <?php echo $healthScore; ?>%
                         </div>
                         <p class="health-report-help">
-                            This dashboard starts from <?php echo $healthBaseScore; ?>%. Then it subtracts capped deductions for overdue tasks, delayed DFs, and help tickets within your visible scope. Minimum score is 0%.
+                            Start with <?php echo $healthBaseScore; ?> points. Subtract points for overdue tasks, delayed DFs, and open help tickets. The points left are your health score out of <?php echo $healthBaseScore; ?>, shown as a percentage.
+                        </p>
+                        <p class="health-report-help">
+                            <strong>Formula:</strong> <?php echo $healthBaseScore; ?> &minus; overdue task points &minus; delayed DF points &minus; open help ticket points. Each category has a maximum number of points it can subtract, as shown below.
                         </p>
                     </div>
 
                     <div class="row">
                         <div class="col-sm-3">
                             <div class="health-summary-box">
-                                <span class="value"><?php echo $healthBaseScore; ?>%</span>
-                                <span class="label">Base Score</span>
+                                <span class="value"><?php echo $healthBaseScore; ?></span>
+                                <span class="label">Starting Points</span>
                             </div>
                         </div>
                         <div class="col-sm-3">
                             <div class="health-summary-box">
                                 <span class="value"><?php echo $healthTotalDeduction; ?></span>
-                                <span class="label">Total Deduction</span>
+                                <span class="label">Points Subtracted</span>
                             </div>
                         </div>
                         <div class="col-sm-3">
@@ -5232,23 +5830,25 @@ $grand_total_running_loss = 0;
                         <table class="table table-bordered health-report-table">
                             <thead>
                                 <tr>
-                                    <th>Metric</th>
-                                    <th>Current Count</th>
-                                    <th>Rule</th>
-                                    <th>Max Deduction</th>
-                                    <th>Current Deduction</th>
-                                    <th>Meaning</th>
+                                    <th>What we count</th>
+                                    <th>Number now</th>
+                                    <th>How the points are calculated</th>
+                                    <th>Points subtracted</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($healthBreakdownRows as $healthRow): ?>
                                 <tr>
-                                    <td><strong><?php echo $healthRow['metric']; ?></strong></td>
+                                    <td><strong><?php echo $healthRow['metric']; ?></strong><br><?php echo $healthRow['note']; ?></td>
                                     <td><span class="health-pill"><?php echo $healthRow['count']; ?></span></td>
-                                    <td><?php echo $healthRow['rule']; ?></td>
-                                    <td><?php echo $healthRow['cap']; ?></td>
-                                    <td><strong><?php echo $healthRow['deduction']; ?></strong></td>
-                                    <td><?php echo $healthRow['note']; ?></td>
+                                    <td>
+                                        <?php echo $healthRow['count']; ?> &times; <?php echo $healthRow['multiplier']; ?> points = <?php echo $healthRow['count'] * $healthRow['multiplier']; ?> points.<br>
+                                        We subtract at most <?php echo $healthRow['cap']; ?> points for this category.
+                                        <?php if (($healthRow['count'] * $healthRow['multiplier']) > $healthRow['cap']): ?>
+                                        <br>The total exceeds this limit, so only <?php echo $healthRow['cap']; ?> points are subtracted.
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><strong><?php echo $healthRow['deduction']; ?> points</strong></td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -5256,7 +5856,10 @@ $grand_total_running_loss = 0;
                     </div>
 
                     <div class="health-thresholds">
-                        <strong>Health bands:</strong> GOOD = 80% and above, ATTENTION = 50% to 79%, CRITICAL = below 50%.
+                        <strong>Why the score cannot go below <?php echo $healthMinimumScore; ?>%:</strong>
+                        The three category limits add up to <?php echo $healthOverdueCap + $healthDelayedDfCap + $healthHelpTicketCap; ?> points (<?php echo $healthOverdueCap; ?> + <?php echo $healthDelayedDfCap; ?> + <?php echo $healthHelpTicketCap; ?>). Even with more issues, the current formula subtracts no more than this total.
+                        <br>
+                        <strong>What your score means:</strong> GOOD = 80% and above, ATTENTION = 50% to 79%, CRITICAL = below 50%.
                         <br>
                         <strong>Scope:</strong> <?php echo $dashboardScopeText; ?> on <?php echo date('d-M-Y h:i A'); ?>.
                     </div>
@@ -5501,7 +6104,10 @@ https://cdn.jsdelivr.net/npm/bootoast@1.1.4/dist/bootoast.min.js
             var usefilter = $("#task_user_filter").val();
             var dfno = $("#task_dfno_filter").val();
             var activeusertype = '1';
-            $('#example').DataTable().ajax.url("<?php echo page_url; ?>Task/ongoingtasklist/" + filter + "/" + departmentfilter + "/" + usefilter + "/" + dfno + "/" + activeusertype).load();
+            exampleAjaxUrl = "<?php echo page_url; ?>Task/ongoingtasklist/" + filter + "/" + departmentfilter + "/" + usefilter + "/" + dfno + "/" + activeusertype;
+            if ($.fn.DataTable.isDataTable('#example')) {
+                $('#example').DataTable().ajax.reload(null, false);
+            }
             //$('#example').DataTable().ajax.reload();
         }
 
@@ -5562,7 +6168,33 @@ https://cdn.jsdelivr.net/npm/bootoast@1.1.4/dist/bootoast.min.js
     </script>
 
 
-    <div id="assigntaskwindow" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+    <style>
+        /* Keep assignment actions visible while long task lists scroll. */
+        #assigntaskwindow .modal-dialog {
+            width: calc(100% - 20px);
+            max-width: 900px;
+            margin: 10px auto;
+        }
+
+        #assigntaskwindow .modal-content {
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 20px);
+            max-height: calc(100dvh - 20px);
+        }
+
+        #assigntaskwindow .modal-header,
+        #assigntaskwindow .modal-footer {
+            flex: 0 0 auto;
+        }
+
+        #assigntaskwindow .modal-body {
+            min-height: 0;
+            overflow-y: auto;
+        }
+    </style>
+
+    <div id="assigntaskwindow" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="assignTaskModalLabel"
         aria-hidden="true" style="display: none;">
 
         <form id="assigntasktoteammember" method="post"
@@ -5574,7 +6206,7 @@ https://cdn.jsdelivr.net/npm/bootoast@1.1.4/dist/bootoast.min.js
                 <div class="modal-content">
                     <div class="modal-header">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                        <h4 class="modal-title">Assign Task to Your Team Members</h4>
+                        <h4 class="modal-title" id="assignTaskModalLabel">Assign Task to Your Team Members</h4>
                     </div>
 
                     <div class="modal-body">

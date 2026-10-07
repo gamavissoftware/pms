@@ -89,6 +89,12 @@
     </style>
 </head>
 <body>
+    <?php
+    $pdf_currency = strtoupper(trim((string) ($currency ?? 'INR')));
+    if (!in_array($pdf_currency, array('INR', 'USD', 'EUR'), true)) {
+        $pdf_currency = 'INR';
+    }
+    ?>
     <div class="watermark">Shubham Pack</div>
 
     <!-- REPEATING HEADER -->
@@ -104,24 +110,9 @@
     foreach($q->result() as $oppninfo);
     $q1 = $this->db->select('op_no')->from('service_opportunities')->where('opportunity_id',$oppninfo->opportunity_id)->get();
     foreach($q1->result() as $opportunitynoinfo);
-    echo $opportunitynoinfo->op_no; ?>
-    <?php
-    $countingnum = '';
-    $quotation_count = $this->db
-        ->where('opportunity_id', $oppninfo->opportunity_id)
-        ->count_all_results('service_quotations');
-
-    if ($quotation_count > 0) {
-        $versioncount = $quotation_count;
-        if($versioncount>1){
-            $countingnum = $versioncount-1;
-        }else{
-            $countingnum = '';
-        }
-        if($countingnum!==''){
-            echo "/ V" . $countingnum;
-        }
-        
+    echo $opportunitynoinfo->op_no;
+    if (!empty($revision_no)) {
+        echo ' / R' . (int) $revision_no;
     }
     ?>
     <br>
@@ -230,10 +221,10 @@
                 <tr>
                     <th width="7%">S.NO</th>
                     <th width="35%">DESCRIPTION</th>
-                    <th width="13%">RATE</th>
+                    <th width="13%">RATE (<?php echo $pdf_currency; ?>)</th>
                     <th width="15%">DAYS / TIMES</th>
                     <th width="10%">ENG.</th>
-                    <th width="20%" class="text-right">TOTAL (<?php echo $currency; ?>)</th>
+                    <th width="20%" class="text-right">TOTAL (<?php echo $pdf_currency; ?>)</th>
                 </tr>
             </thead>
             <tbody>
@@ -246,7 +237,7 @@
                             <br><span style="color: #555; font-size: 8pt;"><?php echo nl2br(strip_tags($row->description)); ?></span>
                         <?php endif; ?>
                     </td>
-                    <td class="text-center"><?php echo number_format($row->rate, 2); ?></td>
+                    <td class="text-center"><?php echo $pdf_currency . ' ' . number_format($row->rate, 2); ?></td>
                     <td class="text-center">
                         <?php 
                             $val = $row->no_of_days;
@@ -255,54 +246,54 @@
                     </td>
                     <td class="text-center"><?php echo $row->no_of_engineers; ?></td>
                     <td class="text-right">
-                        <?php echo ($row->is_customer_scope == '1') ? '<strong>CUSTOMER SCOPE</strong>' : number_format($row->row_total, 2); ?>
+                        <?php echo ($row->is_customer_scope == '1') ? '<strong>CUSTOMER SCOPE</strong>' : $pdf_currency . ' ' . number_format($row->row_total, 2); ?>
                     </td>
                 </tr>
                 <?php endforeach; ?>
 
                 <tr class="total-row">
                     <td colspan="5" class="text-right">TOTAL BASIC AMOUNT</td>
-                    <td class="text-right"><?php echo number_format($total_basic_amount, 2); ?></td>
+                    <td class="text-right"><?php echo $pdf_currency . ' ' . number_format($total_basic_amount, 2); ?></td>
                 </tr>
 
                 <?php if(isset($total_discount) && $total_discount > 0): ?>
                 <tr class="total-row">
                     <td colspan="5" class="text-right" style="color: #d4380d;">DISCOUNT (-)</td>
-                    <td class="text-right" style="color: #d4380d;"><?php echo number_format($total_discount, 2); ?></td>
+                    <td class="text-right" style="color: #d4380d;"><?php echo $pdf_currency . ' ' . number_format($total_discount, 2); ?></td>
                 </tr>
                 <?php endif; ?>
 
                 <?php if($gst_percent > 0): ?>
                 <tr class="total-row">
                     <td colspan="5" class="text-right">GST (<?php echo $gst_percent; ?>%)</td>
-                    <td class="text-right"><?php echo number_format($gst_amount, 2); ?></td>
+                    <td class="text-right"><?php echo $pdf_currency . ' ' . number_format($gst_amount, 2); ?></td>
                 </tr>
                 <?php endif; ?>
 
                 <?php if(isset($wht_amount) && $wht_amount > 0): ?>
                 <tr class="total-row">
                     <td colspan="5" class="text-right">WHT (<?php echo $wht_percent; ?>%)</td>
-                    <td class="text-right"><?php echo number_format($wht_amount, 2); ?></td>
+                    <td class="text-right"><?php echo $pdf_currency . ' ' . number_format($wht_amount, 2); ?></td>
                 </tr>
                 <?php endif; ?>
 
                 <?php if(isset($ex_works_amount) && $ex_works_amount > 0): ?>
                 <tr class="total-row">
                     <td colspan="5" class="text-right">EX-WORKS</td>
-                    <td class="text-right"><?php echo number_format($ex_works_amount, 2); ?></td>
+                    <td class="text-right"><?php echo $pdf_currency . ' ' . number_format($ex_works_amount, 2); ?></td>
                 </tr>
                 <?php endif; ?>
 
                 <?php if(isset($freight_amount) && $freight_amount > 0): ?>
                 <tr class="total-row">
                     <td colspan="5" class="text-right">FREIGHT</td>
-                    <td class="text-right"><?php echo number_format($freight_amount, 2); ?></td>
+                    <td class="text-right"><?php echo $pdf_currency . ' ' . number_format($freight_amount, 2); ?></td>
                 </tr>
                 <?php endif; ?>
 
                 <tr class="grand-total-row">
-                    <td colspan="5" class="text-right">GRAND TOTAL (<?php echo $currency; ?>)</td>
-                    <td class="text-right"><?php echo number_format($grand_total, 2); ?></td>
+                    <td colspan="5" class="text-right">GRAND TOTAL (<?php echo $pdf_currency; ?>)</td>
+                    <td class="text-right"><?php echo $pdf_currency . ' ' . number_format($grand_total, 2); ?></td>
                 </tr>
             </tbody>
         </table>

@@ -561,6 +561,13 @@ $can_add_points = !empty($workflow_state['can_add_points']);
 $can_complete_task = !empty($workflow_state['can_complete_task']);
 $workflow_block_message = !empty($workflow_state['block_message']) ? $workflow_state['block_message'] : '';
 $related_task_51_done = !empty($workflow_state['related_task_51_done']);
+$list_attachment = '';
+foreach ($closure_items as $attachment_item) {
+    if (!empty($attachment_item->attachment)) {
+        $list_attachment = (string) $attachment_item->attachment;
+        break;
+    }
+}
 $hero_kicker = 'Punch Point List';
 $hero_copy = 'Add all required punch points in one submission.';
 $section_kicker = 'Add Points';
@@ -648,6 +655,43 @@ if (!empty($task_row->task_completed_on) && $task_row->task_completed_on !== '00
             </div>
         </div>
 
+        <div class="section-card" id="task-progress">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">Task remarks &amp; tickets</h2>
+                    <p class="section-copy">Share the current progress, reason for delay, or help needed for this task.</p>
+                </div>
+                <a class="btn btn-outline-soft" href="<?php echo page_url . 'Task/viewdfwiseticket/' . (int) $task_row->df_id . '/' . (int) $task_row->id; ?>">View Tickets</a>
+            </div>
+            <?php if (!empty($task_row->remarks)) { ?>
+                <p><strong>Latest remarks</strong><br><?php echo nl2br(htmlspecialchars($task_row->remarks, ENT_QUOTES, 'UTF-8')); ?></p>
+            <?php } ?>
+            <?php if ($is_task_open) { ?>
+                <form method="post" action="<?php echo page_url; ?>Task/save_punch_point_progress">
+                    <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>">
+                    <input type="hidden" name="task_record_id" value="<?php echo (int) $task_row->id; ?>">
+                    <div class="form-group">
+                        <label for="progress-remarks">Progress / delay remarks</label>
+                        <textarea class="form-control" id="progress-remarks" name="taskremarks" required rows="3" placeholder="What is the current status? Explain any delay or assistance needed."></textarea>
+                    </div>
+                    <div class="checkbox"><label><input type="checkbox" id="raise-ticket" name="raise_ticket" value="1"> Raise a ticket for this task</label></div>
+                    <div id="ticket-fields" class="row" hidden>
+                        <div class="col-sm-6 form-group">
+                            <label for="ticket-department">Ticket department</label>
+                            <select class="form-control" id="ticket-department" name="ticket_department" disabled><?php echo $department_options_html; ?></select>
+                        </div>
+                        <div class="col-sm-6 form-group">
+                            <label for="ticket-user">Assign ticket to</label>
+                            <select class="form-control" id="ticket-user" name="ticket_user" disabled><option value="">Select user</option></select>
+                            <p id="ticket-auto" class="small-note" hidden>IT Support tickets are assigned automatically.</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary-closure" type="submit" id="save-progress">Save Remarks</button>
+                    <p class="small-note">The task stays open. Use the workflow completion action below when ready.</p>
+                </form>
+            <?php } ?>
+        </div>
+
         <?php if (!$is_task_open) { ?>
             <div class="completion-banner">
                 <div><?php echo htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8'); ?> has already been completed and is no longer pending.</div>
@@ -707,7 +751,7 @@ if (!empty($task_row->task_completed_on) && $task_row->task_completed_on !== '00
                     <span class="status-pill status-pill-done">Punch Point List closes on submit</span>
                 </div>
 
-                <form method="post" action="<?php echo page_url; ?>Task/save_punch_point_closure">
+                <form method="post" action="<?php echo page_url; ?>Task/save_punch_point_closure" enctype="multipart/form-data">
                     <input type="hidden" name="task_record_id" value="<?php echo (int) $task_row->id; ?>">
                     <div id="closurePointRows">
                         <div class="point-row" data-row-index="0">
@@ -762,6 +806,22 @@ if (!empty($task_row->task_completed_on) && $task_row->task_completed_on !== '00
                         </div>
                     </div>
 
+                    <div class="point-row" style="margin-top:16px;">
+                        <div class="point-row-head">
+                            <span class="point-row-index"><i class="fa fa-paperclip"></i> Punch Point List Attachment</span>
+                            <span class="point-helper">One attachment for the complete list</span>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-7">
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label>Attach File</label>
+                                    <input type="file" class="form-control" name="punch_point_attachment" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip">
+                                    <small class="small-note">Optional · Images, PDF, Word, Excel, CSV or ZIP · Maximum 10 MB</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-action-bar">
                         <div class="form-action-copy">
                             Submit only after all points are added. Punch Point List will be marked done immediately after a successful submission.
@@ -784,6 +844,18 @@ if (!empty($task_row->task_completed_on) && $task_row->task_completed_on !== '00
                 </div>
                 <span class="status-pill status-pill-live"><?php echo count($closure_items); ?> Point<?php echo count($closure_items) === 1 ? '' : 's'; ?></span>
             </div>
+
+            <?php if ($list_attachment !== '') { ?>
+                <div class="action-banner action-banner-ready" style="margin-bottom:18px;">
+                    <div>
+                        <span class="action-banner-title"><i class="fa fa-paperclip"></i> Punch Point List Attachment</span>
+                        <div class="action-banner-copy">One common supporting file attached with this punch point list.</div>
+                    </div>
+                    <a href="<?php echo base_url('image_bank/punch_point_closure/' . rawurlencode($list_attachment)); ?>" target="_blank" download class="btn btn-primary-closure">
+                        <i class="fa fa-download"></i> Download Attachment
+                    </a>
+                </div>
+            <?php } ?>
 
             <?php if (!empty($closure_items)) { ?>
                 <div class="table-wrap">
@@ -830,6 +902,9 @@ if (!empty($task_row->task_completed_on) && $task_row->task_completed_on !== '00
                                             }
                                         } else {
                                             echo '<span class="small-note">No response yet</span>';
+                                        }
+                                        if (!empty($closure_item->response_attachment)) {
+                                            echo '<span class="point-meta"><a href="' . delegationfile . rawurlencode($closure_item->response_attachment) . '" target="_blank" download><i class="fa fa-download"></i> Download completion proof</a></span>';
                                         }
                                         ?>
                                     </td>
@@ -900,6 +975,28 @@ if (!empty($task_row->task_completed_on) && $task_row->task_completed_on !== '00
 <script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
 
 <script>
+var ticketUsers = <?php echo json_encode($ticket_users, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+$('#raise-ticket').on('change', function() {
+    var enabled = this.checked;
+    $('#ticket-fields').prop('hidden', !enabled);
+    $('#ticket-department').prop('disabled', !enabled).prop('required', enabled);
+    $('#save-progress').text(enabled ? 'Save Remarks & Raise Ticket' : 'Save Remarks');
+    $('#ticket-department').trigger('change');
+});
+$('#ticket-department').on('change', function() {
+    var department = this.value;
+    var enabled = $('#raise-ticket').prop('checked');
+    var automatic = department === '18';
+    var select = $('#ticket-user').empty().append($('<option>').val('').text('Select user'));
+    ticketUsers.forEach(function(user) {
+        if (String(user.department_id) === department) {
+            select.append($('<option>').val(user.user_id).text(user.first_name + ' ' + user.last_name));
+        }
+    });
+    select.prop('disabled', !enabled || automatic).prop('required', enabled && !automatic);
+    $('#ticket-auto').prop('hidden', !automatic);
+});
+
 var closurePointRowIndex = 1;
 var departmentOptionsHtml = <?php echo json_encode($department_options_html); ?>;
 

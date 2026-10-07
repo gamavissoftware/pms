@@ -1,6 +1,15 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php
-$workflow_labels = array('IN_STOCK' => 'In Stock', 'STANDARD' => 'Standard Procurement', 'CUSTOM' => 'Custom Production');
+$workflow_labels = array(
+    'CONSUMABLE' => 'Consumable',
+    'CRITICAL' => 'Critical',
+    'CONS_CRITICAL' => 'Consumable + Critical',
+    'CUSTOM_CHANGEOVER' => 'Custom Engg - Changeover',
+    'CUSTOM_SPEED_UPGRADATION' => 'Custom Engg - Speed Upgradation',
+    'IN_STOCK' => 'Legacy - In Stock',
+    'STANDARD' => 'Legacy - Standard Procurement',
+    'CUSTOM' => 'Legacy - Custom Production',
+);
 $focus_task_id = !empty($focus_task_id) ? (int) $focus_task_id : 0;
 $focus_extension_request_id = !empty($focus_extension_request_id) ? (int) $focus_extension_request_id : 0;
 $focus_update_id = !empty($focus_update_id) ? (int) $focus_update_id : 0;
@@ -58,6 +67,8 @@ $focus_update_id = !empty($focus_update_id) ? (int) $focus_update_id : 0;
                         <div class="btn-group pull-right">
                             <a href="<?php echo page_url; ?>Spares/order_detail/<?php echo (int) $order_snapshot->order_id; ?>" class="btn btn-default waves-effect waves-light"><i class="fa fa-arrow-left"></i> Order Detail</a>
                             <a href="<?php echo page_url; ?>Spares_execution/dashboard" class="btn btn-default waves-effect waves-light"><i class="fa fa-dashboard"></i> Execution Dashboard</a>
+                            <a href="<?php echo page_url; ?>Spares_execution/sf_form/<?php echo (int) $order_snapshot->order_id; ?>" class="btn btn-purple waves-effect waves-light"><i class="fa fa-file-text-o"></i> SF Form</a>
+                            <a href="<?php echo page_url; ?>Spares_execution/mrp_shortages/<?php echo (int) $order_snapshot->order_id; ?>" class="btn btn-info waves-effect waves-light"><i class="fa fa-cogs"></i> MRP Report</a>
                             <a href="<?php echo page_url; ?>Spares_execution/gantt/<?php echo (int) $order_snapshot->order_id; ?>" class="btn btn-info waves-effect waves-light"><i class="fa fa-bar-chart"></i> Gantt Chart</a>
                             <a href="<?php echo page_url; ?>Spares_execution/export_order_tracker/<?php echo (int) $order_snapshot->order_id; ?>" class="btn btn-success waves-effect waves-light"><i class="fa fa-download"></i> Export Tracker CSV</a>
                             <a href="#" onclick="window.print(); return false;" class="btn btn-default waves-effect waves-light"><i class="fa fa-print"></i> Print</a>
@@ -90,7 +101,7 @@ $focus_update_id = !empty($focus_update_id) ? (int) $focus_update_id : 0;
                 <div class="col-md-3">
                     <div class="summary-card">
                         <div class="summary-title">Workflow</div>
-                        <div class="summary-value"><?php echo htmlspecialchars($workflow_labels[$execution_order->workflow_type]); ?></div>
+                        <div class="summary-value"><?php echo htmlspecialchars(isset($workflow_labels[$execution_order->workflow_type]) ? $workflow_labels[$execution_order->workflow_type] : $execution_order->workflow_type); ?></div>
                     </div>
                 </div>
                 <div class="col-md-3">

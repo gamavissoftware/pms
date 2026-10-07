@@ -2,7 +2,8 @@
 defined('BASEPATH') or exit('No direct script access allowed');
 
 $currency = strtoupper(trim((string) ($pi->currency ?? 'INR')));
-$currency_symbol = $currency === 'USD' ? '$' : '₹';
+$currency_symbols = ['INR' => '₹', 'USD' => '$', 'EUR' => '€'];
+$currency_symbol = $currency_symbols[$currency] ?? $currency;
 $company_color = $company_profile['colorcode'] ?? '#003366';
 $pi_items = !empty($pi_items) ? $pi_items : [];
 $unit_options = [

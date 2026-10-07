@@ -387,7 +387,10 @@ function get_departments($df)
 		$t=1;
 		foreach($rty->result() as $row)
 		{
-			$text="<a href='".page_url."Task/task_wise_gantchart/".$row->department_id."/".$df."' target='_blank'><u>".$row->department."</u></a>";
+			/* Was Task/task_wise_gantchart/<department>/<df>. The new board takes
+			   the same drill-down as switches: task rows, filtered to the one
+			   department. See application/controllers/Gantt_chart.php. */
+			$text="<a href='".page_url."gantt/".$df."?group=task&amp;dept=".$row->department_id."' target='_blank'><u>".$row->department."</u></a>";
 			$departments[]=str_replace('"','',array("label"=>$text,"id"=>$t));
 		$t++;
 		}
@@ -1204,10 +1207,10 @@ function getRoot()
 	//return json_encode($data);
 }
 
-function getchildren($taskid)
-{
-	$d=array();
-	$resty=$this->db->select('a.task_id,a.task_name,a.department_id,b.department')->from('task_management a')->join('departments b','b.department_id=a.department_id')->where('a.tat_start_from',$taskid)->where('a.status',1)->get();
+	function getchildren($taskid)
+	{
+		$d=array();
+		$resty=$this->db->select('a.task_id,a.task_name,a.department_id,b.department')->from('task_management a')->join('departments b','b.department_id=a.department_id')->where('a.tat_start_from',$taskid)->where('a.status',1)->get();
 	if($resty->num_rows()>0)
 	{
 		
@@ -1219,12 +1222,133 @@ function getchildren($taskid)
       }
   }
 
-      return $d;
+	      return $d;
 
-}
+	}
 
-	function reversetree($tasks, $parentId = null, $level = 0) {
-    $result = [];
+	function get_task_structure_data()
+	{
+		$query = $this->db
+			->select('a.task_id, a.task_name, a.task_type, a.tat, a.tat_start_from, a.sortorder, a.root, a.status, b.department')
+			->from('task_management a')
+			->join('departments b', 'b.department_id = a.department_id', 'left')
+			->where('a.status', 1)
+			->order_by('a.sortorder', 'asc')
+			->order_by('a.task_id', 'asc')
+			->get();
+
+		$nodes = array();
+		$departments = array();
+		$main_tasks = 0;
+		$sub_tasks = 0;
+
+		foreach ($query->result_array() as $row) {
+			$task_id = (int) $row['task_id'];
+			$department = !empty($row['department']) ? $row['department'] : 'Unassigned';
+			$task_type = (int) $row['task_type'];
+
+			if ($task_type === 2) {
+				$sub_tasks++;
+			} else {
+				$main_tasks++;
+			}
+
+			$departments[$department] = true;
+			$nodes[$task_id] = array(
+				'task_id' => $task_id,
+				'task_name' => $row['task_name'],
+				'task_type' => $task_type,
+				'task_type_label' => $task_type === 2 ? 'Sub Task' : 'Main Task',
+				'tat' => (int) $row['tat'],
+				'parent_id' => (int) $row['tat_start_from'],
+				'sortorder' => (int) $row['sortorder'],
+				'root' => (int) $row['root'],
+				'department' => $department,
+				'children' => array()
+			);
+		}
+
+		$roots = array();
+		$attached = array();
+
+		foreach ($nodes as $task_id => &$node) {
+			$parent_id = (int) $node['parent_id'];
+			if ($node['root'] === 1 || $parent_id <= 0 || $parent_id === $task_id || !isset($nodes[$parent_id])) {
+				$roots[] =& $node;
+				$attached[$task_id] = true;
+				continue;
+			}
+
+			$ancestor_id = $parent_id;
+			$visited_ancestors = array();
+			$has_loop = false;
+			while ($ancestor_id > 0 && isset($nodes[$ancestor_id])) {
+				if ($ancestor_id === $task_id || isset($visited_ancestors[$ancestor_id])) {
+					$has_loop = true;
+					break;
+				}
+				$visited_ancestors[$ancestor_id] = true;
+				$ancestor_id = (int) $nodes[$ancestor_id]['parent_id'];
+			}
+
+			if ($has_loop) {
+				$roots[] =& $node;
+				$attached[$task_id] = true;
+				continue;
+			}
+
+			$nodes[$parent_id]['children'][] =& $node;
+			$attached[$task_id] = true;
+		}
+		unset($node);
+
+		foreach ($nodes as $task_id => &$node) {
+			if (!isset($attached[$task_id])) {
+				$roots[] =& $node;
+			}
+		}
+		unset($node);
+
+		$max_depth = 0;
+		$leaf_count = 0;
+		$stack = array();
+		foreach ($roots as $root) {
+			$stack[] = array($root, 1);
+		}
+
+		while (!empty($stack)) {
+			$current = array_pop($stack);
+			$current_node = $current[0];
+			$depth = $current[1];
+			$max_depth = max($max_depth, $depth);
+
+			if (empty($current_node['children'])) {
+				$leaf_count++;
+				continue;
+			}
+
+			foreach ($current_node['children'] as $child) {
+				$stack[] = array($child, $depth + 1);
+			}
+		}
+
+		return array(
+			'roots' => $roots,
+			'tasks' => array_values($nodes),
+			'stats' => array(
+				'total_tasks' => count($nodes),
+				'main_tasks' => $main_tasks,
+				'sub_tasks' => $sub_tasks,
+				'departments' => count($departments),
+				'root_tasks' => count($roots),
+				'leaf_tasks' => $leaf_count,
+				'max_depth' => $max_depth
+			)
+		);
+	}
+
+		function reversetree($tasks, $parentId = null, $level = 0) {
+	    $result = [];
 
     foreach ($tasks as $task) {
         if ($task['tat_start_from'] == $parentId) {
@@ -3382,15 +3506,39 @@ public function get_week_numbers_between_datesNew($start_date, $end_date) {
         }
     }
 
-    function createnewticket($selecteddepartmentid, $selecteduserinfo, $dfid, $mastertaskid, $id, $taskremarks){
-    
-    // --- Start of Added Logic ---
-    // If the selected department is 18 (e.g., 'IT Support'),
-    // automatically assign the ticket to user 180.
-    if ($selecteddepartmentid == 18) {
-        $selecteduserinfo = 180;
+    public function getActiveTicketRecipient($selecteddepartmentid, $selecteduserinfo)
+    {
+        $selecteddepartmentid = (int) $selecteddepartmentid;
+        $selecteduserinfo = (int) $selecteduserinfo;
+
+        // Department 18 is intentionally routed to the configured IT recipient.
+        if ($selecteddepartmentid === 18) {
+            $selecteduserinfo = 180;
+        }
+
+        if ($selecteddepartmentid <= 0 || $selecteduserinfo <= 0) {
+            return null;
+        }
+
+        return $this->db->select('user_id, department_id, first_name, last_name')
+            ->from('system_users')
+            ->where('user_id', $selecteduserinfo)
+            ->where('department_id', $selecteddepartmentid)
+            ->where('user_status', 1)
+            ->get()
+            ->row();
     }
-    // --- End of Added Logic ---
+
+    function createnewticket($selecteddepartmentid, $selecteduserinfo, $dfid, $mastertaskid, $id, $taskremarks){
+
+    $recipient = $this->getActiveTicketRecipient($selecteddepartmentid, $selecteduserinfo);
+    if (!$recipient) {
+        log_message('error', 'Help ticket not created: inactive or mismatched recipient. Department ' . (int) $selecteddepartmentid . ', user ' . (int) $selecteduserinfo . ', DF ' . (int) $dfid . ', task record ' . (int) $id);
+        return false;
+    }
+
+    $selecteddepartmentid = (int) $recipient->department_id;
+    $selecteduserinfo = (int) $recipient->user_id;
 
     $user_id = $this->session->userdata['logged_in']['user_id'];
     $dfno = $this->getdfinfo($dfid);
@@ -3440,6 +3588,7 @@ public function get_week_numbers_between_datesNew($start_date, $end_date) {
     
     // The notification will also be sent to the correct user (180 in this case)
     $this->sendticketinformationtouser($selecteduserinfo, $dfid, $taskremarks, $ticketno);
+    return true;
 }
 
     private function getTicketNotificationPreview($text, $limit = 180)

@@ -149,16 +149,22 @@
                             <?php foreach ($visits as $visit): ?>
                                 <tr>
                                     <td>
-                                        <div class="visit-ref"><?php echo $visit->op_no; ?></div>
+                                        <div class="visit-ref"><?php echo htmlspecialchars((string) $visit->op_no, ENT_QUOTES, 'UTF-8'); ?></div>
                                         <div class="visit-subtext">Visit #<?php echo (int) $visit->visit_id; ?></div>
                                         <div class="visit-subtext">
-                                            <?php echo !empty($visit->op_date) ? date('d M, Y', strtotime($visit->op_date)) : 'Opportunity date not available'; ?>
+                                            <?php
+                                            if (!empty($visit->op_date)) {
+                                                echo ($visit->reference_type === 'Order' ? 'Order: ' : 'DF released: ') . date('d M, Y', strtotime($visit->op_date));
+                                            } else {
+                                                echo $visit->reference_type === 'Other DF' ? 'External DF' : 'Reference date not available';
+                                            }
+                                            ?>
                                         </div>
                                     </td>
                                     <td>
-                                        <div class="visit-ref" style="font-size:14px;"><?php echo $visit->customer_name; ?></div>
-                                        <div class="visit-subtext"><?php echo $visit->customer_contact_name !== '' ? $visit->customer_contact_name : 'Contact not available'; ?></div>
-                                        <div class="visit-subtext"><?php echo $visit->customer_contact_no !== '' ? $visit->customer_contact_no : 'Phone not available'; ?></div>
+                                        <div class="visit-ref" style="font-size:14px;"><?php echo htmlspecialchars((string) $visit->customer_name, ENT_QUOTES, 'UTF-8'); ?></div>
+                                        <div class="visit-subtext"><?php echo $visit->customer_contact_name !== '' ? htmlspecialchars((string) $visit->customer_contact_name, ENT_QUOTES, 'UTF-8') : 'Contact not available'; ?></div>
+                                        <div class="visit-subtext"><?php echo $visit->customer_contact_no !== '' ? htmlspecialchars((string) $visit->customer_contact_no, ENT_QUOTES, 'UTF-8') : 'Phone not available'; ?></div>
                                     </td>
                                     <td>
                                         <div class="visit-ref" style="font-size:14px;"><?php echo $visit->engineer_full_name; ?></div>
@@ -196,7 +202,7 @@
                                             <a href="<?php echo page_url; ?>ServiceLeads/engineer_visit_detail/<?php echo (int) $visit->visit_id; ?>" class="btn btn-xs btn-primary" title="Open Visit">
                                                 <i class="fa fa-folder-open"></i>
                                             </a>
-                                            <?php if ($can_create_service_payment): ?>
+                                            <?php if ($can_create_service_payment && (int) $visit->opportunity_id > 0): ?>
                                                 <a href="<?php echo page_url; ?>ServiceLeads/service_payment_request_form?basis=VISIT&opportunity_id=<?php echo (int) $visit->opportunity_id; ?>&visit_id=<?php echo (int) $visit->visit_id; ?>" class="btn btn-xs btn-warning" title="Request Payment">
                                                     <i class="fa fa-credit-card"></i>
                                                 </a>

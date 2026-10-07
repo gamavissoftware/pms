@@ -40,14 +40,19 @@ $addLine($piston_filler_option);
 
 /* Add this inside your <style> tag */
 .special-notes-area table {
-    width: 100% !important;
+    width: 760pt !important;
+    max-width: 760pt !important;
+    table-layout: fixed !important;
     border: 1px solid #333 !important;
-    margin: 5px 0;
+    margin: 6px 0;
 }
 .special-notes-area table td, .special-notes-area table th {
-    border: 1px solid #333 !important;
-    padding: 3px;
+    border: 1px solid #000 !important;
+    padding: 6px !important;
+    font-size: 11.5px !important;
+    line-height: normal !important;
 }
+.special-notes-area table th { background: #e5e5e5 !important; text-align: center; }
 
     .watermark{
         position: fixed;
@@ -106,6 +111,42 @@ tfoot{
     }
 
     .pagebreak{ page-break-before: always; }
+
+    /* DOMPDF cannot reliably split a large nested table inside an outer table
+       row. Start Special Notes on a clean page so long notes/spares tables stay
+       inside the printable area instead of being clipped at the page bottom. */
+    .special-notes-section{
+        page-break-before: always;
+    }
+    .special-notes-heading{ margin-bottom: 0; table-layout: fixed; }
+    .special-notes-content{
+        display: block;
+        width: auto !important;
+        margin: 0 !important;
+        padding: 6px 0 0;
+        font-size: 11.5px;
+        line-height: normal;
+        page-break-inside: auto;
+    }
+    .special-notes-content p,
+    .special-notes-content ol,
+    .special-notes-content ul{
+        margin-top: 2px;
+        margin-bottom: 3px;
+    }
+    .special-notes-content ol,
+    .special-notes-content ul{
+        margin: 0 !important;
+        padding-left: 24px !important;
+    }
+    .special-notes-content li{
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .special-notes-content *{
+        font-size: 11.5px !important;
+        line-height: normal !important;
+    }
 
 </style>
 </head>
@@ -688,15 +729,30 @@ tfoot{
             <td><?= esc($m5->machine_guarding_remarks) ?></td>
         </tr>
 
-      <tr>
-    <td class="center">54</td>
-    <td class="left">SPECIAL NOTES</td>
-    <td colspan="2" class="left special-notes-area">
-        <?= $special_notes ?>
-    </td>
-</tr>
-
     </table>
+
+    <!-- Keep long rich-text notes outside the parent specification table.
+         DOMPDF cannot split a table row, whereas this block and its nested
+         tables can continue safely across as many pages as required. -->
+    <div class="special-notes-section">
+        <table class="t special-notes-heading" cellspacing="0" cellpadding="0">
+            <colgroup>
+                <col style="width:3%;">
+                <col style="width:17%;">
+                <col style="width:55%;">
+                <col style="width:25%;">
+            </colgroup>
+            <tr>
+                <td class="center">54</td>
+                <td class="left">SPECIAL NOTES</td>
+                <td>&nbsp;</td>
+                <td>&nbsp;</td>
+            </tr>
+        </table>
+        <div class="special-notes-area special-notes-content">
+            <?= $special_notes ?>
+        </div>
+    </div>
 
     <div class="pagebreak"></div>
 

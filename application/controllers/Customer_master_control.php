@@ -17,7 +17,7 @@ class Customer_master_control extends CI_Controller
         $this->load->library('form_validation');
         $this->load->library('Master_profile_guard');
         $this->master_profile_guard->block_methods(
-            array('edit', 'update', 'get_states'),
+            array('edit', 'update', 'delete_duplicate', 'get_states'),
             'This EA profile can review customer master data but cannot change it.'
         );
     }
@@ -49,6 +49,111 @@ class Customer_master_control extends CI_Controller
         );
 
         $this->load->view('customer_master_control/index', $data);
+    }
+
+    public function duplicate_report()
+    {
+        $scope = $this->input->get('scope', true) === 'all' ? 'all' : 'duplicates';
+        $usage = trim((string) $this->input->get('usage', true));
+        if (!in_array($usage, array('used', 'unused'), true)) {
+            $usage = 'all';
+        }
+        $keyword = trim((string) $this->input->get('keyword', true));
+        $rows = $this->customer_master_control->get_quotation_audit_rows();
+        $groups = array();
+
+        foreach ($rows as $index => &$row) {
+            $row['match_key'] = $this->company_match_key($row['company_name']);
+            $key = $row['match_key'] !== '' ? $row['match_key'] : '__record_' . $index;
+            $groups[$key][] = $index;
+        }
+        unset($row);
+
+        $summary = array('total_records' => count($rows), 'duplicate_groups' => 0, 'duplicate_records' => 0, 'used_records' => 0, 'unused_records' => 0);
+        foreach ($groups as $indices) {
+            if (count($indices) > 1) {
+                $summary['duplicate_groups']++;
+                $summary['duplicate_records'] += count($indices);
+            }
+        }
+
+        $filtered = array();
+        foreach ($rows as $row) {
+            $is_used = (int) $row['total_quote_count'] > 0;
+            $is_duplicate = isset($groups[$row['match_key']]) && count($groups[$row['match_key']]) > 1;
+            $summary[$is_used ? 'used_records' : 'unused_records']++;
+            if ($scope === 'duplicates' && !$is_duplicate) continue;
+            if ($usage === 'used' && !$is_used) continue;
+            if ($usage === 'unused' && $is_used) continue;
+            if ($keyword !== '' && stripos($row['company_name'] . ' ' . $row['contact_person'] . ' ' . $row['email'], $keyword) === false) continue;
+            $row['is_duplicate'] = $is_duplicate;
+            $row['duplicate_count'] = $is_duplicate ? count($groups[$row['match_key']]) : 1;
+            $filtered[] = $row;
+        }
+
+        usort($filtered, function ($a, $b) {
+            if ($a['match_key'] === $b['match_key']) return strcmp($a['source_type'], $b['source_type']);
+            return strcmp($a['match_key'], $b['match_key']);
+        });
+
+        $this->load->view('customer_master_control/duplicate_report', array(
+            'rows' => $filtered,
+            'summary' => $summary,
+            'filters' => array('scope' => $scope, 'usage' => $usage, 'keyword' => $keyword)
+        ));
+    }
+
+    public function delete_duplicate($source = '', $record_id = 0)
+    {
+        $source = $this->normalise_source($source);
+        $record_id = (int) $record_id;
+        if ($this->input->method(true) !== 'POST' || $source === '' || $record_id <= 0) {
+            $this->set_flash_message('danger', 'Invalid delete request.');
+            redirect(page_url . 'Customer_master_control/duplicate_report');
+        }
+        if ($this->get_current_user_id() <= 0) {
+            $this->set_flash_message('danger', 'Current user could not be identified. Please login again.');
+            redirect(page_url);
+        }
+
+        $rows = $this->customer_master_control->get_quotation_audit_rows();
+        $target = null;
+        $matching_records = 0;
+        foreach ($rows as $row) {
+            if ($row['source_type'] === $source && (int) $row['record_id'] === $record_id) {
+                $target = $row;
+                break;
+            }
+        }
+        if ($target) {
+            $target_key = $this->company_match_key($target['company_name']);
+            foreach ($rows as $row) {
+                if ($target_key !== '' && $this->company_match_key($row['company_name']) === $target_key) $matching_records++;
+            }
+        }
+
+        if (!$target || $matching_records < 2 || (int) $target['total_quote_count'] !== 0) {
+            $this->set_flash_message('danger', 'This record cannot be deleted. It must be a duplicate and have zero Marketing, Spares and Service quotations.');
+            redirect(page_url . 'Customer_master_control/duplicate_report');
+        }
+
+        $result = $this->customer_master_control->delete_unused_customer($source, $record_id, $this->get_current_user_id());
+        $this->set_flash_message(!empty($result['success']) ? 'success' : 'danger', $result['message']);
+        redirect(page_url . 'Customer_master_control/duplicate_report');
+    }
+
+    private function company_match_key($name)
+    {
+        $name = html_entity_decode(strtolower(trim((string) $name)), ENT_QUOTES, 'UTF-8');
+        $name = str_replace('&', ' and ', $name);
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
+            if ($converted !== false) $name = $converted;
+        }
+        $tokens = preg_split('/[^a-z0-9]+/', $name, -1, PREG_SPLIT_NO_EMPTY);
+        $legal_words = array('pvt', 'private', 'ltd', 'limited', 'llp', 'inc', 'incorporated', 'corp', 'corporation', 'co', 'company');
+        $tokens = array_values(array_diff($tokens, $legal_words));
+        return implode('', $tokens);
     }
 
     public function edit($source = '', $record_id = 0)

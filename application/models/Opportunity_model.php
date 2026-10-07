@@ -74,7 +74,7 @@ class Opportunity_model extends CI_Model {
     }
 
     public function get_opportunity_quotations($opportunity_id) {
-        $this->db->select('quotation_id, quotation_no, quotation_date, total_value');
+        $this->db->select('quotation_id, quotation_no, quotation_date, total_value, quotation_type, custom_engg_type, dispatch_mode, execution_workflow_type');
         $this->db->from('quotations');
         $this->db->where('opportunity_id', $opportunity_id);
         $this->db->order_by('quotation_date', 'DESC');

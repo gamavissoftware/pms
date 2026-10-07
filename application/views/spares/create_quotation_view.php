@@ -44,6 +44,9 @@
         .charge-mode-row { margin-left: -5px; margin-right: -5px; }
         .charge-mode-row > div { padding-left: 5px; padding-right: 5px; }
         .charge-mode-hint { display: block; margin-top: 5px; font-size: 11px; color: #7a8797; line-height: 1.35; }
+        .sf-flow-strip { margin-top: 16px; padding-top: 16px; border-top: 1px solid #edf1f7; }
+        .sf-flow-strip label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085; }
+        .sf-flow-note { display: block; margin-top: 5px; font-size: 11px; color: #7a8797; }
     </style>
 </head>
 <body>
@@ -83,6 +86,7 @@
                             <select name="currency" id="currency_selector" class="form-control" style="font-weight: 600; color: #2c3e50;">
                                 <option value="INR" <?php echo ($opportunity->country_id == 101) ? 'selected' : ''; ?>>Domestic (INR ₹)</option>
                                 <option value="USD" <?php echo ($opportunity->country_id != 101) ? 'selected' : ''; ?>>Export (USD $)</option>
+                                <option value="EUR">Export (EUR €)</option>
                             </select>
                         </div>
                         <div class="col-md-2 form-group">
@@ -92,6 +96,36 @@
                         <div class="col-md-3 form-group">
                             <label>Kind Attention</label>
                             <input type="text" name="attention" class="form-control" value="<?php echo htmlspecialchars($opportunity->contact_person ?? '');?>" placeholder="Recipient Name">
+                        </div>
+                    </div>
+                    <div class="row sf-flow-strip">
+                        <div class="col-md-4 form-group">
+                            <label>Quotation Type</label>
+                            <select name="quotation_type" id="quotation_type" class="form-control required-field">
+                                <?php foreach ($quotation_type_options as $type_key => $type_label): ?>
+                                    <option value="<?php echo htmlspecialchars($type_key); ?>" <?php echo $selected_quotation_type === $type_key ? 'selected' : ''; ?>><?php echo htmlspecialchars($type_label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small class="sf-flow-note">This will drive the SF execution TAT template.</small>
+                        </div>
+                        <div class="col-md-4 form-group custom-engg-field">
+                            <label>Custom Engg. Scope</label>
+                            <select name="custom_engg_type" id="custom_engg_type" class="form-control">
+                                <option value="">Select Custom Engg. Scope</option>
+                                <?php foreach ($custom_engg_type_options as $custom_key => $custom_label): ?>
+                                    <option value="<?php echo htmlspecialchars($custom_key); ?>" <?php echo $selected_custom_engg_type === $custom_key ? 'selected' : ''; ?>><?php echo htmlspecialchars($custom_label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small class="sf-flow-note">Required only for Custom Engg. quotations.</small>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label>Dispatch Mode</label>
+                            <select name="dispatch_mode" id="dispatch_mode" class="form-control required-field">
+                                <?php foreach ($dispatch_mode_options as $mode_key => $mode_label): ?>
+                                    <option value="<?php echo htmlspecialchars($mode_key); ?>" <?php echo $selected_dispatch_mode === $mode_key ? 'selected' : ''; ?>><?php echo htmlspecialchars($mode_label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small class="sf-flow-note">Used for packing and dispatch planning.</small>
                         </div>
                     </div>
                 </div>
@@ -110,7 +144,7 @@
                             <div class="converter-box pull-right">
                                 <div class="form-inline">
                                     <div class="form-group m-r-10">
-                                        <label>Ex. Rate (1 USD to INR)</label>
+                                        <label>Ex. Rate (1 <span class="export-currency-code">USD</span> to INR)</label>
                                         <input type="number" id="conv_rate" class="form-control input-sm" step="0.01" value="94.00" style="width: 80px;">
                                     </div>
                                     <div class="form-group m-r-10">
@@ -118,7 +152,7 @@
                                         <input type="number" id="calc_inr" class="form-control input-sm highlight-input" placeholder="0.00" style="width: 120px;">
                                     </div>
                                     <div class="form-group">
-                                        <label>Result in USD ($)</label>
+                                        <label>Result in <span class="export-currency-code">USD</span> (<span class="export-currency-symbol">$</span>)</label>
                                         <div class="input-group">
                                             <input type="text" id="calc_usd" class="form-control input-sm" placeholder="0.00" style="width: 90px; background: #eee;" readonly>
                                             <span class="input-group-btn">
@@ -323,6 +357,16 @@
     $(document).ready(function() {
         var initialQuoteHistoryMap = <?php echo json_encode($recent_price_history_map ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
 
+        function syncCustomEnggField() {
+            var isCustom = $('#quotation_type').val() === 'CUSTOM_ENGG';
+            $('.custom-engg-field').toggle(isCustom);
+            $('#custom_engg_type').toggleClass('required-field', isCustom).prop('required', isCustom);
+
+            if (!isCustom) {
+                $('#custom_engg_type').val('').removeClass('is-invalid');
+            }
+        }
+
         function isPriceLocked(row) {
             return row.find('.price-locked-input').val() === '1';
         }
@@ -415,11 +459,11 @@
         }
 
         function getDefaultItemGstPercent() {
-            return $('#currency_selector').val() === 'USD' ? 0 : 18;
+            return $('#currency_selector').val() === 'INR' ? 18 : 0;
         }
 
         function getDefaultChargeGstPercent() {
-            return $('#currency_selector').val() === 'USD' ? 0 : 18;
+            return $('#currency_selector').val() === 'INR' ? 18 : 0;
         }
 
         function syncItemGstWithCurrency(forceReset) {
@@ -432,7 +476,7 @@
                     $(this).val(defaultGst.toFixed(2));
                 }
 
-                if ($('#currency_selector').val() === 'USD') {
+                if ($('#currency_selector').val() !== 'INR') {
                     $(this).val('0.00');
                 }
             });
@@ -487,17 +531,21 @@
 
         // --- Real-time Logic: Currency Handling ---
         $('#currency_selector').on('change', function() {
-            let symbol = ($(this).val() === 'USD') ? '$' : '₹';
+            let mode = $(this).val();
+            let symbols = { INR: '₹', USD: '$', EUR: '€' };
+            let symbol = symbols[mode] || mode;
             $('.curr-symbol').text(symbol);
+            $('.export-currency-code').text(mode === 'INR' ? 'USD' : mode);
+            $('.export-currency-symbol').text(mode === 'EUR' ? '€' : '$');
 
-            if($(this).val() === 'USD') {
+            if(mode !== 'INR') {
                 $('#freight-charge').val(0);
                 $('#ex-work-charge').val(0);
             } else {
                 $('#freight-charge').val(1500);
             }
 
-            syncItemGstWithCurrency($(this).val() === 'USD');
+            syncItemGstWithCurrency(mode !== 'INR');
             calculateTotals();
         });
 
@@ -520,7 +568,8 @@
                 }
 
                 lastRow.find('.unit-price').val(usdVal).trigger('input');
-                showGrowl('USD Price applied to the last row.', 'success');
+                let currency = $('#currency_selector').val();
+                showGrowl(currency + ' price applied to the last row.', 'success');
             } else {
                 showGrowl('Please enter an INR value to convert.', 'error');
             }
@@ -567,7 +616,7 @@
             let row = $(this).closest('tr');
             
             let finalPrice = data.price || 0;
-            if($('#currency_selector').val() === 'USD') {
+            if($('#currency_selector').val() !== 'INR') {
                 let currentRate = parseFloat($('#conv_rate').val()) || 94;
                 finalPrice = (finalPrice / currentRate).toFixed(2);
             }
@@ -736,6 +785,8 @@
             loadQuoteHistory(row, row.find('select[name="product_id[]"]').val());
         });
         $('#currency_selector').trigger('change');
+        $('#quotation_type').on('change', syncCustomEnggField);
+        syncCustomEnggField();
 
         $('#quotationForm').on('submit', function(e) {
             e.preventDefault();

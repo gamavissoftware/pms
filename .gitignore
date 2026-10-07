@@ -71,3 +71,10 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# ── Pre-push backup copies & build output ────────────────────────────
+*.bak-*
+.presentation-build/
+
+# ── AI key config (real key lives only on the server) ────────────────
+application/config/chat_ai.php

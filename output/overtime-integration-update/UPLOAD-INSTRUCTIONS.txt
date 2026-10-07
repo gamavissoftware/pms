@@ -1,0 +1,32 @@
+OVERTIME INTEGRATION UPDATE
+
+1. Upload the application/ files to the same paths in your PMS installation.
+2. Import Database/overtime_002_permissions.sql in the PMS database using phpMyAdmin.
+3. In the existing user-wise Module Permission screen, enable the parent module and allow:
+   OVERTIME > OVERTIME REQUESTS: Add for requesters.
+   OVERTIME > OVERTIME APPROVALS: Edit for team leaders and final administrators.
+   OVERTIME > OVERTIME REPORTS: Allow for report users.
+   MASTER > OVERTIME REQUEST LIMITS: Edit for administrators managing limits.
+   MASTER > OVERTIME REPORTING LEADERS: Edit for administrators managing overrides.
+   Allow without Add/Edit gives read-only access. Administrator role is additionally required for masters and final approval.
+4. Open Dashboard/task_master_dashboard for the two overtime masters.
+5. Open Overtime/create. The assigned company-team leader fills automatically.
+6. Refresh the page and check Master/profile dropdowns.
+
+No existing controller changes. Permissions are not granted automatically.
+Company team membership remains the primary source of reporting leaders. If multiple different leaders or no leader is mapped, configure a reporting-leader override.
+The shared nav-menu.php and task_master_dashboard.php files are included because menu/master links changed.
+The original overtime_001.sql migration is not repeated; this update assumes the overtime module is already installed.
+
+Included files:
+- application/controllers/Overtime.php
+- application/models/Overtime_model.php
+- application/helpers/overtime_helper.php
+- application/views/overtime/_header.php
+- application/views/overtime/_footer.php
+- application/views/overtime/create.php
+- application/views/overtime/index.php
+- application/views/overtime/settings.php
+- application/views/common/nav-menu.php
+- application/views/dashboard/task_master_dashboard.php
+- Database/overtime_002_permissions.sql

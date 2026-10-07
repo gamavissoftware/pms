@@ -1,503 +1,310 @@
-<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta name="description" content="">
-        <meta name="author" content="<?php echo copyright;?>">
-        <link rel="shortcut icon" href="<?php echo assets_url;?>images/favicon.ico">
-        <title><?php echo sitetitle;?> Upcoming Payments</title>
-        <!-- Table Responsive css -->
-		<script src="<?php echo assets_url;?>js/angular.min.js"></script>
-		 <!-- DataTables -->
-        <link href="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>plugins/datatables/fixedHeader.bootstrap.min.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>plugins/datatables/scroller.bootstrap.min.css" rel="stylesheet" type="text/css" />
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
-        <link href="<?php echo assets_url;?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>css/core.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>css/components.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>css/icons.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>css/pages.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>css/menu.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>css/our.css" rel="stylesheet" type="text/css" />
-        <link href="<?php echo assets_url;?>css/responsive.css" rel="stylesheet" type="text/css" />
-        <!-- HTML5 Shiv and Respond.js IE8 support of HTML5 elements and media queries -->
-        <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
-        <!--[if lt IE 9]>
-        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
-        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
-        <![endif]-->
-        <script src="<?php echo assets_url;?>js/modernizr.min.js"></script>
-        <?PHP 
-        $q = $this->db->select('company_name, logo, colorcode')->from('company_information')->get();
-        foreach($q->result() as $LOGO);
-        ?>
+<?php defined('BASEPATH') OR exit('No direct script access allowed');
 
-		<style>
+/*
+| Forward cash view over a date window: invoices falling due inside it,
+| milestones that will become billable inside it, and what has been carried in
+| already billable or already overdue.
+*/
 
-		table.manglesh thead th {
-                background: <?php echo $LOGO->colorcode;?>;
-                color:#fff;
-                font-weight:bold;
-                text-align:center;
+$calendar = isset($calendar) && is_array($calendar) ? $calendar : array();
+$filters = isset($filters) && is_array($filters) ? $filters : array();
+$df_options = isset($df_options) && is_array($df_options) ? $df_options : array();
 
-			}
-				table.manglesh tbody td {
-				    text-align:center;
-                    font-size: 10px;
-				}
-             .c11{
-                background-color: #F9E4E4;
-             }
+$summary = isset($calendar['summary']) && is_array($calendar['summary']) ? $calendar['summary'] : array();
+$insights = isset($calendar['insights']) && is_array($calendar['insights']) ? $calendar['insights'] : array();
+$due_invoices = isset($calendar['due_invoices']) ? $calendar['due_invoices'] : array();
+$becoming = isset($calendar['becoming_claimable']) ? $calendar['becoming_claimable'] : array();
+$ready_now = isset($calendar['ready_now']) ? $calendar['ready_now'] : array();
+$overdue_carry = isset($calendar['overdue_carry_in']) ? $calendar['overdue_carry_in'] : array();
 
+$start_date_value = isset($filters['start_date']) ? $filters['start_date'] : date('Y-m-d');
+$end_date_value = isset($filters['end_date']) ? $filters['end_date'] : date('Y-m-d', strtotime('+7 days'));
+$current_df_filter = isset($filters['df_id']) ? (string) $filters['df_id'] : 'ALL';
 
-		</style>
-
-    </head>
-
-    <body>
-<!-- Navigation Bar-->
-        <header id="topnav">
-          <?php $this->load->view('common/nav-menu');?>
-        </header>
-        <!-- End Navigation Bar-->
-        <?php $this->load->view('common/info-section.php');?>
-        <div class="wrapper">
-            <div class="container-fluid">
-                <!-- Page-Title -->
-                <div class="row" style="margin-top:20px;">
-                    <div class="col-sm-12 col-xs-12 col-md-12 col-lg-12">
-                        <div class="page-title-box">
-						 <div class="btn-group pull-right">
-						 <div class="badge">
-    <span class="amount">Total Order Value: - <?php 
-        $totalordervalue = array();
-        $totalordervalue[] = 0;
-
-        $this->db->select('a.*, b.payment_terms, c.df_no, c.df_description, c.id as dfprimaryid')->from('poreceived a')->join('payment_terms b','a.payment_term=b.id')->join('df_release c','a.df_id=c.id')->where('c.df_status',0);
-        $query = $this->db->get();
-        if($query->num_rows()>0){
-            foreach($query->result() as $row){
-                $totalordervalue[] = $row->order_value;
-            }
-        }
-        $grandtotal = array_sum($totalordervalue);
-        $moneyformat = number_format($grandtotal, 2, '.', ','); 
-                $finalamount = '₹' . $moneyformat;
-                echo $finalamount;
-                $todays = date('Y-m-d');
-        $currentDate = new DateTime();
-        $currentDate->add(new DateInterval('P7D'));
-        $weekdate = $currentDate->format('Y-m-d');
-    ?></span> <!-- Replace this with your amount -->
-  </div>
-
-  <table class="table table-bordered">
-           <tr>
-                <td>Upcoming Payments This Week</td>
-                <td><a href="<?php echo page_url;?>Accounts/paymentdashboard/<?php echo $todays;?>/<?php echo $weekdate;?>/ALL"><?php echo $thisweekpayment;?></a></td>
-            </tr>
-            <tr>
-                <td>Overdue Payments</td>
-                <td style="color:red;"><a style="color:red; font-weight:bold;"  href="<?php echo page_url;?>Accounts/overduepaymentdashboard"><?php echo $overduepayments;?></a></td>
-            </tr>
-        </table>
-						</div>
-			             <h4 class="text-center">Payment Dashboard Records Between (<?php echo date('d-m-Y',strtotime($this->uri->segment(3)));?> To <?php echo date('d-m-Y',strtotime($this->uri->segment(4)));?>)</h4> <hr>
-
-                        </div>
-
- <div class="accordion">
-  <button class="accordion-btn text-center">Filter By Date and DF No. <img src="<?php echo dashboard_icon;?>tap.png" style="width:30px"></button>
-  <div class="accordion-content">
-    <form method="post" action="<?php echo page_url;?>Accounts/filterbydateanddf" id="filter-form" style="padding-top: 10px;">
-        <div class="col-md-2"></div>
-        <div class="col-md-2">  <div class="form-group">
-        <label for="start-date">Start Date:</label>
-        <input type="date" id="start_date" name="start_date" value="<?php echo date('Y-m-d',strtotime($this->uri->segment(3)));?>">
-      </div></div>
-
-      <div class="col-md-2"> <div class="form-group">
-        <label for="end-date">End Date:</label>
-        <input type="date" id="end_date" name="end_date" value="<?php echo date('Y-m-d',strtotime($this->uri->segment(4)));?>">
-      </div></div>
-      <div class="col-md-2">
-           <div class="form-group">
-        <label for="df-no">DF No.:</label>
-        <select id="df_no" name="df_no">
-          <option value="ALL">ALL</option>
-          <?php 
-            $q = $this->db->select('id, df_no, df_description')->from('df_release')->where('df_status',0)->get();
-            if($q->num_rows()>0){
-                foreach($q->result() as $row){?>
-                <option value="<?php echo $row->id;?>" <?php if($this->uri->segment(5)==$row->id){echo "selected";}?>><?php echo $row->df_no." ".$row->df_description;?></option>
-
-           <?php } }
-          ?>
-          
-        </select>
-      </div>
-      </div>
-      <div class="col-md-2">
-        <div class="form-group" style="margin-top: 20px;">
-             <button type="submit" id="submitBtn">Apply Filter</button>
-        </div>
-         
-      </div>
-     <div class="col-md-2"></div>
-     <div class="col-md-12">
-         <div id="waitingMsg" style="display:none;">Please wait...</div>
-     </div>
-    </form>
-  </div>
-</div>
-<script>
-  // JavaScript to toggle the accordion
-  var accordionBtn = document.querySelector('.accordion-btn');
-  accordionBtn.addEventListener('click', function() {
-    this.classList.toggle('active');
-    var panel = this.nextElementSibling;
-    if (panel.style.maxHeight) {
-      panel.style.maxHeight = null;
-    } else {
-      panel.style.maxHeight = panel.scrollHeight + 'px';
+if (!function_exists('accounts_master_report_escape')) {
+    function accounts_master_report_escape($value)
+    {
+        return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
     }
-  });
-</script>
+}
+if (!function_exists('accounts_master_report_value')) {
+    function accounts_master_report_value($source, $key, $fallback = '')
+    {
+        return isset($source[$key]) ? $source[$key] : $fallback;
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="<?php echo copyright; ?>">
+    <link rel="shortcut icon" href="<?php echo assets_url; ?>images/favicon.ico">
+    <title><?php echo sitetitle; ?> | Payment Calendar</title>
 
-<script type="text/javascript">
-    $(document).ready(function() {
-    $('#submitBtn').click(function() {
-        // Show waiting message
-        $('#waitingMsg').show();
-        
-        // Perform your submit action here
-        // For example, you can submit a form or make an AJAX request
-        
-        // Simulating a delay for demonstration purposes (remove this in your actual code)
-        setTimeout(function() {
-            // Hide waiting message once the action is completed
-            $('#waitingMsg').hide();
-        }, 2000); // Adjust the delay time as needed
-    });
-});
-</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link href="<?php echo assets_url; ?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>css/core.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>css/components.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>css/pages.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>css/menu.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>css/responsive.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo assets_url; ?>plugins/datatables/buttons.bootstrap.min.css" rel="stylesheet" type="text/css" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
+    <script src="<?php echo assets_url; ?>js/modernizr.min.js"></script>
+
+    <?php $this->load->view('accounts/_finance_theme'); ?>
+</head>
+<body>
+    <header id="topnav">
+        <?php $this->load->view('common/nav-menu'); ?>
+    </header>
+    <?php $this->load->view('common/info-section.php'); ?>
+
+    <div class="wrapper">
+        <div class="container-fluid fin-shell">
+
+            <div class="fin-card fin-hero">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <span class="fin-kicker">Finance Control Room</span>
+                        <div class="fin-title">Payment Calendar</div>
+                        <div class="fin-lede">
+                            What can be collected in this window, and what will become billable inside it.
+                            Collection comes from invoices already raised; billing comes from payment milestones
+                            whose triggering work completes. Both are shown so the week can be planned, not guessed.
+                        </div>
+                        <div class="fin-chip-row">
+                            <span class="fin-chip"><i class="fa fa-calendar"></i> <?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'window_label')); ?></span>
+                            <span class="fin-chip"><i class="fa fa-clock-o"></i> <?php echo (int) accounts_master_report_value($summary, 'window_days', 0); ?> day window</span>
+                        </div>
                     </div>
-
-                </div>
-
-                <!-- end page title end breadcrumb -->
-
-        <span style="color:red;"><?php echo $this->session->flashdata('message'); ?></span>
-
-
-
-                 <div class="row">
-
-                    <div class="col-sm-12">
-
-                        <div class="card-box table-responsive">
-                        	<table id="example" class="table table-bordered manglesh">
-                                <thead>
-                                <tr>
-                                    <th>SR NO.</th>
-                                    <th>COMPANY NAME</th>
-                                    <th>PO NO.</th>
-                                    <th>PO DATE</th>
-                                    <th>DF NO.</th>
-                                    <th>PO DOWNLOAD</th>
-                                    <th>TASK NAME</th>
-                                    <th>TARGET DATE</th>
-                                    <th>PAYMENT (%)</th>
-                                    <th>AMOUNT</th>
-                                    <th>MARKETING PERSON</th>
-                                    <th>PAYMENT STATUS</th>
-                                    <th>WORK STATUS</th>
-                                   
-                                </tr>
-                                </thead>
-                            </table>
+                    <div class="col-lg-4">
+                        <div class="fin-hero-actions">
+                            <a href="<?php echo page_url; ?>Accounts/allrunningdf/ALL/ALL/ALL" class="fin-btn"><i class="fa fa-sitemap"></i> Running DF Control</a>
+                            <a href="<?php echo page_url; ?>Accounts/overduepaymentdashboard" class="fin-btn"><i class="fa fa-exclamation-triangle"></i> Receivables &amp; Overdue</a>
+                            <a href="<?php echo page_url; ?>Machine/mcsdispatchreport" class="fin-btn"><i class="fa fa-truck"></i> Dispatch Ledger</a>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Footer -->
+            <?php if ($this->session->flashdata('message')): ?>
+                <div style="margin-bottom:18px;"><?php echo $this->session->flashdata('message'); ?></div>
+            <?php endif; ?>
 
-<?php $this->load->view('common/footer');?>
+            <div class="fin-card fin-filter">
+                <h3 class="fin-section-title">Window</h3>
+                <div class="fin-section-copy">Pick the period you are planning collections for.</div>
+                <form method="post" action="<?php echo page_url; ?>Accounts/filterbydateanddf" class="fin-filter-grid">
+                    <div>
+                        <label class="fin-label" for="start_date">From</label>
+                        <input type="date" id="start_date" name="start_date" class="form-control" value="<?php echo accounts_master_report_escape($start_date_value); ?>">
+                    </div>
+                    <div>
+                        <label class="fin-label" for="end_date">To</label>
+                        <input type="date" id="end_date" name="end_date" class="form-control" value="<?php echo accounts_master_report_escape($end_date_value); ?>">
+                    </div>
+                    <div>
+                        <label class="fin-label" for="df_no">DF</label>
+                        <select id="df_no" name="df_no" class="form-control">
+                            <option value="ALL">All running DFs</option>
+                            <?php foreach ($df_options as $df_option): ?>
+                                <option value="<?php echo (int) $df_option['id']; ?>" <?php echo $current_df_filter === (string) $df_option['id'] ? 'selected' : ''; ?>>
+                                    <?php echo accounts_master_report_escape(trim($df_option['df_no'] . ' ' . $df_option['df_description'])); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="fin-label">&nbsp;</label>
+                        <div class="fin-filter-actions">
+                            <button type="submit" class="fin-btn primary">Apply</button>
+                            <a href="<?php echo page_url; ?>Accounts/paymentdashboard/<?php echo date('Y-m-d'); ?>/<?php echo date('Y-m-d', strtotime('+30 days')); ?>/ALL" class="fin-btn">Next 30 days</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
 
-                <!-- End Footer -->
+            <div class="fin-kpi-grid">
+                <div class="fin-card fin-kpi good">
+                    <div class="fin-kpi-label">Collectable in this window</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'expected_collection_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Invoices falling due here plus anything already overdue.</div>
+                </div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Falling due</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'due_in_window_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note"><?php echo (int) accounts_master_report_value($summary, 'due_in_window_count', 0); ?> invoice(s) reach their due date inside this window.</div>
+                </div>
+                <div class="fin-card fin-kpi danger">
+                    <div class="fin-kpi-label">Already overdue</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'overdue_carry_in_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note"><?php echo (int) accounts_master_report_value($summary, 'overdue_carry_in_count', 0); ?> invoice(s) carried in past their due date.</div>
+                </div>
+                <div class="fin-card fin-kpi headline">
+                    <div class="fin-kpi-label">Ready to invoice now</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'ready_now_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note">Milestones already complete on <?php echo (int) accounts_master_report_value($summary, 'ready_now_count', 0); ?> DF(s) with no invoice raised. Bill these to create next month's collection.</div>
+                </div>
+                <div class="fin-card fin-kpi">
+                    <div class="fin-kpi-label">Becoming billable</div>
+                    <div class="fin-kpi-value"><?php echo accounts_master_report_escape(accounts_master_report_value($summary, 'becoming_claimable_display', '₹0.00')); ?></div>
+                    <div class="fin-kpi-note"><?php echo (int) accounts_master_report_value($summary, 'becoming_claimable_count', 0); ?> milestone(s) fall due inside this window, if the work lands on time.</div>
+                </div>
+            </div>
 
+            <div class="fin-panel-grid">
+                <div class="fin-card fin-panel">
+                    <h3 class="fin-section-title">Chase these</h3>
+                    <div class="fin-section-copy">Invoices due in the window, then anything already past due.</div>
+                    <div class="fin-list">
+                        <?php if (!empty($due_invoices) || !empty($overdue_carry)): ?>
+                            <?php foreach ($overdue_carry as $item): ?>
+                                <div class="fin-item red">
+                                    <div class="fin-item-top">
+                                        <div class="fin-item-title"><?php echo accounts_master_report_escape($item['df_no']); ?> &middot; <?php echo accounts_master_report_escape($item['invoice_no']); ?></div>
+                                        <div class="fin-item-amount"><?php echo accounts_master_report_escape($item['amount_display']); ?></div>
+                                    </div>
+                                    <div class="fin-item-copy"><?php echo accounts_master_report_escape($item['company_name']); ?> &mdash; overdue by <?php echo (int) $item['days_overdue']; ?> day(s), due <?php echo accounts_master_report_escape($item['due_date']); ?>.</div>
+                                </div>
+                            <?php endforeach; ?>
+                            <?php foreach ($due_invoices as $item): ?>
+                                <div class="fin-item amber">
+                                    <div class="fin-item-top">
+                                        <div class="fin-item-title"><?php echo accounts_master_report_escape($item['df_no']); ?> &middot; <?php echo accounts_master_report_escape($item['invoice_no']); ?></div>
+                                        <div class="fin-item-amount"><?php echo accounts_master_report_escape($item['amount_display']); ?></div>
+                                    </div>
+                                    <div class="fin-item-copy"><?php echo accounts_master_report_escape($item['company_name']); ?> &mdash; due <?php echo accounts_master_report_escape($item['due_date']); ?>.</div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <div class="fin-empty">No invoice falls due in this window and nothing is carried in overdue.</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
 
+                <div class="fin-card fin-panel">
+                    <h3 class="fin-section-title">Invoice these now</h3>
+                    <div class="fin-section-copy">Work is finished and the money is claimable, but no invoice exists yet.</div>
+                    <div class="fin-list">
+                        <?php if (!empty($ready_now)): ?>
+                            <?php foreach (array_slice($ready_now, 0, 10) as $item): ?>
+                                <div class="fin-item amber">
+                                    <div class="fin-item-top">
+                                        <div class="fin-item-title"><?php echo accounts_master_report_escape($item['df_no']); ?></div>
+                                        <div class="fin-item-amount"><?php echo accounts_master_report_escape($item['amount_display']); ?></div>
+                                    </div>
+                                    <div class="fin-item-copy"><?php echo accounts_master_report_escape($item['company_name']); ?> &mdash; <?php echo accounts_master_report_escape($item['detail']); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <div class="fin-empty">Nothing is claimable and uninvoiced right now.</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
 
-            </div> <!-- end container -->
+                <div class="fin-card fin-panel">
+                    <h3 class="fin-section-title">Readout</h3>
+                    <div class="fin-section-copy">What this window says about cash.</div>
+                    <ul class="fin-bullets">
+                        <?php foreach ($insights as $insight): ?>
+                            <li><?php echo accounts_master_report_escape($insight); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            </div>
 
+            <div class="fin-card fin-report">
+                <div class="fin-toolbar">
+                    <div>
+                        <h3 class="fin-section-title">Milestones becoming billable in this window</h3>
+                        <div class="fin-section-copy">Earliest first. Each becomes claimable when its triggering task is signed off, so a slipped task pushes the cash out with it.</div>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table id="calendarTable" class="table fin-table" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th style="width:36px;">#</th>
+                                <th style="width:14%;">Trigger date</th>
+                                <th style="width:22%;">DF &amp; customer</th>
+                                <th style="width:24%;">Milestone</th>
+                                <th style="width:14%;">Amount</th>
+                                <th style="width:14%;">Status</th>
+                                <th style="width:12%;">Owner</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php if (!empty($becoming)): ?>
+                            <?php foreach ($becoming as $index => $item): ?>
+                                <tr class="<?php echo $item['claim_status_key'] === 'slipped' ? 'row-overdue' : ''; ?>">
+                                    <td data-order="<?php echo (int) $index; ?>"><span class="fin-idx"><?php echo $index + 1; ?></span></td>
+                                    <td data-order="<?php echo accounts_master_report_escape($item['trigger_date_raw']); ?>">
+                                        <div class="cell-title"><?php echo accounts_master_report_escape($item['trigger_date']); ?></div>
+                                    </td>
+                                    <td>
+                                        <div class="cell-title"><?php echo accounts_master_report_escape($item['company_name']); ?></div>
+                                        <div class="cell-copy">DF <?php echo accounts_master_report_escape($item['df_no']); ?> &middot; <?php echo accounts_master_report_escape($item['po_no']); ?></div>
+                                        <div class="cell-copy"><a href="<?php echo accounts_master_report_escape($item['df_detail_url']); ?>" target="_blank">DF detail</a></div>
+                                    </td>
+                                    <td>
+                                        <div class="cell-title"><?php echo accounts_master_report_escape($item['task_name']); ?></div>
+                                        <div><span class="tag"><?php echo accounts_master_report_escape($item['percentage_display']); ?> of order</span></div>
+                                    </td>
+                                    <td data-order="<?php echo (float) $item['amount']; ?>">
+                                        <div class="cell-title"><?php echo accounts_master_report_escape($item['amount_display']); ?></div>
+                                    </td>
+                                    <td>
+                                        <span class="pill <?php echo accounts_master_report_escape($item['claim_status_key']); ?>"><?php echo accounts_master_report_escape($item['claim_status_label']); ?></span>
+                                    </td>
+                                    <td><div class="cell-copy"><?php echo accounts_master_report_escape($item['marketing_person']); ?></div></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr><td colspan="7"><div class="fin-empty">No payment milestone falls due between <?php echo accounts_master_report_escape($start_date_value); ?> and <?php echo accounts_master_report_escape($end_date_value); ?>.<br>Widen the window with <strong>Next 30 days</strong>.</div></td></tr>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-
-        <!-- end wrapper -->
-
-
-<div id="updateprogress" class="modal fade" role="dialog">
-<form id="updateprogressform" method="post" action="<?php echo page_url;?>Accounts/updatepaymentdetailfrompaymentdashboard/<?php echo $this->uri->segment(3);?>/<?php echo $this->uri->segment(4);?>/<?php echo $this->uri->segment(5);?>"  enctype="multipart/form-data">
-<div id="pageloader1">
-<img src="<?php echo assets_url;?>images/loading.gif" alt="processing..." />
-</div>
-<div class="modal-dialog">
-<!-- Modal content-->
-<div class="modal-content">
-<div class="modal-header">
-<button type="button" class="close" data-dismiss="modal">&times;</button>
-<h4 class="modal-title" style="font-weight: bold; text-align:center;">Update Payment Receipt</h4>
-</div>
-<div class="modal-body">
-<div class="row">
-
-<div class="col-md-12">
-<input type="hidden" id="taskkiid" value="" name="taskkiid">
-<div class="form-group">
-<label>Amount Received <span style="color:red" id="error_taskstatus">*</span></label>
-<input type="number" class="form-control" name="amountreceived" id="amountreceived" step="any" readonly required value="">
-</div>
-</div>
-</div>
-<div class="row">
-    <div class="col-md-12">
-<div class="form-group">
-<label>Payment Date <span style="color:red" id="error_paymentreceivedate">*</span></label>
-<input type="date" class="form-control" name="paymentreceivedate" id="paymentreceivedate" required value="">
-</div>
-</div>
-</div>
-
-<div class="row">
-
-<div class="col-md-12">
-<div class="form-group">
-<label>Remarks (If Any) <span style="color:red" id="error_taskremarks"></span></label>
-<textarea name="taskremarks" id="taskremarks" class="form-control"></textarea>
-</div>
-</div>
-</div>
-
-
-
-<div class="row">
-<div class="col-md-4"></div>
-<div class="col-md-4">
-<input type="submit" style="width: 100%;" name="" onclick="taskupdationvalidation();" value="Submit" class="btn btn-success">
-</div>
-</div>
-
-</div>
-<!-- <div class="modal-footer">
-<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-</div> -->
-</div>
-
-</div>
-</form>
-</div>
-<script type="text/javascript">
-function updateyourprogressremarks(id,amount){
-$("#updateprogress").modal('show');
-$("#taskkiid").val(id);
-$("#amountreceived").val(amount);
-}
-</script>
- <script>
-$(document).ready(function(){
-  $("#updateprogressform").on("submit", function(){
-    $("#pageloader1").fadeIn();
-  });//submit
-});//document ready
-</script>
-
-
-         <!-- jQuery  -->
-
-<script src="<?php echo assets_url;?>js/jquery.min.js"></script>
-<script src="<?php echo assets_url;?>js/bootstrap.min.js"></script>
-<script src="<?php echo assets_url;?>js/detect.js"></script>
-<script src="<?php echo assets_url;?>js/fastclick.js"></script>
-<script src="<?php echo assets_url;?>js/jquery.slimscroll.js"></script>
-<script src="<?php echo assets_url;?>js/jquery.blockUI.js"></script>
-<script src="<?php echo assets_url;?>js/waves.js"></script>
-<script src="<?php echo assets_url;?>js/wow.min.js"></script>
-<script src="<?php echo assets_url;?>js/jquery.nicescroll.js"></script>
-<script src="<?php echo assets_url;?>js/jquery.scrollTo.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/jquery.dataTables.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/dataTables.bootstrap.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/dataTables.buttons.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/buttons.bootstrap.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/jszip.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/pdfmake.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/vfs_fonts.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/buttons.html5.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/buttons.print.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/dataTables.fixedHeader.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/dataTables.keyTable.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/dataTables.responsive.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.js"></script>
-<script src="<?php echo assets_url;?>plugins/datatables/dataTables.scroller.min.js"></script>
-<script src="<?php echo assets_url;?>pages/datatables.init.js"></script>
-<script src="<?php echo assets_url;?>js/jquery.core.js"></script>
-<script src="<?php echo assets_url;?>js/jquery.app.js"></script>
-
-
-
-<script>
-
-$(document).ready(function(){
-$("#depsave").attr('disabled',false);
-$("#depsave").val('submit');
-$("#loginForm").on("submit", function(){
-$("#depsave").attr('disabled',true);
-$("#depsave").val('Please Wait...');
-});//submit
-
-});//document ready
-
-</script>  
-<script>
-$( document ).ready(function() {
-$('#example').dataTable({
-"bProcessing": true,
-fixedHeader: true,
-"pagination":true,
-"pageLength": 100,
-dom: 'Bfrtip',
-buttons: [
-            {
-                extend: 'excelHtml5',
-                title: 'All Upcoming Payment List'
-            }
-        ],
-
-"sAjaxSource": "<?php echo page_url;?>Accounts/upcomingpaymentlist/<?php echo $this->uri->segment(3);?>/<?php echo $this->uri->segment(4);?>/<?php echo $this->uri->segment(5);?>",
-
-"aoColumns": [
-
-				{ mData: 'sr_no' } ,
-				{ mData: 'company_name' },
-                { mData: 'pono' },
-                { mData: 'podate' },
-                { mData: 'df_no' },
-                { mData: 'poattachment' },
-                { mData: 'task_name' },
-                { mData: 'workcompletiondate' },
-                { mData: 'payment_percentage' },
-                { mData: 'amount' },
-                { mData: 'marketingperson' },
-                { mData: 'message' },
-                { mData: 'workstatus' },
-],
-"initComplete": function(settings, json) {
-
-getcolors()
-}
-
-});   
-
-});
-
-$('#example').on('draw.dt', function() {
-// do action here
-
-getcolors();
-});
-
-$('#example').on('search.dt', function() {
-
-getcolors();
-});
-
-function getcolors() {
-$("#example tr").each(function() {
-var currentRow = $(this);
-var col1_value = currentRow.find("td:eq(12)").text();
-if (col1_value == 'PAYMENT COLLECTION PENDING') {
-                    currentRow.addClass("c11");
-                }
-
-
-
-});
-}
-</script>
-
-		
-
-		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
-
-<script language="javascript" type="text/javascript">   
-
-jQuery.noConflict();
-
-$(document).ready(function() {
-
-$("#depsave").click(function() {
-
-var business_loc = $("#business_loc").val();
-
-if(business_loc=='')
-
-{
-
-	$("#error_business_loc").html('Required!');
-
-}
-
-var department_name = $("#department_name").val();
-
-if(department_name=='')
-
-{
-
-	
-
-	$("#error_department_name").html('Required!');
-
-}
-
-
-
-var status = $("#status").val();
-
-if(status=='')
-
-{
-
-	
-
-	$("#error_status").html('Required!');
-
-}
-
-
-
-
-
-if(business_loc=='' || department_name==''|| status=='' )
-
-{
-
-	
-
-	return false;
-
-}
-
-
-
-});
-
-});
-
-</script>
-
-    </body>
-
+    </div>
+
+    <?php $this->load->view('common/footer'); ?>
+
+    <script src="<?php echo assets_url; ?>js/bootstrap.min.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/datatables/jquery.dataTables.min.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/datatables/dataTables.bootstrap.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/datatables/dataTables.buttons.min.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/datatables/buttons.bootstrap.min.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/datatables/jszip.min.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/datatables/buttons.html5.min.js"></script>
+    <script src="<?php echo assets_url; ?>plugins/datatables/buttons.print.min.js"></script>
+    <script src="<?php echo assets_url; ?>js/jquery.core.js"></script>
+    <script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
+
+    <script>
+        $(function () {
+            $('#calendarTable').DataTable({
+                order: [[0, 'asc']],
+                pageLength: 25,
+                dom: 'Bfrtip',
+                buttons: [
+                    { extend: 'excelHtml5', text: 'Excel', title: 'Payment calendar' },
+                    { extend: 'csvHtml5', text: 'CSV', title: 'Payment calendar' },
+                    { extend: 'print', text: 'Print', title: 'Payment calendar' }
+                ]
+            });
+        });
+    </script>
+</body>
 </html>
-

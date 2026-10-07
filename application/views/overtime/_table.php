@@ -1,0 +1,11 @@
+<div class="table-wrap"><table><thead><tr><th>Request</th><th>DF No.</th><th>Person / department</th><th>Requested by</th><th>Overtime period</th><th class="num">Hours per person</th><th class="num">Cost</th><th>Status</th><th>Submitted</th></tr></thead><tbody>
+<?php foreach ($rows as $row) { ?><tr><td><a href="<?php echo ot_e(ot_link('view/' . (int) $row['id'])); ?>"><?php echo ot_e($row['request_code']); ?></a><br><small><?php echo ot_e($row['work_reference']); ?></small></td><td><?php echo ot_e($row['df_no'] ?: '—'); ?></td><td><?php echo ot_e($row['person_name']); ?><br><small><?php echo ot_e($row['department']); ?> · <?php echo $row['worker_id'] ? 'PMS #'.(int)$row['worker_id'] : 'Manual worker'; ?></small></td><td><?php echo ot_e($row['first_name'].' '.$row['last_name']); ?></td><td><?php echo ot_e($row['start_at']); ?><br><small>to <?php echo ot_e($row['end_at']); ?></small></td><td class="num"><?php echo ot_hours($row['requested_minutes']); ?></td><td class="num"><?php if ((float) $row['hourly_rate'] > 0) { ?>₹ <?php echo ot_money($row['cost_amount']); ?><br><small>@ ₹<?php echo ot_money($row['hourly_rate']); ?>/hr</small><?php } else { ?><span class="muted">No rate</span><?php } ?></td><td><span class="badge <?php echo ot_e($row['status']); ?>"><?php echo ot_e(ot_status($row['status'])); ?></span></td><td><?php echo ot_e($row['created_at']); ?></td></tr><?php } ?>
+<?php if (!$rows) { ?><tr><td colspan="9" class="empty">No requests match this selection.</td></tr><?php } ?>
+</tbody></table></div>
+<?php
+$query = $filters; unset($query['mine'], $query['inbox']);
+if ($action === '') $query['scope'] = !empty($filters['mine']) ? 'mine' : 'visible';
+if (isset($group)) $query['group'] = $group;
+$pages = max(1, (int) ceil($summary['total'] / 50));
+?>
+<div class="pagination"><span class="muted">Page <?php echo (int) $page; ?> of <?php echo $pages; ?> · <?php echo (int) $summary['total']; ?> person entries</span><div><?php if ($page > 1) { ?><a class="button secondary" href="<?php echo ot_e(ot_link($action, array_merge($query, array('page' => $page - 1)))); ?>">Previous</a><?php } ?> <?php if ($page < $pages) { ?><a class="button secondary" href="<?php echo ot_e(ot_link($action, array_merge($query, array('page' => $page + 1)))); ?>">Next</a><?php } ?></div></div>

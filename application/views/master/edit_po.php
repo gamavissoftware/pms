@@ -57,6 +57,53 @@ top: 30%;
 .showdiv{
 display: none;
 }
+.po-attachment-box{
+background:#f7f9fc;
+border:1px solid #e3e9f2;
+border-left:4px solid #4872b8;
+border-radius:8px;
+padding:15px 15px 5px;
+margin-bottom:18px;
+}
+.po-attachment-note{
+display:block;
+color:#6b7280;
+font-size:12px;
+margin-top:6px;
+line-height:1.5;
+}
+.po-optional{
+color:#6b7280;
+font-weight:400;
+font-size:12px;
+}
+.po-history-table,
+.po-log-table{
+background:#fff;
+font-size:12px;
+margin-bottom:10px;
+}
+.po-history-table th,
+.po-log-table th{
+background:#eef2f8;
+font-weight:700;
+}
+.po-history-current{
+background:#f2fbf4;
+}
+.po-log-box{
+background:#fff;
+border:1px solid #e3e9f2;
+border-left:4px solid #6c757d;
+border-radius:8px;
+padding:15px 15px 5px;
+margin-bottom:18px;
+}
+.po-log-empty{
+color:#6b7280;
+font-size:13px;
+padding:8px 0 12px;
+}
 </style>
 </head>
 <body>
@@ -83,6 +130,17 @@ display: none;
 $q = $this->db->select('*')->from('poreceived')->where('id',$this->uri->segment(3))->get();
 foreach($q->result() as $row);
 
+$po_revisions   = isset($po_revisions) ? $po_revisions : array();
+$po_change_logs = isset($po_change_logs) ? $po_change_logs : array();
+$return_to      = isset($return_to) ? $return_to : 'all';
+
+$current_revision = null;
+foreach ($po_revisions as $revision) {
+    if ((int) $revision->is_current === 1) {
+        $current_revision = $revision;
+        break;
+    }
+}
 ?>
 <div class="row">
 <div class="col-xs-12">
@@ -94,17 +152,96 @@ foreach($q->result() as $row);
 <div class="row">
 <div class="col-sm-12 col-xs-12 col-md-12">
 
-<div class="col-md-2">
+<div class="col-md-12">
+<div class="po-attachment-box">
+
+<div class="row">
+<div class="col-md-5">
+<label class="control-label">PO Currently Attached</label>
+<?php if (trim((string) $row->po_attachment) !== '') { ?>
+    <div>
+        <a href="<?php echo sfdocument;?>Taskdocument/<?php echo $row->po_attachment;?>" target="_blank" class="btn btn-info btn-sm" style="border-radius:20px; font-weight:700;">
+            <i class="fa fa-file-o"></i> View / Download PO
+        </a>
+        <?php if (!empty($current_revision)) { ?>
+            <span class="label label-success" style="margin-left:6px;">Revision <?php echo (int) $current_revision->revision_no;?></span>
+        <?php } ?>
+    </div>
+    <p class="po-attachment-note">
+        This PO stays linked to the order. You do <strong>not</strong> need to upload it again to change any detail below.
+    </p>
+<?php } else { ?>
+    <div><span class="label label-warning">No PO attached yet</span></div>
+    <p class="po-attachment-note">Attach the PO on the right to link it to this order.</p>
+<?php } ?>
+</div>
+
+<div class="col-md-7">
 <div class="form-group">
-<label for="field-1" class="control-label">Upload PO</label>
-<span id="error_attachpo" style="color:red;">*</span>
+<label for="attachpo" class="control-label">
+    Attach Revised PO <span class="po-optional">(optional)</span>
+</label>
 <input type="file" name="attachpo" id="attachpo" value="" class="form-control">
 <input type="hidden" name="oldpo" id="oldpo" value="<?php echo $row->po_attachment;?>">
+<input type="hidden" name="returnto" value="<?php echo html_escape(isset($return_to) ? $return_to : 'all');?>">
+<span class="po-attachment-note">
+    Only pick a file if the customer has sent an amended PO. The existing PO is kept as an earlier revision, never overwritten.
+</span>
+</div>
+<div class="form-group">
+<label for="attachment_remarks" class="control-label">Reason / Remarks <span class="po-optional">(optional)</span></label>
+<input type="text" class="form-control" name="attachment_remarks" id="attachment_remarks" maxlength="500" placeholder="e.g. Amended PO received on 12-09-2026, value revised">
+</div>
+</div>
+</div>
+
+<?php if (!empty($po_revisions)) { ?>
+<div class="row" style="margin-top:6px;">
+<div class="col-md-12">
+<label class="control-label">PO Attachment History</label>
+<div class="table-responsive">
+<table class="table table-bordered po-history-table">
+    <thead>
+        <tr>
+            <th style="width:90px;">Revision</th>
+            <th>File</th>
+            <th style="width:200px;">Attached By</th>
+            <th style="width:150px;">Attached On</th>
+            <th>Remarks</th>
+        </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($po_revisions as $revision) { ?>
+        <tr<?php echo ((int) $revision->is_current === 1) ? ' class="po-history-current"' : '';?>>
+            <td>
+                <?php echo (int) $revision->revision_no;?>
+                <?php if ((int) $revision->is_current === 1) { ?>
+                    <span class="label label-success">Current</span>
+                <?php } ?>
+            </td>
+            <td>
+                <a href="<?php echo sfdocument;?>Taskdocument/<?php echo html_escape($revision->stored_file_name);?>" target="_blank">
+                    <i class="fa fa-download"></i>
+                    <?php echo html_escape($revision->original_file_name !== '' ? $revision->original_file_name : $revision->stored_file_name);?>
+                </a>
+            </td>
+            <td><?php echo html_escape($this->po_attachment->person_name($revision));?></td>
+            <td><?php echo date('d-m-Y H:i', strtotime($revision->uploaded_on));?></td>
+            <td><?php echo html_escape((string) $revision->remarks);?></td>
+        </tr>
+    <?php } ?>
+    </tbody>
+</table>
+</div>
+</div>
+</div>
+<?php } ?>
+
 </div>
 </div>
 
 
-<div class="col-md-10">
+<div class="col-md-12">
 <div class="form-group">
 <label for="field-1" class="control-label">Payment Term 
     <!-- <i class="fa fa-plus" data-toggle="modal" data-target="#con-close-modal"></i> -->
@@ -147,7 +284,7 @@ foreach($q->result() as $row1){
         <select class="form-control" name="financialyear" id="financialyear">
             <?php $q = $this->db->select('id, year')->from('financialyear')->order_by('id','desc')->get();
                 foreach($q->result() as $r){?>
-                <option value="<?php echo $r->id;?>"><?php echo $r->year;?></option>
+                <option value="<?php echo $r->id;?>" <?php if((int)$row->financialyear === (int)$r->id){echo "selected";}?>><?php echo $r->year;?></option>
                 <?php }?>
         </select>
     </div>
@@ -219,11 +356,52 @@ foreach($q->result() as $row1){
 </div>
 </div>
 
-<div class="col-md-12" style="padding-top:30px;"></div><hr>
+<div class="col-md-12" style="padding-top:20px;"></div><hr>
+
+<div class="col-md-12">
+<div class="po-log-box">
+<label class="control-label">Change Log &mdash; who changed what</label>
+<?php if (!empty($po_change_logs)) { ?>
+<div class="table-responsive">
+<table class="table table-bordered po-log-table">
+    <thead>
+        <tr>
+            <th style="width:150px;">Changed On</th>
+            <th style="width:180px;">Changed By</th>
+            <th style="width:170px;">Action</th>
+            <th style="width:170px;">Field</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Remarks</th>
+        </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($po_change_logs as $log) { ?>
+        <tr>
+            <td><?php echo date('d-m-Y H:i', strtotime($log->changed_on));?></td>
+            <td><?php echo html_escape($this->po_attachment->person_name($log));?></td>
+            <td><?php echo html_escape(ucwords(strtolower(str_replace('_', ' ', (string) $log->action))));?></td>
+            <td><?php echo html_escape((string) $log->field_label);?></td>
+            <td><?php echo ($log->field_name !== null && trim((string) $log->old_value) !== '') ? html_escape((string) $log->old_value) : '<span style="color:#9ca3af;">&mdash;</span>';?></td>
+            <td><?php echo ($log->field_name !== null && trim((string) $log->new_value) !== '') ? html_escape((string) $log->new_value) : '<span style="color:#9ca3af;">&mdash;</span>';?></td>
+            <td><?php echo html_escape((string) $log->remarks);?></td>
+        </tr>
+    <?php } ?>
+    </tbody>
+</table>
+</div>
+<?php } else { ?>
+<div class="po-log-empty">
+    No changes have been recorded for this PO yet. Every edit made from here on is logged with the user, the date and the old and new value.
+</div>
+<?php } ?>
+</div>
+</div>
 
 <div class="col-md-12">
 <div class="form-group pull-right">
-<input type="submit" class="btn btn-success" name="Save" id="savedata">
+<a href="<?php echo ($return_to === 'my') ? page_url.'Task/myreceivedpolist' : page_url.'Task/poreceived';?>" class="btn btn-default">Cancel</a>
+<input type="submit" class="btn btn-success" name="Save" id="savedata" value="Update PO">
 </div>
 </div>
 
@@ -396,12 +574,8 @@ $("#pageloader").fadeIn();
 <script language="javascript" type="text/javascript">   
 $(document).ready(function() {
 $("#savedata").click(function() {
-var attachpo = $("#attachpo").val();
-if(attachpo=='')
-{	 $("#attachpo").css("border", "1px solid red");
-$("#error_attachpo").html('Required!');
-}
-
+// The PO already attached to this order stays linked, so a file is never
+// required here. It is only asked for when a revised PO is being added.
 var existingpaymentterms = $("#existingpaymentterms").val();
 if(existingpaymentterms=='')
 {	 $("#existingpaymentterms").css("border", "1px solid red");
@@ -438,7 +612,7 @@ $("#error_currency").html('Required!');
 
 
 
-if(attachpo=='' || paymentterms=='' || companyname=='' || pono=='' || podate=='' || currency=='')
+if(existingpaymentterms=='' || companyname=='' || pono=='' || podate=='' || currency=='')
 {
 
 return false;

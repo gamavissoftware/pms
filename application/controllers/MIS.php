@@ -66,11 +66,22 @@ class MIS extends CI_Controller {
 
 
 	function filter_mis(){
-		$startdate = date('Y-m-d',strtotime($this->input->post('start_date')));
-		$enddate = date('Y-m-d',strtotime($this->input->post('end_date')));
-		$userid = $this->input->post('user');
-		$dfid = $this->input->post('filterbydf');
-		$department = $this->input->post('department');
+		$startdate = $this->input->post('start_date', TRUE);
+		$enddate = $this->input->post('end_date', TRUE);
+		$userid = $this->input->post('user', TRUE) ?: 'ALL';
+		$dfid = $this->input->post('filterbydf', TRUE) ?: 'ALL';
+		$department = $this->input->post('department', TRUE) ?: 'ALL';
+
+		$startdate = DateTime::createFromFormat('Y-m-d', $startdate);
+		$enddate = DateTime::createFromFormat('Y-m-d', $enddate);
+		if (!$startdate || !$enddate || $startdate > $enddate) {
+			$this->session->set_flashdata('message', 'Please select a valid date range.');
+			redirect(page_url."MIS/index/ALL/".date('Y-m-d', strtotime('-1 year +1 day'))."/".date('Y-m-d')."/ALL/ALL");
+			return;
+		}
+
+		$startdate = $startdate->format('Y-m-d');
+		$enddate = $enddate->format('Y-m-d');
 		redirect(page_url."MIS/index/".$dfid."/".$startdate."/".$enddate."/".$userid."/".$department);
 
 	}
@@ -89,7 +100,7 @@ class MIS extends CI_Controller {
 			$department=$this->input->post('department');
 
 			 $this->db->select('b.user_id,b.first_name,b.last_name, c.department')->from('task_department_wise_scheduling a')->join('system_users b','a.assigned_user=b.user_id','left')->join('departments c','b.department_id=c.department_id','left')->where('b.business_location',2)->where('b.user_role_id!=',1)->where('b.user_status',1)->group_by('a.assigned_user');
-			if($department<>'ALL' && $department<>'')
+			if($department<>'ALL' && $department<>'' && ctype_digit((string) $department))
 				{
 					$this->db->where('b.department_id',$department);
 				}
@@ -145,17 +156,33 @@ class MIS extends CI_Controller {
 	}
 
 
-	function save_remark()
+function save_remark()
 {
     $id = $this->input->post('id');
-    $remark = $this->input->post('remark');
+    $remark = trim((string) $this->input->post('remark', TRUE));
+	$current_user_id = (int) $this->session->userdata['logged_in']['user_id'];
+	$current_role = (int) $this->session->userdata['logged_in']['role'];
+
+	if (!ctype_digit((string) $id) || $remark === '') {
+		echo json_encode(array('status' => 'error'));
+		return;
+	}
+
+	$this->db->select('id')->from('task_department_wise_scheduling')->where('id', (int) $id);
+	if (!in_array($current_role, array(1, 12, 68, 84), true)) {
+		$this->db->where('assigned_user', $current_user_id);
+	}
+	if ($this->db->get()->num_rows() !== 1) {
+		echo json_encode(array('status' => 'error'));
+		return;
+	}
 
     $data = array(
         'remarks' => $remark,
         'taskupdatedontime' => date('Y-m-d H:i:s')
     );
 
-    $this->db->where('id', $id);
+    $this->db->where('id', (int) $id);
     $update = $this->db->update('task_department_wise_scheduling', $data);
 
     if ($update) {

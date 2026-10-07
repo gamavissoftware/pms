@@ -379,6 +379,10 @@ $last_refreshed  = date('d M Y, h:i A');
                     <button type="button" class="btn btn-primary-soft mr-2" onclick="location.reload();">
                         <i class="fa fa-refresh mr-1"></i> Refresh
                     </button>
+                    <a href="<?php echo page_url.'Masters/assembly_machine_report'; ?>"
+                       class="btn btn-primary-soft mr-2">
+                        <i class="fa fa-industry mr-1"></i> Assembly Report
+                    </a>
                     <a href="<?php echo page_url.'Masters/allocate_job'; ?>" 
                        class="btn btn-dark shadow-sm px-4 py-2" 
                        style="border-radius: 10px; font-weight: 500;">

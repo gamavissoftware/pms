@@ -443,6 +443,7 @@ class Task extends CI_Controller {
 					`assigned_user` int(11) NOT NULL DEFAULT 0,
 					`point_title` varchar(255) NOT NULL,
 					`point_description` text DEFAULT NULL,
+					`attachment` varchar(255) DEFAULT NULL,
 					`department_id` int(11) NOT NULL DEFAULT 0,
 					`delegate_to` int(11) NOT NULL DEFAULT 0,
 					`due_date` date NOT NULL,
@@ -466,6 +467,39 @@ class Task extends CI_Controller {
 			$this->db->query("ALTER TABLE `task_punch_point_closure` ADD `source_task_record_id` int(11) NOT NULL DEFAULT 0 AFTER `task_record_id`");
 			$this->db->query("ALTER TABLE `task_punch_point_closure` ADD KEY `source_task_record_id` (`source_task_record_id`)");
 		}
+
+		if (!$this->db->field_exists('attachment', 'task_punch_point_closure')) {
+			$this->db->query("ALTER TABLE `task_punch_point_closure` ADD `attachment` varchar(255) DEFAULT NULL AFTER `point_description`");
+		}
+	}
+
+	private function uploadPunchPointAttachment()
+	{
+		if (empty($_FILES['punch_point_attachment']['name'])) {
+			return '';
+		}
+
+		$file = $_FILES['punch_point_attachment'];
+		$file['error'] = isset($file['error']) ? (int) $file['error'] : UPLOAD_ERR_NO_FILE;
+		$file['size'] = isset($file['size']) ? (int) $file['size'] : 0;
+
+		if ($file['error'] !== UPLOAD_ERR_OK || $file['tmp_name'] === '' || !is_uploaded_file($file['tmp_name'])) {
+			return false;
+		}
+
+		$extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+		$allowed_extensions = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'zip');
+		if (!in_array($extension, $allowed_extensions, true) || $file['size'] <= 0 || $file['size'] > 10485760) {
+			return false;
+		}
+
+		$upload_directory = FCPATH . 'image_bank/punch_point_closure/';
+		if (!is_dir($upload_directory) && !mkdir($upload_directory, 0755, true)) {
+			return false;
+		}
+
+		$filename = 'punch_' . date('YmdHis') . '_' . str_replace('.', '', uniqid('', true)) . '.' . $extension;
+		return move_uploaded_file($file['tmp_name'], $upload_directory . $filename) ? $filename : false;
 	}
 
 	private function generateDelegationCaseNo()
@@ -686,7 +720,7 @@ class Task extends CI_Controller {
 		}
 
 		foreach ($query->result() as $row) {
-			$response_query = $this->db->select('remarks, status, created_at')
+			$response_query = $this->db->select('remarks, status, attachment, created_at')
 				->from('delegation_task_response')
 				->where('task_id', (int) $row->delegation_task_id)
 				->order_by('id', 'DESC')
@@ -696,7 +730,7 @@ class Task extends CI_Controller {
 			$response_row = $response_query->row();
 
 			if (empty($response_row)) {
-				$response_query = $this->db->select('user_response AS remarks, task_status AS status, updated_on AS created_at')
+				$response_query = $this->db->select('user_response AS remarks, task_status AS status, proof AS attachment, updated_on AS created_at')
 					->from('user_response_on_delegated_task')
 					->where('task_id', (int) $row->delegation_task_id)
 					->order_by('id', 'DESC')
@@ -711,11 +745,13 @@ class Task extends CI_Controller {
 				$row->response_status_label = $row->is_done ? 'Done' : 'Pending';
 				$row->response_status_class = $row->is_done ? 'label-success' : 'label-warning';
 				$row->response_remarks = '';
+				$row->response_attachment = '';
 				$row->response_updated_on = !empty($row->delegated_updated_time) && $row->delegated_updated_time !== '0000-00-00 00:00:00'
 					? (string) $row->delegated_updated_time
 					: '';
 
 				if (!empty($response_row)) {
+					$row->response_attachment = !empty($response_row->attachment) ? (string) $response_row->attachment : '';
 					if ((int) $response_row->status === 1) {
 						$row->is_done = true;
 						$row->response_status_label = 'Done';
@@ -1100,11 +1136,68 @@ class Task extends CI_Controller {
 			'closure_items' => $closure_items,
 			'department_options' => $department_options,
 			'workflow_state' => $workflow_state,
+			'ticket_users' => $this->db->select('user_id, department_id, first_name, last_name')->from('system_users')->where('user_status', 1)->get()->result(),
 			'page_mode' => $page_mode,
 			'page_title' => $this->getPunchPointWorkflowLabel((int) $task_row->taskid)
 		);
 
 		$this->load->view('taskview/punch_point_closure', $data);
+	}
+
+	public function save_punch_point_progress()
+	{
+		if ($this->input->method() !== 'post') {
+			show_error('Method not allowed', 405);
+			return;
+		}
+		$scope = $this->getTaskDashboardScope();
+		$id = (int) $this->input->post('task_record_id');
+		$row = $this->getPunchPointClosureTaskRecord($id, $scope, array(50, 51, 11));
+		if (empty($row)) {
+			show_error('Task not found or access denied.', 403);
+			return;
+		}
+		$remarks = trim((string) $this->input->post('taskremarks'));
+		$raise_ticket = $this->input->post('raise_ticket') === '1';
+		$department = (int) $this->input->post('ticket_department');
+		$user = $department === 18 ? 180 : (int) $this->input->post('ticket_user');
+		$error = '';
+		if ((int) $row->task_status !== 0) {
+			$error = 'This task is no longer open.';
+		} elseif ($remarks === '') {
+			$error = 'Please enter a progress update or delay reason.';
+		} elseif ($raise_ticket) {
+			$valid_department = $this->db->from('departments')->where('department_id', $department)->where('status', 1)->where('business_loc_id', 2)->get()->row();
+			$valid_user = $this->task->getActiveTicketRecipient($department, $user);
+			if (!$valid_department || !$valid_user) {
+				$error = 'Please select an active ticket recipient in the selected department.';
+			}
+		}
+		if ($error !== '') {
+			$this->session->set_flashdata('message', '<div class="alert alert-danger">' . $error . '</div>');
+			redirect(page_url . 'Task/punch_point_closure/' . $id);
+			return;
+		}
+		$now = date('Y-m-d H:i:s');
+		$this->db->trans_start();
+		if (trim((string) $row->remarks) !== '') {
+			$this->db->insert('task_pending_status', array(
+				'recordid' => $id, 'remarks' => $row->remarks,
+				'taskupdatedontime' => $now, 'added_on' => $now,
+				'added_by' => (int) $scope['user_id']
+			));
+		}
+		$this->db->where('id', $id)->update('task_department_wise_scheduling', array(
+			'remarks' => $remarks, 'taskupdatedontime' => $now
+		));
+		if ($raise_ticket) {
+			$this->task->createnewticket($department, $user, (int) $row->df_id, (int) $row->taskid, $id, $remarks);
+		}
+		$this->db->trans_complete();
+		$ok = $this->db->trans_status();
+		$message = $ok ? ($raise_ticket ? 'Remarks saved and ticket raised.' : 'Remarks saved.') : 'Unable to save this update. Please try again.';
+		$this->session->set_flashdata('message', '<div class="alert alert-' . ($ok ? 'success' : 'danger') . '">' . $message . '</div>');
+		redirect(page_url . 'Task/punch_point_closure/' . $id);
 	}
 
 	public function save_punch_point_closure()
@@ -1139,7 +1232,14 @@ class Task extends CI_Controller {
 		$user_id = (int) $this->session->userdata['logged_in']['user_id'];
 		$added_on = date('Y-m-d H:i:s');
 		$success_count = 0;
+		$upload_error_count = 0;
 		$source_task_record_id = (int) $task_row->id;
+		$attachment = $this->uploadPunchPointAttachment();
+		if ($attachment === false) {
+			$upload_error_count = 1;
+			$attachment = '';
+		}
+		$attachment_saved = false;
 
 		foreach ($point_titles as $index => $point_title) {
 			$point_title = trim((string) $point_title);
@@ -1199,6 +1299,7 @@ class Task extends CI_Controller {
 					'assigned_user' => (int) $task_row->assigned_user,
 				'point_title' => strtoupper($point_title),
 				'point_description' => $point_description !== '' ? strtoupper($point_description) : null,
+				'attachment' => (!$attachment_saved && $attachment !== '') ? $attachment : null,
 				'department_id' => $department_id,
 				'delegate_to' => $delegate_to,
 				'due_date' => $due_date,
@@ -1211,6 +1312,9 @@ class Task extends CI_Controller {
 			);
 
 			$this->db->insert('task_punch_point_closure', $closure_data);
+			if (!$attachment_saved && $attachment !== '') {
+				$attachment_saved = true;
+			}
 			$this->sendPunchPointClosureDelegationEmail(
 				$task_row,
 				$delegate_to,
@@ -1231,8 +1335,14 @@ class Task extends CI_Controller {
 			} else {
 				$this->session->set_flashdata('message', '<div class="alert alert-success alert-dismissable">Punch point list saved successfully and Punch Point List has been marked done.</div>');
 			}
+			if ($upload_error_count > 0) {
+				$this->session->set_flashdata('message', '<div class="alert alert-warning alert-dismissable">Punch points were saved, but the list attachment could not be uploaded. Allowed formats: images, PDF, Word, Excel, CSV and ZIP up to 10 MB.</div>');
+			}
 		} else {
-			$this->session->set_flashdata('message', '<div class="alert alert-danger alert-dismissable">Please fill all required closure point details before submitting.</div>');
+			$message = $upload_error_count > 0
+				? 'Attachment could not be uploaded. Allowed formats: images, PDF, Word, Excel, CSV and ZIP up to 10 MB.'
+				: 'Please fill all required closure point details before submitting.';
+			$this->session->set_flashdata('message', '<div class="alert alert-danger alert-dismissable">' . $message . '</div>');
 		}
 
 		redirect(page_url . 'Task/punch_point_closure/' . $task_record_id);
@@ -1680,6 +1790,119 @@ class Task extends CI_Controller {
 
 	}
 
+	private function task_hierarchy_update_response($success, $message)
+	{
+		$this->output
+			->set_content_type('application/json')
+			->set_output(json_encode(array(
+				'success' => (bool) $success,
+				'message' => $message
+			)));
+	}
+
+	private function would_create_task_hierarchy_loop($task_id, $parent_task_id)
+	{
+		$task_id = (int) $task_id;
+		$parent_task_id = (int) $parent_task_id;
+		$visited = array();
+
+		while ($parent_task_id > 0) {
+			if ($parent_task_id === $task_id) {
+				return true;
+			}
+
+			if (in_array($parent_task_id, $visited, true)) {
+				return false;
+			}
+
+			$visited[] = $parent_task_id;
+			$parent = $this->db
+				->select('tat_start_from')
+				->from('task_management')
+				->where('task_id', $parent_task_id)
+				->limit(1)
+				->get()
+				->row();
+
+			if (empty($parent)) {
+				return false;
+			}
+
+			$parent_task_id = (int) $parent->tat_start_from;
+		}
+
+		return false;
+	}
+
+	public function update_task_hierarchy()
+	{
+		if (strtoupper($this->input->method()) !== 'POST') {
+			return $this->task_hierarchy_update_response(false, 'Invalid request.');
+		}
+
+		$task_id = (int) $this->input->post('taskid');
+		$task_type = (int) $this->input->post('task_type');
+		$parent_task_id = (int) $this->input->post('startfrom');
+
+		if ($task_id <= 0 || !in_array($task_type, array(1, 2), true)) {
+			return $this->task_hierarchy_update_response(false, 'Please select valid task details.');
+		}
+
+		$current_task = $this->db
+			->select('task_id')
+			->from('task_management')
+			->where('task_id', $task_id)
+			->limit(1)
+			->get()
+			->row();
+
+		if (empty($current_task)) {
+			return $this->task_hierarchy_update_response(false, 'Task not found.');
+		}
+
+		if ($task_type === 2 && $parent_task_id <= 0) {
+			return $this->task_hierarchy_update_response(false, 'Please select main task for sub task.');
+		}
+
+		if ($parent_task_id === $task_id) {
+			return $this->task_hierarchy_update_response(false, 'A task cannot start from itself.');
+		}
+
+		if ($parent_task_id > 0) {
+			$parent_exists = $this->db
+				->select('task_id')
+				->from('task_management')
+				->where('task_id', $parent_task_id)
+				->limit(1)
+				->get()
+				->num_rows() > 0;
+
+			if (!$parent_exists) {
+				return $this->task_hierarchy_update_response(false, 'Selected main task not found.');
+			}
+
+			if ($this->would_create_task_hierarchy_loop($task_id, $parent_task_id)) {
+				return $this->task_hierarchy_update_response(false, 'This selection creates a task loop.');
+			}
+		}
+
+		$data = array(
+			'task_type' => $task_type,
+			'tat_start_from' => $parent_task_id,
+			'updatedOn' => date('Y-m-d H:i:s')
+		);
+
+		$this->db->where('task_id', $task_id);
+		$result = $this->db->update('task_management', $data);
+
+		if (!$result) {
+			return $this->task_hierarchy_update_response(false, 'Unable to update task.');
+		}
+
+		$this->task->get_sorted_tasks();
+		return $this->task_hierarchy_update_response(true, 'Task hierarchy updated.');
+	}
+
 	public function tasklistdata()
 	{
 		$i=1;
@@ -1696,6 +1919,15 @@ class Task extends CI_Controller {
 		$this->db->order_by('a.sortorder','asc');
 		$query = $this->db->get();
 		$res = $query->result();
+		$all_tasks = $this->db
+			->select('a.task_id, a.task_name, b.department')
+			->from('task_management a')
+			->join('departments b','a.department_id=b.department_id','left')
+			->where('a.status',1)
+			->order_by('a.sortorder','asc')
+			->get()
+			->result();
+
 		foreach($res as $row){
 
 			$task_type = $row->task_type;
@@ -1714,48 +1946,79 @@ class Task extends CI_Controller {
 			{
 				$sta =  "<a href='".page_url."Task/updatetaskstatus/".$row->task_id."/".$row->status."'><span class='btn btn-danger btn-xs'>Not Active</span></a>";
 			}	
-			$edit = "<a href='".page_url."Task/edit_task/".$row->task_id."'><i class='fa fa-pencil'></i></a>";	
+			$edit = "<a class='task-edit-btn' href='".page_url."Task/edit_task/".$row->task_id."' title='Edit task'><i class='fa fa-pencil'></i></a>";	
 
-			$message = "<table border='1' style='width:300px; padding:5px 5px 5px 5px;'><tr style='background-color:#fbeeee; text-align:center;'><th style='padding:2px 2px 2px 2px; text-align:center;'>Department</th><th style='padding:2px 2px 2px 2px;  text-align:center;'>Message</th></tr>";
+			$message_count = 0;
+			$message = "<div class='task-message-panel'><div class='task-message-scroll'><table class='task-message-table'><tr><th>Department</th><th>Message</th></tr>";
 			$q = $this->db->select('a.task_message, b.department, a.department_id')->from('task_related_messages a')->join('departments b','a.department_id=b.department_id','left')->where('a.taskid',$row->task_id)->get();
 			foreach($q->result() as $row1){
+				$message_count++;
 				if($row1->department_id==0){
 					$departmentmsg = "Applicable for All the Departments";
 				}else{
 					$departmentmsg = $row1->department;
 				}
 				$message.='<tr>
-					<td>'.$departmentmsg.'</td>
+					<td>'.htmlspecialchars((string) $departmentmsg, ENT_QUOTES, 'UTF-8').'</td>
 					<td>'.$row1->task_message.'</td>
 				</tr>';
 			}
-			$message.='</table>';
+			if ($message_count === 0) {
+				$message .= '<tr><td colspan="2" class="task-empty-message">No message defined</td></tr>';
+			}
+			$message.='</table></div><span class="task-message-count">'.$message_count.' message'.($message_count === 1 ? '' : 's').'</span></div>';
 
 			$finalstep = $row->isitfinalstep;
 			if($finalstep==1){
-				$fstep = "Final Step";
+				$fstep = "<span class='task-badge task-badge-final'>Final Step</span>";
 			}else{
-				$fstep = "";
+				$fstep = "<span class='task-muted'>-</span>";
 			}
 
 			$selectoption = '<input type="number" id="taskid'.$row->task_id.'" class="form-control" value="'.$row->sortorder.'" onkeyup="updateorders('.$row->task_id.');"><span id="success'.$row->task_id.'"></span>';
 
 			if($row->visibleformd==1){
-				$visible = "<strong>Yes</strong>";
+				$visible = "<span class='task-badge task-badge-visible'>Yes</span>";
 			}else{
-				$visible  = "";
+				$visible  = "<span class='task-muted'>-</span>";
 			}
 
 			$tatfrom_design=$this->task->getdepartmentoftaskBYID($row->tat_start_from);
+
+			$task_type_select = '<select class="form-control input-sm task-hierarchy-type" id="task_type_'.$row->task_id.'" onchange="updateTaskHierarchy('.$row->task_id.');">'
+				. '<option value="1" '.($row->task_type == 1 ? 'selected' : '').'>Main Task</option>'
+				. '<option value="2" '.($row->task_type == 2 ? 'selected' : '').'>Sub Task</option>'
+				. '</select>';
+
+			$parent_select = '<select class="form-control input-sm task-hierarchy-parent" id="startfrom_'.$row->task_id.'" onchange="updateTaskHierarchy('.$row->task_id.');">';
+			$parent_select .= '<option value="0">No Parent / Start</option>';
+			foreach ($all_tasks as $parent_task) {
+				if ((int) $parent_task->task_id === (int) $row->task_id) {
+					continue;
+				}
+
+				$parent_label = trim((string) $parent_task->task_name);
+				if (!empty($parent_task->department)) {
+					$parent_label .= ' ('.(string) $parent_task->department.')';
+				}
+
+				$parent_select .= '<option value="'.$parent_task->task_id.'" '.((int) $row->tat_start_from === (int) $parent_task->task_id ? 'selected' : '').'>'.htmlspecialchars($parent_label, ENT_QUOTES, 'UTF-8').'</option>';
+			}
+			$parent_select .= '</select>';
+			$hierarchy_controls = '<div class="task-hierarchy-box">'.$task_type_select.$parent_select.'<small id="hierarchy_status_'.$row->task_id.'" class="task-hierarchy-status"></small></div>';
 			
-			$taskdata[] = array('sr_no'=>$i."<br><br><br>".$edit,
-			'department'=>$row->department,
-			'task_name'=>$row->task_name,
-            'type'=>$type,
+			$responsible_person = trim($row->title." ".$row->first_name." ".$row->last_name);
+			$start_from_task = !empty($row->taskname) ? $row->taskname : 'No Parent / Start';
+			$start_from_department = !empty($tatfrom_design) ? $tatfrom_design : '';
+
+			$taskdata[] = array('sr_no'=>"<div class='task-index'><span class='task-index-number'>".$i."</span>".$edit."</div>",
+			'department'=>"<span class='task-department'>".htmlspecialchars((string) $row->department, ENT_QUOTES, 'UTF-8')."</span>",
+			'task_name'=>"<div class='task-name-cell'>".htmlspecialchars((string) $row->task_name, ENT_QUOTES, 'UTF-8')."</div>",
+            'type'=>$hierarchy_controls,
             'fstep'=>$fstep,
-            'tat'=>$row->tat,
-            'responsibleperson'=>ucwords(strtolower($row->title." ".$row->first_name." ".$row->last_name)),
-            'taskname'=>$row->taskname."<BR/>".$tatfrom_design,
+            'tat'=>"<span class='task-tat'>".(int) $row->tat."</span>",
+            'responsibleperson'=>!empty($responsible_person) ? "<span class='task-person'>".htmlspecialchars(ucwords(strtolower($responsible_person)), ENT_QUOTES, 'UTF-8')."</span>" : "<span class='task-muted'>-</span>",
+            'taskname'=>"<div class='task-start-from'><strong>".htmlspecialchars((string) $start_from_task, ENT_QUOTES, 'UTF-8')."</strong><span>".htmlspecialchars((string) $start_from_department, ENT_QUOTES, 'UTF-8')."</span></div>",
             'task_frequency'=>$row->task_frequency,
             'sortorder'=>$row->sortorder,
             'changeorder'=>$selectoption,
@@ -2232,6 +2495,27 @@ Shubham Pack 📦 ";
 			'added_by'=>$user_id);
 			$this->db->insert('poreceived',$data);
 			$polastid = $this->db->insert_id();
+			
+			// Link this PO file to the order from the start, so later edits
+			// never have to ask for it again.
+			$this->load->model('Po_attachment_model', 'po_attachment');
+			
+			if ($poattachment !== '') {
+				$this->po_attachment->add_revision(
+					$polastid,
+					$poattachment,
+					(string) $photo,
+					$user_id,
+					'Attached while punching the order.'
+				);
+			}
+			
+			$this->po_attachment->log_event(
+				$polastid,
+				'PO_CREATED',
+				'Order punched for ' . $this->input->post('companyname') . ' (PO ' . $this->input->post('pono') . ')',
+				$user_id
+			);
 
 			$nexttaskid = 0;
 			$departmentid = 0;
@@ -2356,16 +2640,18 @@ Shubham Pack 📦 ";
         $this->db->where('a.added_by', $loggedInUserId);
     }
 
+    $poReportDateExpression = "COALESCE(NULLIF(DATE(a.podate), '0000-00-00'), NULLIF(DATE(a.added_on), '0000-00-00'))";
+
     if (!empty($startdate) && !empty($enddate)) {
         $start_date = base64_decode($startdate);
         $end_date   = base64_decode($enddate);
 
         if (!empty($start_date) && !empty($end_date)) {
-            $st = date('Y-m-d', strtotime($start_date)) . " 00:00:00";
-            $et = date('Y-m-d', strtotime($end_date)) . " 23:59:59";
+            $st = date('Y-m-d', strtotime($start_date));
+            $et = date('Y-m-d', strtotime($end_date));
 
-            $this->db->where('a.added_on >=', $st);
-            $this->db->where('a.added_on <=', $et);
+            $this->db->where($poReportDateExpression . ' >= ' . $this->db->escape($st), null, false);
+            $this->db->where($poReportDateExpression . ' <= ' . $this->db->escape($et), null, false);
         }
     }
 
@@ -2374,20 +2660,57 @@ Shubham Pack 📦 ";
 
     $query = $this->db->get();
 
+    $this->load->model('Po_attachment_model', 'po_attachment');
+
+    $revisionCounts = array();
+
+    if ($query->num_rows() > 0) {
+        $poIds = array();
+
+        foreach ($query->result() as $countRow) {
+            $poIds[] = (int) $countRow->id;
+        }
+
+        $revisionCounts = $this->po_attachment->revision_counts($poIds);
+    }
+
     if ($query->num_rows() > 0) {
         foreach ($query->result() as $row) {
 
             $poId = (int)$row->id;
 
             $companyName = !empty($row->company_name) ? ucwords(strtolower($row->company_name)) : '-';
-            $financialYear = !empty($row->year) ? $row->year : '-';
+            $financialYear = '-';
             $poNo = !empty($row->pono) ? $row->pono : '-';
             $dfNo = !empty($row->df_number) ? strtoupper($row->df_number) : '-';
 
             $poDate = '-';
+            $reportDate = '';
             if (!empty($row->podate) && $row->podate != '0000-00-00') {
                 $poDate = date('d-m-Y', strtotime($row->podate));
+                $reportDate = date('Y-m-d', strtotime($row->podate));
+            } elseif (!empty($row->added_on) && $row->added_on != '0000-00-00 00:00:00') {
+                $reportDate = date('Y-m-d', strtotime($row->added_on));
             }
+
+            if ($reportDate !== '') {
+                $reportYear = (int) date('Y', strtotime($reportDate));
+                $reportMonth = (int) date('n', strtotime($reportDate));
+                $fyStart = ($reportMonth >= 4) ? $reportYear : ($reportYear - 1);
+                $financialYear = $fyStart . '-' . substr((string) ($fyStart + 1), -2);
+            }
+
+            $lastUpdatedDate = '-';
+            if (!empty($row->po_updated_on) && $row->po_updated_on != '0000-00-00 00:00:00') {
+                $lastUpdatedDate = date('d-m-Y', strtotime($row->po_updated_on));
+            } elseif (!empty($row->added_on) && $row->added_on != '0000-00-00 00:00:00') {
+                $lastUpdatedDate = date('d-m-Y', strtotime($row->added_on));
+            }
+
+            $poDateDisplay = "<div style='min-width:92px; line-height:1.55;'>
+                                <div><strong>PO:</strong> " . $poDate . "</div>
+                                <small style='color:#6b7280; font-weight:700;'>Updated: " . $lastUpdatedDate . "</small>
+                              </div>";
 
             $title = !empty($row->title) ? $row->title : '';
             $firstName = !empty($row->first_name) ? $row->first_name : '';
@@ -2407,7 +2730,18 @@ Shubham Pack 📦 ";
 
             $orderValue = "<span style='font-weight:700; white-space:nowrap;'><i class='fa fa-inr'></i> " . $formattedNumber . "</span>";
 
-            $edit = "<a href='" . page_url . "Task/editpo/" . $poId . "' class='btn btn-primary btn-xs' style='border-radius:20px; font-weight:700;'>
+            $exportValue = "<span style='color:#9ca3af;'>-</span>";
+            $customerCurrency = !empty($row->customer_currency) ? strtoupper(trim($row->customer_currency)) : 'INR';
+            $customerCurrencyAmount = !empty($row->amount_in_customer_currency) ? (float) $row->amount_in_customer_currency : 0;
+
+            if (in_array($customerCurrency, array('USD', 'EUR'), true) && $customerCurrencyAmount > 0) {
+                $currencySymbol = ($customerCurrency === 'USD') ? '$' : '&euro;';
+                $exportValue = "<span style='font-weight:700; white-space:nowrap;'>" . $currencySymbol . " " . number_format($customerCurrencyAmount, 2) . "</span><br><small style='color:#6b7280; font-weight:700;'>" . $customerCurrency . "</small>";
+            }
+
+            $returnTo = $this->receivedPoOwnOrdersOnly ? 'my' : 'all';
+
+            $edit = "<a href='" . page_url . "Task/editpo/" . $poId . "?from=" . $returnTo . "' class='btn btn-primary btn-xs' style='border-radius:20px; font-weight:700;'>
                         <i class='fa fa-pencil'></i> Edit
                     </a>";
 
@@ -2417,6 +2751,18 @@ Shubham Pack 📦 ";
                                     <i class='fa fa-download'></i> PO
                                 </a>";
             }
+
+            // The PO stays linked to the order, so show how many revisions are
+            // on record and give a way into the full trail.
+            $revisionCount = isset($revisionCounts[$poId]) ? (int) $revisionCounts[$poId] : 0;
+
+            if ($revisionCount > 1) {
+                $poAttachment .= " <span class='label label-warning' style='border-radius:20px;' title='" . $revisionCount . " PO revisions on record'>R" . $revisionCount . "</span>";
+            }
+
+            $poAttachment .= "<br><a href='" . page_url . "Task/pohistory/" . $poId . "' class='btn btn-link btn-xs' style='padding:2px 0; font-weight:700;'>
+                                  <i class='fa fa-history'></i> History
+                              </a>";
 
             $leadId = !empty($row->lead_id) ? $row->lead_id : 0;
 
@@ -2492,8 +2838,9 @@ Shubham Pack 📦 ";
                 'financialyear'   => $financialYear,
                 'company_name'    => $companyName,
                 'pono'            => $poNo,
-                'podate'          => $poDate,
+                'podate'          => $poDateDisplay,
                 'ordervalue'      => $orderValue,
+                'exportvalue'     => $exportValue,
                 'marketingperson' => $marketingPerson,
                 'po_attachment'   => $poAttachment,
                 'brandtag'        => $brandname,
@@ -2886,6 +3233,33 @@ public function dfrelease()
 
 		$departid = 9;
 		$this->task->marketingtaskautoassign($dfid, $user_id, $departid);
+
+		/* ===== CHAT MODULE — create the DF's chat group ====================
+		   Creates "DF - <df no> - Group", adds every active department leader
+		   and notifies them. See Chat_model::ensure_df_channel().
+
+		   DELIBERATELY CANNOT BREAK A DF RELEASE. The DF is already committed
+		   by this point and the group is a convenience on top of it, so every
+		   failure path here is swallowed and logged rather than raised: a
+		   chat table missing because the schema was not imported, or any
+		   error inside the model, must not cost the user the release they
+		   just performed. The group can always be created afterwards with the
+		   one-click button (Chat::df()).
+		   ================================================================= */
+		try {
+			if ($this->db->table_exists('chat_conversation')) {
+				$this->load->helper('chat_access');
+				$this->load->model('Chat_model', 'chatmod');
+				$chat_me = chat_identity($this);
+				if ($chat_me) {
+					$this->chatmod->ensure_df_channel($dfid, $chat_me);
+				}
+			}
+		} catch (Exception $e) {
+			log_message('error', 'Chat: DF group for df_release ' . $dfid .
+				' could not be created - ' . $e->getMessage());
+		}
+		/* ===== END CHAT MODULE ===== */
 
 		$this->session->set_flashdata('message', '<div class="alert alert-success alert-dismissable">Thank you, record successfully added.</div>');
 		redirect(page_url . 'Task/dfrelease');
@@ -3305,7 +3679,11 @@ public function dfreleasebynewfeature()
 	}
 
 public function dfreleasedashboard(){
-	$this->load->view('master/dfreleasedashboard');
+	$this->load->model('Customised_df_model', 'customisedDfModel');
+	$data = array(
+		'customised_df_activity' => $this->customisedDfModel->get_latest_activity_map()
+	);
+	$this->load->view('master/dfreleasedashboard', $data);
 }
 
 public function save_marked_df()
@@ -3569,6 +3947,9 @@ public function apply_dfmeeting_friday_reset()
 
 public function ongoingtasklist()
 {
+    $previous_db_debug = $this->db->db_debug;
+    $this->db->db_debug = false;
+
     $scope = $this->getTaskDashboardScope();
     $user_id = (int) $scope['user_id'];
     $admin_user_type = (int) $scope['admin_user_type'];
@@ -3663,7 +4044,12 @@ public function ongoingtasklist()
     $this->db->order_by('b.df_no', 'asc');
     
     $query = $this->db->get();
-    $res = $query->result();
+    if ($query === false) {
+        log_message('error', 'ongoingtasklist query failed: ' . json_encode($this->db->error()));
+        $res = array();
+    } else {
+        $res = $query->result();
+    }
 
     $taskdata = array();
     $today_str = date('Y-m-d');
@@ -3722,7 +4108,8 @@ public function ongoingtasklist()
                             $updateprogress = '<a href="' . page_url . 'Dashboard/df_form_600/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                         } else {
                             if ($row->product_to_be_packed == 2) {
-                                $updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                                //$updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                                $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                             } else {
                                 $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                             }
@@ -3788,7 +4175,8 @@ public function ongoingtasklist()
                                     $updateprogress = '<a href="' . page_url . 'Dashboard/df_form_600/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                                 } else {
                                     if ($row->product_to_be_packed == 2) {
-                                        $updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                                        //$updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                                        $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                                     } else {
                                         $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                                     }
@@ -3898,7 +4286,33 @@ public function ongoingtasklist()
         "aaData" => $taskdata
     );
 
-    echo json_encode($results);
+    $this->db->db_debug = $previous_db_debug;
+
+    $json_flags = 0;
+    if (defined('JSON_UNESCAPED_UNICODE')) {
+        $json_flags |= JSON_UNESCAPED_UNICODE;
+    }
+    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
+        $json_flags |= JSON_INVALID_UTF8_SUBSTITUTE;
+    }
+    if (defined('JSON_PARTIAL_OUTPUT_ON_ERROR')) {
+        $json_flags |= JSON_PARTIAL_OUTPUT_ON_ERROR;
+    }
+
+    $json_output = json_encode($results, $json_flags);
+    if ($json_output === false) {
+        log_message('error', 'ongoingtasklist json_encode failed: ' . json_last_error_msg());
+        $json_output = '{"sEcho":1,"iTotalRecords":0,"iTotalDisplayRecords":0,"aaData":[]}';
+    }
+
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+
+    $this->output
+        ->set_content_type('application/json')
+        ->set_output($json_output);
+    return;
 }
 
 public function ongoingtasklistoldone()
@@ -4002,7 +4416,8 @@ public function ongoingtasklistoldone()
 							}else{
 								if($productpacktype->product_to_be_packed==2){
 
-							 $updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 //$updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}else{
 							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}
@@ -4106,7 +4521,8 @@ public function ongoingtasklistoldone()
 						}else{
 							if($productpacktype->product_to_be_packed==2){
 
-							 $updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 //$updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}else{
 							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}
@@ -4147,7 +4563,8 @@ public function ongoingtasklistoldone()
 							}else{
 								if($productpacktype->product_to_be_packed==2){
 
-							 $updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 //$updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}else{
 							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}
@@ -4487,7 +4904,8 @@ public function outdatedtask()
                             $updateprogress = '<a href="' . page_url . 'Dashboard/df_form_600/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                         } else {
                             if ($row->product_to_be_packed == 2) {
-                                $updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                                //$updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                                $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                             } else {
                                 $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                             }
@@ -4537,7 +4955,8 @@ public function outdatedtask()
                          $updateprogress = '<a href="' . page_url . 'Dashboard/df_form_600/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                     } else {
                         if ($row->product_to_be_packed == 2) {
-                            $updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                            //$updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                            $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                         } else {
                             $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                         }
@@ -4567,7 +4986,8 @@ public function outdatedtask()
                                 $updateprogress = '<a href="' . page_url . 'Dashboard/df_form_600/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                             } else {
                                 if ($row->product_to_be_packed == 2) {
-                                    $updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                                    //$updateprogress = '<a href="' . page_url . 'Dashboard/powder_df_form_design/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
+                                    $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                                 } else {
                                     $updateprogress = '<a href="' . page_url . 'Dashboard/df_project_form/' . $row->id . '/' . $row->po_id . '/' . $row->lead_id . '" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>';
                                 }
@@ -4829,7 +5249,8 @@ public function outdatedtaskbeforeoptimization()
 							}else{
 								if($productpacktype->product_to_be_packed==2){
 
-							 $updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 //$updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}else{
 							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}
@@ -4917,7 +5338,8 @@ public function outdatedtaskbeforeoptimization()
 							}else{
 								if($productpacktype->product_to_be_packed==2){
 
-							 $updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							// $updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}else{
 							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}
@@ -4953,7 +5375,8 @@ public function outdatedtaskbeforeoptimization()
 							}else{
 								if($productpacktype->product_to_be_packed==2){
 
-							 $updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 //$updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}else{
 							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}
@@ -5035,7 +5458,8 @@ public function outdatedtaskbeforeoptimization()
 							}else{
 								if($productpacktype->product_to_be_packed==2){
 
-							 $updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 //$updateprogress = '<a href="'.page_url.'Dashboard/powder_df_form_design/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
+							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}else{
 							 $updateprogress = '<a href="'.page_url.'Dashboard/df_project_form/'.$row->id.'/'.$row->po_id.'/'.$row->lead_id.'" class="btn btn-sm btn-danger">Fill Design Form (DF)</a>'; 
 						}
@@ -5898,22 +6322,25 @@ public function completeddf()
 
         // Delay Calculation
         $task_completed_date = date('Y-m-d', strtotime($row->task_completed_on));
-        
-        if (strtotime($row->end_date) < strtotime($row->task_completed_on)) {
+        $planned_completion_date = date('Y-m-d', strtotime($row->end_date));
+
+        // Compare calendar dates only. A completion at any time on the planned
+        // due date is on time; the time component must not make it look delayed.
+        if ($task_completed_date > $planned_completion_date) {
             // Delayed
-            $pendinddays = $this->task->getDays($row->end_date, $task_completed_date, 2);
+            $pendinddays = $this->task->getDays($planned_completion_date, $task_completed_date, 2);
             $status = "Delayed";
             $task_delay_display = "<strong style='color:red;font-weight:bold;'>{$pendinddays} Days</strong>";
         } else {
             // On Time / Early
-            $pendinddays = $this->task->getDays($row->end_date, $task_completed_date, 1);
+            $pendinddays = $this->task->getDays($planned_completion_date, $task_completed_date, 1);
             $status = ($pendinddays > 0) ? "Early" : "On Time";
             $task_delay_display = "<strong style='color:black;font-weight:bold;'>{$pendinddays} Days</strong>";
         }
 
         // Admin Date Change Input
         $end_dateChange = '';
-        if ($user_id == 61 || $user_id == 161) {
+        if ($user_id == 161) {
             $end_dateChange = "<div class='col-md-12'><input type='date' name='doneadate" . $row->id . "' id='donedate" . $row->id . "' class='form-control' onchange='changeDoneDate(" . $row->id . ");'></div>";
         }
 
@@ -6201,6 +6628,14 @@ public function updatetaskremarks()
 
         /*If task status is pending*/
         if ($status == 0 && $taskremarks <> '') {
+            $ticketselection = $this->input->post('ticketcondition');
+            $selecteddepartmentid = $this->input->post('selectdepartment');
+            $selecteduserinfo = $this->input->post('departmentuser');
+            if ($ticketselection == 1 && !$this->task->getActiveTicketRecipient($selecteddepartmentid, $selecteduserinfo)) {
+                $this->session->set_flashdata('message', '<div class="alert alert-danger alert-dismissable">Help ticket was not raised. Please select an active user from the selected department.</div>');
+                redirect(page_url . 'Dashboard');
+            }
+
             $data = [
                 'task_status' => $status,
                 'taskupdatedontime' => date('Y-m-d H:i:s'),
@@ -6222,11 +6657,7 @@ public function updatetaskremarks()
             $this->db->where('id', $id);
             $this->db->update('task_department_wise_scheduling', $data);
             
-            // This part is external, no changes
-            $ticketselection = $this->input->post('ticketcondition');
             if ($ticketselection == 1) {
-                $selecteddepartmentid = $this->input->post('selectdepartment');
-                $selecteduserinfo = $this->input->post('departmentuser');
                 $this->task->createnewticket($selecteddepartmentid, $selecteduserinfo, $dfid, $mastertaskid, $id, $taskremarks);
             }
 
@@ -6478,6 +6909,14 @@ public function updatetaskremarks()
 		//echo date('Y-m-d H:i:s',strtotime($doneDate)); exit;
 		/*If task status is pending*/
 		if($status==0 && $taskremarks<>''){
+			$ticketselection = $this->input->post('ticketcondition');
+			$selecteddepartmentid = $this->input->post('selectdepartment');
+			$selecteduserinfo = $this->input->post('departmentuser');
+			if($ticketselection==1 && !$this->task->getActiveTicketRecipient($selecteddepartmentid, $selecteduserinfo)){
+				$this->session->set_flashdata('message','<div class="alert alert-danger alert-dismissable">Help ticket was not raised. Please select an active user from the selected department.</div>');
+				redirect(page_url.'Dashboard');
+			}
+
 			$data = array('task_status'=>$status,
 				'taskupdatedontime'=>date('Y-m-d H:i:s'),
 				'remarks'=>$taskremarks);
@@ -6498,9 +6937,6 @@ public function updatetaskremarks()
 
 			$this->db->where('id',$id);
 			$this->db->update('task_department_wise_scheduling',$data);
-			$ticketselection = $this->input->post('ticketcondition');
-			$selecteddepartmentid = $this->input->post('selectdepartment');
-			$selecteduserinfo = $this->input->post('departmentuser');
 			if($ticketselection==1){
 				$this->task->createnewticket($selecteddepartmentid, $selecteduserinfo, $dfid, $mastertaskid, $id, $taskremarks);
 			}
@@ -7907,10 +8343,11 @@ echo $msg; exit;
 	}
 
 
-function graphStructure()
-{
-	$this->load->view('master/tree_graph');
-}
+	function graphStructure()
+	{
+		$data = $this->task->get_task_structure_data();
+		$this->load->view('master/tree_graph', $data);
+	}
 
 function ExpenseMaster()
 {
@@ -8289,7 +8726,7 @@ $this->load->view('charts/DF_Gant_chartSharmaji');
 function getdepartmentwiseusers(){
 	$option = '<option value="">Select User</option>';
 	$departmentid = $this->input->post('departmentid');
-	$q = $this->db->select('user_id, first_name, last_name')->from('system_users')->where('department_id',$departmentid)->where('user_status',1)->where('hide_profile',0)->get();
+	$q = $this->db->select('user_id, first_name, last_name')->from('system_users')->where('department_id',$departmentid)->where('user_status',1)->get();
 	if($q->num_rows()>0){
 		foreach($q->result() as $row){
 			$username = ucfirst(strtolower($row->first_name))." ".ucfirst(strtolower($row->last_name));
@@ -8525,7 +8962,7 @@ public function viewallrunninghelpticketslist()
     $this->db->join('departments b', 'a.department_id = b.department_id', 'left');
     $this->db->join('task_management c', 'a.task_id = c.task_id', 'left');
     $this->db->join('system_users d', 'a.added_by = d.user_id', 'left');
-    $this->db->join('system_users e', 'a.user_id = e.user_id', 'left');
+    $this->db->join('system_users e', 'a.user_id = e.user_id AND e.department_id = a.department_id AND e.user_status = 1', 'left');
     $this->db->join('df_release f', 'a.df_id = f.id', 'left');
 
     $this->db->where('a.ticket_status', 0);
@@ -8579,8 +9016,9 @@ public function viewallrunninghelpticketslist()
             $remarks = !empty($row->remarks) ? nl2br(htmlspecialchars($row->remarks)) : '-';
             $department = !empty($row->department) ? ucwords(strtolower($row->department)) : '-';
 
+            $hasActiveAssignee = !empty($row->fname) || !empty($row->lname);
             $assignedTo = trim($row->usertitle . ' ' . $row->fname . ' ' . $row->lname);
-            $assignedTo = !empty($assignedTo) ? ucwords(strtolower($assignedTo)) : '-';
+            $assignedTo = !empty($assignedTo) ? ucwords(strtolower($assignedTo)) : '<span class="status-pill pill-danger">No active user assigned</span><br><small>Stored user #' . (int)$row->user_id . '</small>';
 
             $addedBy = trim($row->title . ' ' . $row->first_name . ' ' . $row->last_name);
             $addedBy = !empty($addedBy) ? ucwords(strtolower($addedBy)) : '-';
@@ -8632,10 +9070,12 @@ public function viewallrunninghelpticketslist()
              * Add comment permission:
              * Assigned person can add comment.
              */
-            if ((int)$row->user_id == $loggedInUserId) {
+            if ($hasActiveAssignee && (int)$row->user_id == $loggedInUserId) {
                 $addcomment = '<button type="button" class="btn btn-primary btn-xs btn-action" onclick="showcommentbox(' . $ticketId . ');">
                                     <i class="fa fa-comment"></i> Add Comment
                                </button>';
+            } elseif (!$hasActiveAssignee) {
+                $addcomment = '<span class="status-pill pill-danger">Reassign Required</span>';
             } else {
                 $addcomment = '<span class="status-pill pill-info">Assigned User Only</span>';
             }
@@ -9005,7 +9445,7 @@ public function helpticketsforyourteamlist()
     $this->db->join('departments b', 'a.department_id = b.department_id', 'left');
     $this->db->join('task_management c', 'a.task_id = c.task_id', 'left');
     $this->db->join('system_users d', 'a.added_by = d.user_id', 'left');
-    $this->db->join('system_users e', 'a.user_id = e.user_id', 'left');
+    $this->db->join('system_users e', 'a.user_id = e.user_id AND e.department_id = a.department_id AND e.user_status = 1', 'left');
     $this->db->join('df_release f', 'a.df_id = f.id', 'left');
 
     $this->db->where('a.ticket_status', 0);
@@ -9066,8 +9506,9 @@ public function helpticketsforyourteamlist()
             $taskName = !empty($row->task_name) ? $row->task_name : '-';
             $department = !empty($row->department) ? ucwords(strtolower($row->department)) : '-';
 
+            $hasActiveAssignee = !empty($row->fname) || !empty($row->lname);
             $assignedTo = trim($row->usertitle . ' ' . $row->fname . ' ' . $row->lname);
-            $assignedTo = !empty($assignedTo) ? ucwords(strtolower($assignedTo)) : '-';
+            $assignedTo = !empty($assignedTo) ? ucwords(strtolower($assignedTo)) : '<span class="status-pill pill-danger">No active user assigned</span><br><small>Stored user #' . (int)$row->user_id . '</small>';
 
             $addedBy = trim($row->title . ' ' . $row->first_name . ' ' . $row->last_name);
             $addedBy = !empty($addedBy) ? ucwords(strtolower($addedBy)) : '-';
@@ -9129,10 +9570,12 @@ public function helpticketsforyourteamlist()
              * Assigned user can add comment.
              */
             $addcomment = '';
-            if ((int)$row->user_id == $loggedInUserId) {
+            if ($hasActiveAssignee && (int)$row->user_id == $loggedInUserId) {
                 $addcomment = '<button type="button" class="btn btn-primary btn-xs btn-action" onclick="showcommentbox(' . $ticketId . ');">
                                     <i class="fa fa-comment"></i> Add Comment
                                </button>';
+            } elseif (!$hasActiveAssignee) {
+                $addcomment = '<span class="status-pill pill-danger">Reassign Required</span>';
             } else {
                 $addcomment = '<span class="status-pill pill-info">Assigned User Only</span>';
             }
@@ -9498,6 +9941,27 @@ function getteamwisetickets($departmentid){
 				'added_by'=>$user_id);
 				$this->db->insert('poreceived',$data);
 				$polastid = $this->db->insert_id();
+				
+				// Link this PO file to the order from the start, so later edits
+				// never have to ask for it again.
+				$this->load->model('Po_attachment_model', 'po_attachment');
+				
+				if ($poattachment !== '') {
+					$this->po_attachment->add_revision(
+						$polastid,
+						$poattachment,
+						(string) $photo,
+						$user_id,
+						'Attached while punching the order.'
+					);
+				}
+				
+				$this->po_attachment->log_event(
+					$polastid,
+					'PO_CREATED',
+					'Order punched for ' . $this->input->post('companyname') . ' (PO ' . $this->input->post('pono') . ')',
+					$user_id
+				);
 
 				$nexttaskid = 0;
 				$departmentid = 0;
@@ -9927,6 +10391,7 @@ public function viewhelpticketdfwise(){
 	function brandmapping(){
 		$recordid = $this->input->post('poid');
 		$tagbrand = $this->input->post('tagbrand');
+		$return_url = trim((string) $this->input->post('return_url', true));
 
 		if(!is_numeric($this->input->post('tagbrand'))){
 
@@ -9948,13 +10413,27 @@ public function viewhelpticketdfwise(){
 
 
 
+		$before = $this->db->select('*')->from('poreceived')->where('id',$recordid)->get()->row();
+
 		$data = array('brand_tag'=>$brand_id);
 		$this->db->where('id',$recordid);
 		$this->db->update('poreceived',$data);
-		$this->session->set_flashdata('message','<div class="alert alert-danger alert-dismissable">Thank You! Brand successfully updated.</div>');
-			redirect(page_url.'Task/receivedpolist/');
 
-	}
+		$this->load->model('Po_attachment_model', 'po_attachment');
+		$this->po_attachment->log_changes(
+			$recordid,
+			'BRAND_ASSIGNED',
+			$this->po_attachment->diff($before, $data),
+			$this->session->userdata['logged_in']['user_id']
+		);
+
+		$this->session->set_flashdata('message','<div class="alert alert-success alert-dismissable">Thank You! Brand successfully updated.</div>');
+		if ($return_url !== '' && strpos($return_url, page_url) === 0) {
+			redirect($return_url);
+		}
+		redirect(page_url.'Task/receivedpolist/');
+
+		}
 
 	public function edit_df(){
 		$this->load->view('master/edit_df');
@@ -10217,7 +10696,69 @@ public function getreportoftasks(){
 	}
 
 	function editpo(){
-		$this->load->view('master/edit_po');
+		$po_id = (int) $this->uri->segment(3);
+
+		$this->load->model('Po_attachment_model', 'po_attachment');
+
+		// An order punched before the revision history existed still has its
+		// PO file. Give it revision 1 so the edit screen shows it as a real
+		// attachment rather than as a blank history.
+		$this->po_attachment->backfill_original($po_id);
+
+		$this->load->view('master/edit_po', array(
+			'po_id'          => $po_id,
+			'po_revisions'   => $this->po_attachment->get_revisions($po_id),
+			'po_change_logs' => $this->po_attachment->get_logs($po_id),
+			'return_to'      => $this->poReturnTo($this->input->get('from')),
+		));
+	}
+
+	/**
+	 * Where the PO screens should send the user back to. Only the two known
+	 * listings are accepted, so this can never be pointed somewhere else.
+	 */
+	private function poReturnTo($token)
+	{
+		return ((string) $token === 'my') ? 'my' : 'all';
+	}
+
+	private function poReturnUrl($token)
+	{
+		return ($this->poReturnTo($token) === 'my')
+			? page_url . 'Task/myreceivedpolist'
+			: page_url . 'Task/poreceived';
+	}
+
+	/**
+	 * Move an uploaded PO into the document folder.
+	 *
+	 * @return array stored and original file name, or an error message.
+	 */
+	private function storeUploadedPo($field)
+	{
+		if (empty($_FILES[$field]['name'])) {
+			return array('stored' => '', 'original' => '', 'error' => '');
+		}
+
+		if (!empty($_FILES[$field]['error'])) {
+			return array('stored' => '', 'original' => '', 'error' => 'The PO file could not be uploaded. Please try again.');
+		}
+
+		$original = (string) $_FILES[$field]['name'];
+		$extension = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+		$allowed = array('pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx');
+
+		if (!in_array($extension, $allowed, true)) {
+			return array('stored' => '', 'original' => '', 'error' => 'PO files must be one of: ' . strtoupper(implode(', ', $allowed)) . '.');
+		}
+
+		$stored = time() . '.' . $extension;
+
+		if (!move_uploaded_file($_FILES[$field]['tmp_name'], UPLOADPATH . 'Taskdocument/' . $stored)) {
+			return array('stored' => '', 'original' => '', 'error' => 'The PO file could not be saved on the server.');
+		}
+
+		return array('stored' => $stored, 'original' => $original, 'error' => '');
 	}
 
 	public function updatepoinfo()
@@ -10226,30 +10767,63 @@ public function getreportoftasks(){
 		$this->form_validation->set_error_delimiters('<div style="color:red;">', '</div>');
 		$this->form_validation->set_rules('companyname', 'Company Name', 'required|trim');
 		$this->form_validation->set_rules('pono', 'Po Number', 'required|trim');
-		$user_id =$this->session->userdata['logged_in']['user_id'];		
+		$user_id =$this->session->userdata['logged_in']['user_id'];
+		$po_id = (int) $this->uri->segment(3);
+		$return_to = $this->poReturnTo($this->input->post('returnto'));
+
+		$this->load->model('Po_attachment_model', 'po_attachment');
+
 		if ($this->form_validation->run() == FALSE)
 		{
-			$this->load->view('master/edit_po');
+			$this->po_attachment->backfill_original($po_id);
+			$this->load->view('master/edit_po', array(
+				'po_id'          => $po_id,
+				'po_revisions'   => $this->po_attachment->get_revisions($po_id),
+				'po_change_logs' => $this->po_attachment->get_logs($po_id),
+				'return_to'      => $return_to,
+			));
 		}
 		else
 		{
 		date_default_timezone_set("Asia/Kolkata");
-		$date =  date('Y-m-d H:i:s'); 
+		$date =  date('Y-m-d H:i:s');
 
-		$photo=$_FILES['attachpo']['name'];
-			if($photo<>'')
-			{
-				$image1=explode('.',$photo);
-				$cat_image=end($image1);
-				$poattachment=time().'.'.$cat_image;
-				move_uploaded_file($_FILES['attachpo']["tmp_name"],UPLOADPATH.'Taskdocument/' . $poattachment);
-			}else
-			{
-				$poattachment=$this->input->post('oldpo');
-				}
+		$before = $this->db->select('*')->from('poreceived')->where('id', $po_id)->get()->row();
 
+		if (!$before) {
+			$this->session->set_flashdata('message','<div class="alert alert-danger alert-dismissable">Sorry, that PO could not be found.</div>');
+			redirect($this->poReturnUrl($return_to));
+			return;
+		}
 
-		
+		// The PO already on the order stays linked. A file is only needed when
+		// the user actually wants to replace it with a revised copy.
+		$this->po_attachment->backfill_original($po_id);
+
+		$upload = $this->storeUploadedPo('attachpo');
+
+		if ($upload['error'] !== '') {
+			$this->session->set_flashdata('message','<div class="alert alert-danger alert-dismissable">' . html_escape($upload['error']) . '</div>');
+			redirect(page_url . 'Task/editpo/' . $po_id . '?from=' . $return_to);
+			return;
+		}
+
+		$attachment_remarks = trim((string) $this->input->post('attachment_remarks'));
+		$revision_no = 0;
+
+		if ($upload['stored'] !== '') {
+			$poattachment = $upload['stored'];
+			$revision_no = $this->po_attachment->add_revision(
+				$po_id,
+				$upload['stored'],
+				$upload['original'],
+				$user_id,
+				$attachment_remarks
+			);
+		} else {
+			$poattachment = (string) $before->po_attachment;
+		}
+
 			$data = array('company_name'=>$this->input->post('companyname'),
 			'pono'=>$this->input->post('pono'),
 			'financialyear'=>$this->input->post('financialyear'),
@@ -10258,13 +10832,55 @@ public function getreportoftasks(){
 			'po_attachment'=>$poattachment,
 			'po_updated_by'=>$user_id,
 			'po_updated_on'=>date('Y-m-d H:i:s'));
-			$this->db->where('id',$this->uri->segment(3));
+
+			$changes = $this->po_attachment->diff($before, $data);
+
+			$this->db->where('id',$po_id);
 			$this->db->update('poreceived',$data);
-			
-			$this->session->set_flashdata('message','<div class="alert alert-danger alert-dismissable">Thank You!, Record successfully updated.</div>');
-			redirect(page_url.'Task/poreceived');
+
+			$this->po_attachment->log_changes($po_id, 'PO_UPDATED', $changes, $user_id, $attachment_remarks);
+
+			if ($revision_no > 0) {
+				$this->po_attachment->log_event(
+					$po_id,
+					'PO_ATTACHMENT_ADDED',
+					'Revised PO attached (Revision ' . $revision_no . ': ' . $upload['original'] . ')',
+					$user_id,
+					$attachment_remarks
+				);
+			}
+
+			$summary = ($revision_no > 0)
+				? 'Thank You!, record updated and the revised PO was attached as Revision ' . $revision_no . '. The earlier PO is still on record.'
+				: (count($changes) > 0
+					? 'Thank You!, record successfully updated. The PO already attached stays linked.'
+					: 'No changes were made. The PO already attached stays linked.');
+
+			$this->session->set_flashdata('message','<div class="alert alert-success alert-dismissable">' . $summary . '</div>');
+			redirect($this->poReturnUrl($return_to));
 		}
 		
+	}
+
+	/**
+	 * Attachment revisions and the change log for one PO, rendered for the
+	 * listing screens.
+	 */
+	public function pohistory()
+	{
+		$po_id = (int) $this->uri->segment(3);
+
+		$this->load->model('Po_attachment_model', 'po_attachment');
+		$this->po_attachment->backfill_original($po_id);
+
+		$order = $this->db->select('id, pono, company_name')->from('poreceived')->where('id', $po_id)->get()->row();
+
+		$this->load->view('master/po_history', array(
+			'po_id'          => $po_id,
+			'po_order'       => $order,
+			'po_revisions'   => $this->po_attachment->get_revisions($po_id),
+			'po_change_logs' => $this->po_attachment->get_logs($po_id),
+		));
 	}
 
 	function manualsorting()
@@ -10280,7 +10896,7 @@ public function getreportoftasks(){
 			'message' => 'You are not allowed to update completed task dates.'
 		);
 
-		if (!in_array($user_id, array(61, 161), true)) {
+		if ($user_id !== 161) {
 			return $this->output
 				->set_content_type('application/json')
 				->set_output(json_encode($response));
@@ -10996,8 +11612,8 @@ public function markasunhold() {
             $task_delay_display = "<strong style='color:black;font-weight:bold;'>{$pendinddays} Days</strong>";
         }
 
-        // Allow changing end date if user ID is 61 or 161
-	        if ($current_user_id == 61 || $current_user_id == 161) {
+        // Allow changing end date if user ID is 161
+	        if ($current_user_id == 161) {
 	            $end_dateChange = "<div class='col-md-12'><input type='date' name='doneadate" . $row->id . "' id='donedate" . $row->id . "' class='form-control' onchange='changeDoneDate(" . $row->id . ");'></div>";
 	        } else {
 	            $end_dateChange = '';
@@ -11656,7 +12272,7 @@ public function pending_tasks($department_id)
         $task_row['df_no'] = strtoupper(trim((string) $task_row['df_no']));
         $task_row['company_name'] = $this->format_pending_task_title_case($task_row['company_name']);
         $task_row['df_description'] = trim((string) $task_row['df_description']);
-        $task_row['gantt_url'] = page_url . 'Task/finalgantchartWithDetails/' . (int) $task_row['df_id'];
+        $task_row['gantt_url'] = page_url . 'gantt/' . (int) $task_row['df_id'];
         $task_row['df_detail_url'] = page_url . 'Dashboard/df_full_detail?df_id=' . (int) $task_row['df_id'];
 
         $unique_df_ids[$task_row['df_id']] = true;
@@ -12142,8 +12758,22 @@ public function get_task_details() {
     $this->db->where('a.department_id', $department_id);
 
     if ($detail_scope !== 'all') {
-        $status_filter = ($task_status === 'delayed') ? [0, 2] : [1];
-        $this->db->where_in('a.task_status', $status_filter);
+        $today = date('Y-m-d');
+        if ($task_status === 'delayed' || $task_status === 'pending' || $task_status === 'on-time') {
+            $this->db->where_in('a.task_status', [0, 2]);
+            if ($task_status === 'delayed') {
+                $this->db->where('a.end_date >=', '1000-01-01');
+                $this->db->where('a.end_date <', $today);
+            } elseif ($task_status === 'on-time') {
+                $this->db->group_start();
+                $this->db->where('a.end_date >=', $today);
+                $this->db->or_where('a.end_date <', '1000-01-01');
+                $this->db->or_where('a.end_date', null);
+                $this->db->group_end();
+            }
+        } else {
+            $this->db->where_in('a.task_status', [1]);
+        }
     }
 
     $this->db->order_by('a.end_date', 'ASC');
@@ -12312,6 +12942,14 @@ function canceledorder(){
     $data = array('orderhold' => 1);
     $this->db->where('id', $orderid);
     $this->db->update('poreceived', $data);
+
+    $this->load->model('Po_attachment_model', 'po_attachment');
+    $this->po_attachment->log_event(
+        $orderid,
+        'ORDER_CANCELLED',
+        'Order cancellation requested',
+        isset($_SESSION['logged_in']['user_id']) ? (int) $_SESSION['logged_in']['user_id'] : 0
+    );
 
     $qq = $this->db->select('a.company_name, b.df_no, b.df_description, c.title, c.first_name, c.last_name')->from('poreceived a')->join('df_release b','a.df_id=b.id','left')->join('system_users c','a.added_by=c.user_id','left')->where('a.id',$orderid)->get();
 

@@ -882,7 +882,11 @@ if(!empty($m5->special_notes))
     );
 
     // 2. Remove all inline CSS/Styles (This prevents Dompdf layout crashes)
-    $notes = preg_replace('/ style="[^"]*"/i', '', $notes);
+    $notes = preg_replace(
+        '/\sstyle\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/i',
+        '',
+        $notes
+    );
 
     // 3. Remove specific problematic formatting tags but keep content
     $notes = preg_replace('/<\/?(span|font|strong|b|i|u)[^>]*>/i', '', $notes);
@@ -898,7 +902,54 @@ if(!empty($m5->special_notes))
     // Normalize multiple line breaks to a single one
     $notes = preg_replace('/(<br\s*\/?>\s*)+/i', '<br>', $notes);
 
+    // Older editor content may wrap the complete Special Notes block inside a
+    // wide table cell, leaving an empty leading column. That legacy wrapper
+    // shifts all notes and nested tables to the right in DOMPDF. Unwrap only a
+    // top-level table whose largest cell contains most of the complete content;
+    // genuine character/spares data tables remain untouched.
+    if (class_exists('DOMDocument')) {
+        $notesDom = new DOMDocument('1.0', 'UTF-8');
+        $previousLibxmlState = libxml_use_internal_errors(true);
+        $loadedNotes = $notesDom->loadHTML(
+            '<?xml encoding="UTF-8"><div id="df-special-notes-root">' . $notes . '</div>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
+
+        if ($loadedNotes) {
+            $notesXpath = new DOMXPath($notesDom);
+            $rootNode = $notesXpath->query('//*[@id="df-special-notes-root"]')->item(0);
+            $topTables = $notesXpath->query('./table', $rootNode);
+
+            if ($topTables && $topTables->length === 1) {
+                $outerTable = $topTables->item(0);
+                $outerTextLength = strlen(trim($outerTable->textContent));
+                $largestCell = null;
+                $largestCellLength = 0;
+
+                foreach ($notesXpath->query('.//td', $outerTable) as $candidateCell) {
+                    $candidateLength = strlen(trim($candidateCell->textContent));
+                    if ($candidateLength > $largestCellLength) {
+                        $largestCell = $candidateCell;
+                        $largestCellLength = $candidateLength;
+                    }
+                }
+
+                if ($largestCell && $outerTextLength > 0 && $largestCellLength >= ($outerTextLength * 0.75)) {
+                    $unwrappedNotes = '';
+                    foreach ($largestCell->childNodes as $childNode) {
+                        $unwrappedNotes .= $notesDom->saveHTML($childNode);
+                    }
+                    $notes = $unwrappedNotes;
+                }
+            }
+        }
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlState);
+    }
+
     $cleanSpecialNotes = $notes;
+
 }
 
 
@@ -959,6 +1010,13 @@ if(!empty($m5->special_notes))
     ];
 
     // ---------- LOAD HTML ----------
+    // This PDF is edited frequently and some production OPcache setups do not
+    // revalidate view files immediately. Invalidate only this template so the
+    // generated PDF always uses the current layout.
+    $dfPdfTemplate = APPPATH . 'views/formats/rfq/examples/df_form_dompdf.php';
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($dfPdfTemplate, true);
+    }
     $html = $this->load->view('formats/rfq/examples/df_form_dompdf', $data, true);
 
     // ---------- DOMPDF ----------
@@ -986,6 +1044,12 @@ if(!empty($m5->special_notes))
 
     $file = FCPATH."designform/".$fileNameSafe;
     file_put_contents($file, $output);
+
+    // Always show the latest generated DF layout in the browser PDF viewer.
+    // Chrome otherwise may reuse an older inline PDF for the same route.
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
 
     $dompdf->stream($fileNameSafe, ["Attachment"=>false]);
 }

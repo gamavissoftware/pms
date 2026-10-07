@@ -348,17 +348,21 @@ if ($multitrack4->num_rows() > 0) {
     $weighing_conveyor_drive_remarks = $spec_rows->weighing_conveyor_drive_remarks;
 }
 
-  $sizepouch = $this->db->select('*')->from('df_form_machine_specification_size_qnty')->where('record_id', $id)->get();
+  $pouch_size_remarks = '';
+  $quantity_packed_remarks = '';
+  $sizepouch = $this->db->select('*')->from('df_form_machine_specification_size_qnty')->where('record_id', $id)->order_by('id', 'DESC')->limit(1)->get();
 
 
 if($sizepouch->num_rows()>0){
-
-    foreach($sizepouch->result() as $rowws);
-
+    $rowws = $sizepouch->row();
     $pouch_size_remarks =$rowws->pouch_size_remarks;
     $quantity_packed_remarks=$rowws->quantity_packed_remarks;
-
-
+    if (strpos((string) $pouch_size_remarks, 'Undefined variable: pouch_size_remarks') !== false) {
+        $pouch_size_remarks = '';
+    }
+    if (strpos((string) $quantity_packed_remarks, 'Undefined variable: quantity_packed_remarks') !== false) {
+        $quantity_packed_remarks = '';
+    }
 }
 
 
@@ -432,6 +436,102 @@ if($sizepouch->num_rows()>0){
             width: 98.5%;
             min-height: 90% !important;
         }
+
+        .df-preview-modal .modal-dialog {
+            width: 96%;
+            max-width: 1280px;
+        }
+
+        .df-preview-body {
+            max-height: 72vh;
+            overflow: auto;
+            background: #f7f8fa;
+        }
+
+        .df-preview-body .table {
+            background: #fff;
+        }
+
+        .df-preview-value {
+            min-height: 28px;
+            padding: 6px 8px;
+            border: 1px solid #e1e5ea;
+            background: #fdfdfd;
+            color: #111;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .df-preview-empty {
+            color: #999;
+            font-style: italic;
+        }
+
+        .df-preview-note {
+            margin-bottom: 12px;
+            color: #555;
+            font-size: 13px;
+        }
+
+        .df-save-loader {
+            display: none;
+            position: fixed;
+            z-index: 100000;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(255, 255, 255, 0.88);
+            text-align: center;
+        }
+
+        .df-save-loader.is-visible {
+            display: block;
+        }
+
+        .df-save-loader-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 320px;
+            max-width: 90%;
+            padding: 28px 24px;
+            transform: translate(-50%, -50%);
+            border: 1px solid #dfe5ec;
+            border-radius: 6px;
+            background: #fff;
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+        }
+
+        .df-save-spinner {
+            width: 46px;
+            height: 46px;
+            margin: 0 auto 16px;
+            border: 4px solid #e8eef5;
+            border-top-color: #26a69a;
+            border-radius: 50%;
+            animation: dfSaveSpin 0.8s linear infinite;
+        }
+
+        .df-save-loader-title {
+            margin: 0 0 6px;
+            color: #111;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .df-save-loader-text {
+            margin: 0;
+            color: #667085;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        @keyframes dfSaveSpin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 </head>
 
@@ -485,7 +585,7 @@ if($sizepouch->num_rows()>0){
                 <div class="col-sm-12">
                     <?php echo  $this->session->flashdata('success'); ?>
                     <div class="form_box">
-                        <form action="<?php echo page_url; ?>Dashboard/powder_df_project_form_edit/<?php echo $this->uri->segment(3); ?>/<?php echo $this->uri->segment(4); ?>/<?php echo $this->uri->segment(5); ?>/<?php echo $id;?>" enctype="multipart/form-data" method="post">
+                        <form id="powderDfEditForm" action="<?php echo page_url; ?>Dashboard/powder_df_project_form_edit/<?php echo $this->uri->segment(3); ?>/<?php echo $this->uri->segment(4); ?>/<?php echo $this->uri->segment(5); ?>/<?php echo $id;?>" enctype="multipart/form-data" method="post">
                             <table class="table">
                                 <tr>
                                     <th width="50%">From: Project Dept.</th>
@@ -498,7 +598,7 @@ if($sizepouch->num_rows()>0){
                                         <p><b>DF No.<br>
                                           <!-- <input type="text" class="form-control" name="design_form_name" value="<?php echo $nextdf;?>" style="text-align:center;" readonly required>-->
                                         <b><?php echo $df_number;?></b><br>
-                                        <b>Date:</b><input type="date" class="form-control" name="design_form_date" style="text-align: center;" value="<?php echo $design_form_date;?>" min="<?php echo date('Y-m-d');?>" required></b></p>
+                                        <b>Date:</b><input type="date" class="form-control" name="design_form_date" style="text-align: center;" value="<?php echo $design_form_date;?>" required></b></p>
                                     </td>
                                     <td class="text-center" rowspan="9" style="vertical-align: middle;">
                                         <input type="text" name="reference_no" class="form-control" value="<?php echo $reference_no; ?>" required>
@@ -567,7 +667,7 @@ if($sizepouch->num_rows()>0){
                                     <td>Dispatch date</td>
                                     <td width="50%" class="text-center">
                                         
-                                    <input type="date" class="form-control" name="dispatch_date" value="<?php echo date('Y-m-d',strtotime($dispatch_date));?>" min="<?php echo date('Y-m-d');?>" required readonly>
+                                    <input type="date" class="form-control" id="dispatch_date" name="dispatch_date" value="<?php echo date('Y-m-d',strtotime($dispatch_date));?>" required>
 
                                 
                                
@@ -580,7 +680,7 @@ if($sizepouch->num_rows()>0){
                                     <td>Trial Date</td>
 
                                     <td width="50%" class="text-center">
-                                       <input type="date" class="form-control" min="<?php echo date('Y-m-d');?>" name="trial_date" value="<?php echo date('Y-m-d',strtotime($trial_date));?>" required readonly>
+                                       <input type="date" class="form-control" id="trial_date" name="trial_date" value="<?php echo date('Y-m-d',strtotime($trial_date));?>" required>
 
                                        
                                     </td>
@@ -1257,16 +1357,14 @@ if($sizepouch->num_rows()>0){
                                     <td class="text-center" width="3%">8</td>
                                     <td width="17%">Profile of Sealing</td>
                                     <td width="50%">
-                                        <!-- <select name="profile_of_sealing" id="profile_of_sealing" class="form-control" required readonly>
+                                        <select name="profile_of_sealing" id="profile_of_sealing" class="form-control" required>
                                             <option value="">--Select--</option>
-                                            <option value="V-Lining" <?php if($typeofsealing=="V-Lining"){?> selected <?php } ?>>V-Lining</option>
-    <option value="Butt" <?php if($typeofsealing=="Butt"){?> selected <?php } ?>>Butt</option>
-    <option value="Knurling" <?php if($typeofsealing=="Knurling"){?> selected <?php } ?>>Knurling</option>
-    <option value="Plain" <?php if($typeofsealing=="Plain"){?> selected <?php } ?>>Plain</option>
-                                        </select> -->
-
-
-                                         <p><?php echo $typeofsealing; ?></p>
+                                            <?php $selected_profile_of_sealing = !empty($profile_of_sealing) ? $profile_of_sealing : $typeofsealing; ?>
+                                            <option value="V-Lining" <?php if($selected_profile_of_sealing=="V-Lining"){?> selected <?php } ?>>V-Lining</option>
+    <option value="Butt" <?php if($selected_profile_of_sealing=="Butt"){?> selected <?php } ?>>Butt</option>
+    <option value="Knurling" <?php if($selected_profile_of_sealing=="Knurling"){?> selected <?php } ?>>Knurling</option>
+    <option value="Plain" <?php if($selected_profile_of_sealing=="Plain"){?> selected <?php } ?>>Plain</option>
+                                        </select>
 
                                     </td>
                                     <td width="25%">
@@ -2224,7 +2322,7 @@ $('#non_pressurised_option').val('');
                                     <td width="17%">Horizontal Sealer Width</td>
                                     <td width="50%" class="text-center">
                                       
-                                        <p><?php echo $horizontal_sealing_width;?>mm</p>
+                                        <input type="text" name="horizontal_sealer_width" class="form-control" value="<?php echo !empty($horizontal_sealer_width) ? $horizontal_sealer_width : $horizontal_sealing_width; ?>" required>
                                        
                                         
                                     
@@ -2238,7 +2336,7 @@ $('#non_pressurised_option').val('');
                                     <td width="17%">Vertical Sealer Width</td>
                                     <td width="50%" class="text-center" >
                                       
-                                         <p><?php echo $vertical_sealing_width;?>mm</p>
+                                         <input type="text" name="vertical_sealer_width" class="form-control" value="<?php echo !empty($vertical_sealer_width) ? $vertical_sealer_width : $vertical_sealing_width; ?>" required>
                                         
                                       
                                     </td>
@@ -2661,6 +2759,9 @@ if($packed->num_rows()>0){
                                                 <option value="Flow Wrap Machine">Flow Wrap Machine</option>
                                                 <option value="Case Taping Machine">Case Taping Machine</option>
                                                 <option value="Check Weigher with Rejection System">Check Weigher with Rejection System</option>
+                                                <option value="Rope Conveyor">Rope Conveyor</option>
+                                                <option value="Take Off Conveyor">Take Off Conveyor</option>
+                                                <option value="Elevated Conveyor">Elevated Conveyor</option>
                                                 <option value="Auto Sack Packer">Auto Sack Packer</option>
                                                 <option value="Auto L-Sealer Machine">Auto L-Sealer Machine</option>
                                             </select>
@@ -3035,13 +3136,38 @@ if (values.includes('Case Packer')) {
                                 <tr>
                                     <td>
                                         <div class="text-center" style="margin-top: 20px; margin-bottom:20px;">
-                                            <button type="submit" class="btn btn-success" style="width: 18%;">Submit</button>
+                                            <button type="button" id="previewDfBeforeSubmit" class="btn btn-info" style="width: 18%;">Preview</button>
                                         </div>
                                     </td>
                                 </tr>
                             </table>
 
                         </form>
+                        <div class="modal fade df-preview-modal" id="dfPreviewModal" tabindex="-1" role="dialog" aria-labelledby="dfPreviewModalLabel">
+                            <div class="modal-dialog modal-lg" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                        <h4 class="modal-title" id="dfPreviewModalLabel">DF Form Preview</h4>
+                                    </div>
+                                    <div class="modal-body df-preview-body">
+                                        <div class="df-preview-note">Please review the details below. Use Edit Again to make changes, or Submit for PDF to save and continue.</div>
+                                        <div id="dfPreviewContent"></div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-default" data-dismiss="modal">Edit Again</button>
+                                        <button type="button" id="submitDfForPdf" class="btn btn-success">Submit for PDF</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="dfSaveLoader" class="df-save-loader" aria-hidden="true">
+                            <div class="df-save-loader-box">
+                                <div class="df-save-spinner"></div>
+                                <h4 class="df-save-loader-title">Saving DF Form</h4>
+                                <p class="df-save-loader-text">Please wait. Records are being saved and the PDF preview will open shortly.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -3137,6 +3263,178 @@ if (values.includes('Case Packer')) {
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
 
+
+    <script type="text/javascript">
+        (function() {
+            function syncDfEditors() {
+                if (window.CKEDITOR && CKEDITOR.instances) {
+                    for (var instanceName in CKEDITOR.instances) {
+                        if (CKEDITOR.instances.hasOwnProperty(instanceName)) {
+                            CKEDITOR.instances[instanceName].updateElement();
+                        }
+                    }
+                }
+            }
+
+            function formatDateForPreview(value) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+                    return value;
+                }
+
+                var parts = value.split('-');
+                return parts[2] + '/' + parts[1] + '/' + parts[0];
+            }
+
+            function emptyPreviewValue() {
+                return $('<div class="df-preview-value df-preview-empty">Blank</div>');
+            }
+
+            function makeTextPreview(value) {
+                if ($.trim(value) === '') {
+                    return emptyPreviewValue();
+                }
+
+                return $('<div class="df-preview-value"></div>').text(value);
+            }
+
+            function makeHtmlPreview(value) {
+                if ($.trim(value) === '') {
+                    return emptyPreviewValue();
+                }
+
+                return $('<div class="df-preview-value"></div>').html(value);
+            }
+
+            function selectedText($field) {
+                var values = [];
+                $field.find('option:selected').each(function() {
+                    var optionText = $.trim($(this).text());
+                    if (optionText !== '' && optionText !== '--Select--') {
+                        values.push(optionText);
+                    }
+                });
+
+                return values.join(', ');
+            }
+
+            function controlPreview($field) {
+                var tagName = ($field.prop('tagName') || '').toLowerCase();
+                var inputType = ($field.attr('type') || '').toLowerCase();
+                var value = '';
+
+                if (inputType === 'hidden') {
+                    return $('<span></span>');
+                }
+
+                if (tagName === 'select') {
+                    value = selectedText($field);
+                    return makeTextPreview(value);
+                }
+
+                if (tagName === 'textarea') {
+                    value = $field.val() || '';
+                    if ($field.hasClass('ckeditor') || $field.attr('name') === 'special_notes') {
+                        return makeHtmlPreview(value);
+                    }
+
+                    return makeTextPreview(value);
+                }
+
+                if (inputType === 'checkbox' || inputType === 'radio') {
+                    return makeTextPreview($field.is(':checked') ? 'Yes' : 'No');
+                }
+
+                value = $field.val() || '';
+                if (inputType === 'date') {
+                    value = formatDateForPreview(value);
+                }
+
+                return makeTextPreview(value);
+            }
+
+            function buildDfPreview() {
+                var $form = $('#powderDfEditForm');
+
+                syncDfEditors();
+
+                if ($form[0] && typeof $form[0].checkValidity === 'function' && !$form[0].checkValidity()) {
+                    $form[0].reportValidity();
+                    return false;
+                }
+
+                var $preview = $('<div></div>');
+                var $tables = $form.children('table').clone(false, false);
+                var $originalFields = $form.children('table').find('input, select, textarea');
+                var $previewFields = $tables.find('input, select, textarea');
+
+                $tables.find('script, .cke, .select2-container, button').remove();
+
+                $previewFields.each(function(index) {
+                    var $originalField = $originalFields.eq(index);
+                    $(this).replaceWith(controlPreview($originalField));
+                });
+
+                $preview.append($tables);
+                $('#dfPreviewContent').empty().append($preview);
+                showDfPreviewModal();
+
+                return true;
+            }
+
+            function showDfPreviewModal() {
+                $('#dfPreviewBackdrop').remove();
+                $('<div class="modal-backdrop fade in" id="dfPreviewBackdrop"></div>').appendTo('body');
+                $('body').addClass('modal-open');
+                $('#dfPreviewModal').show().addClass('in').attr('aria-hidden', 'false');
+            }
+
+            function hideDfPreviewModal() {
+                $('#dfPreviewModal').removeClass('in').hide().attr('aria-hidden', 'true');
+                $('#dfPreviewBackdrop').remove();
+                $('body').removeClass('modal-open');
+            }
+
+            function showDfSaveLoader() {
+                $('#dfPreviewBackdrop').remove();
+                $('#dfPreviewModal').removeClass('in').hide().attr('aria-hidden', 'true');
+                $('#dfSaveLoader').addClass('is-visible').attr('aria-hidden', 'false');
+                $('body').addClass('modal-open');
+            }
+
+            $(document).on('click', '#previewDfBeforeSubmit', function() {
+                buildDfPreview();
+            });
+
+            $(document).on('submit', '#powderDfEditForm', function(event) {
+                if ($(this).data('df-preview-confirmed') === true) {
+                    return true;
+                }
+
+                event.preventDefault();
+                buildDfPreview();
+                return false;
+            });
+
+            $(document).on('click', '#submitDfForPdf', function() {
+                var $form = $('#powderDfEditForm');
+                $(this).prop('disabled', true).text('Submitting...');
+                syncDfEditors();
+                showDfSaveLoader();
+                $form.data('df-preview-confirmed', true);
+                $form.trigger('submit');
+            });
+
+            $(document).on('click', '#dfPreviewModal [data-dismiss="modal"], #dfPreviewBackdrop', function() {
+                hideDfPreviewModal();
+            });
+
+            $(document).on('keyup', function(event) {
+                if (event.which === 27 && $('#dfPreviewModal').is(':visible')) {
+                    hideDfPreviewModal();
+                }
+            });
+        })();
+    </script>
 
     <script language="javascript" type="text/javascript">
         $(document).ready(function() {

@@ -22,7 +22,7 @@ if ($_SESSION['logged_in']['user_id'] == 139 || $_SESSION['logged_in']['user_id'
 // Fetch Chart Data for Admins/Managers
 $sales_agent_data = [];
 $top_products_data = [];
-if ($this->session->userdata['logged_in']['role'] == 12 || $this->session->userdata['logged_in']['user_id'] == 139 || $_SESSION['logged_in']['user_id'] == 114 || $_SESSION['logged_in']['user_id'] == 189 || $_SESSION['logged_in']['user_id'] == 111) {
+if (pms_is_super_admin() || $this->session->userdata['logged_in']['user_id'] == 139 || $_SESSION['logged_in']['user_id'] == 114 || $_SESSION['logged_in']['user_id'] == 189 || $_SESSION['logged_in']['user_id'] == 111) {
     $sales_agent_data = $DI->Dashboard_model->get_spares_sales_by_agent();
     $top_products_data = $DI->Dashboard_model->get_spares_top_products_by_value();
 }
@@ -33,7 +33,7 @@ function get_status_color_class($lead_name) {
     if (strpos($name, 'won') !== false || strpos($name, 'closed') !== false || strpos($name, 'po received') !== false) {
         return 'kpi-status-won';
     }
-    if (strpos($name, 'lost') !== false || strpos($name, 'dropped') !== false) {
+    if (strpos($name, 'lost') !== false || strpos($name, 'dropped') !== false || strpos($name, 'cancelled') !== false) {
         return 'kpi-status-lost';
     }
     if (strpos($name, 'negotiation') !== false || strpos($name, 'proposal') !== false || strpos($name, 'discussion') !== false) {
@@ -49,6 +49,7 @@ function get_status_color_class($lead_name) {
 function get_stage_icon($stage_name) {
     $name = strtolower($stage_name);
     if (strpos($name, 'new') !== false) return 'fa-star';
+    if (strpos($name, 'cancelled') !== false) return 'fa-ban';
     if (strpos($name, 'quotation') !== false) return 'fa-file-text-o';
     if (strpos($name, 'negotiation') !== false) return 'fa-comments-o';
     if (strpos($name, 'won') !== false || strpos($name, 'po') !== false) return 'fa-trophy';
@@ -274,7 +275,7 @@ function get_stage_icon($stage_name) {
                 </div>
                 </div>
             
-            <?php if ($this->session->userdata['logged_in']['role'] == 12 || $this->session->userdata['logged_in']['user_id'] == 139 || $this->session->userdata['logged_in']['user_id'] == 114 || $this->session->userdata['logged_in']['user_id'] == 189) : ?>
+            <?php if (pms_is_super_admin() || $this->session->userdata['logged_in']['user_id'] == 139 || $this->session->userdata['logged_in']['user_id'] == 114 || $this->session->userdata['logged_in']['user_id'] == 189) : ?>
             <div class="row">
                 <div class="col-lg-7">
                     <div class="modern-card">
@@ -302,7 +303,7 @@ function get_stage_icon($stage_name) {
     <script src="<?php echo assets_url; ?>js/jquery.app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <?php if ($this->session->userdata['logged_in']['role'] == 12 || $this->session->userdata['logged_in']['user_id'] == 139 || $this->session->userdata['logged_in']['user_id'] == 114 || $this->session->userdata['logged_in']['user_id'] == 189) : ?>
+    <?php if (pms_is_super_admin() || $this->session->userdata['logged_in']['user_id'] == 139 || $this->session->userdata['logged_in']['user_id'] == 114 || $this->session->userdata['logged_in']['user_id'] == 189) : ?>
         <script>
             $(document).ready(function() {
                 // --- Sales Agent Performance Chart ---

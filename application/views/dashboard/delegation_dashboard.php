@@ -121,6 +121,18 @@ table.manglesh thead th {
 
 }
 
+.delegation-card-order {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.delegation-card-form { order: 1; }
+.delegation-card-dashboard { order: 2; }
+.delegation-card-assigned { order: 3; }
+.delegation-card-task-history { order: 4; }
+.delegation-card-history { order: 5; }
+.delegation-card-master { order: 6; }
+
 
 </style></head>
  <body>
@@ -133,12 +145,12 @@ table.manglesh thead th {
         <div class="dashboard-header">
             <h1>Delegation Module Management</h1><hr>
         </div>
-        <div class="row">
+        <div class="row delegation-card-order">
 		<?php 
 		$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','2')->where('submoduleid','13')->where('submodule_access','1')->get();
 		if($qry->num_rows()>0){
 		?>	
-            <div class="col-sm-4 col-md-4 col-lg-2">
+            <div class="col-sm-4 col-md-4 col-lg-2 delegation-card delegation-card-master">
                 <a href="<?php echo page_url;?>Delegation/delegation_master">
                     <div class="report-box badge1" >
                         <div class="text-center">
@@ -153,7 +165,7 @@ table.manglesh thead th {
 		$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','2')->where('submoduleid','14')->where('submodule_access','1')->get();
 		 if($qry->num_rows()>0){
 			?>	
-            <div class="col-sm-4 col-md-4 col-lg-2">
+            <div class="col-sm-4 col-md-4 col-lg-2 delegation-card delegation-card-form">
                 <a href="<?php echo page_url;?>Delegation/new_delegation_task">
                     <div class="report-box badge1" >
                         <div class="text-center">
@@ -169,7 +181,7 @@ table.manglesh thead th {
 			$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','2')->where('submoduleid','15')->where('submodule_access','1')->get();
 			if($qry->num_rows()>0){
 			?>	
-            <div class="col-sm-4 col-md-4 col-lg-2">
+            <div class="col-sm-4 col-md-4 col-lg-2 delegation-card delegation-card-dashboard">
                 <a href="<?php echo page_url;?>Delegation/delegation_dashboard">
                     <div class="report-box badge1" >
                         <div class="text-center">
@@ -186,7 +198,7 @@ table.manglesh thead th {
 			$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','2')->where('submoduleid','16')->where('submodule_access','1')->get();
 			 if($qry->num_rows()>0){
 			?>
-            <div class="col-sm-4 col-md-4 col-lg-2">
+            <div class="col-sm-4 col-md-4 col-lg-2 delegation-card delegation-card-task-history">
                 <a href="<?php echo page_url;?>Delegation/delegated_task_history">
                     <div class="report-box badge1" >
                         <div class="text-center">
@@ -202,7 +214,7 @@ table.manglesh thead th {
 			$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','2')->where('submoduleid','17')->where('submodule_access','1')->get();
 			if($qry->num_rows()>0){
 			?>
-            <div class="col-sm-4 col-md-4 col-lg-2">
+            <div class="col-sm-4 col-md-4 col-lg-2 delegation-card delegation-card-assigned">
                 <a href="<?php echo page_url;?>Delegation/delegated_task">
                     <div class="report-box badge1" >
                         <div class="text-center">
@@ -226,7 +238,7 @@ table.manglesh thead th {
              $qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','2')->where('submoduleid','25')->where('submodule_access','1')->get();
             if($qry->num_rows()>0){
             ?>
-            <div class="col-sm-4 col-md-4 col-lg-2">
+            <div class="col-sm-4 col-md-4 col-lg-2 delegation-card delegation-card-history">
                 <a href="<?php echo page_url;?>Delegation/delegation_history">
                     <div class="report-box badge1" >
                         <div class="text-center">

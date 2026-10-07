@@ -20,7 +20,7 @@ $team_task_settings_enabled = $this->db->field_exists('show_all_team_tasks', 'pr
         <link href="<?php echo assets_url;?>plugins/datatables/fixedHeader.bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="<?php echo assets_url;?>plugins/datatables/responsive.bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="<?php echo assets_url;?>plugins/datatables/scroller.bootstrap.min.css" rel="stylesheet" type="text/css" />
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
+		<script src="<?php echo assets_url;?>js/jquery.min.js"></script>
 		<link href="<?php echo assets_url;?>plugins/select2/dist/css/select2.css" rel="stylesheet" type="text/css">
         <link href="<?php echo assets_url;?>css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="<?php echo assets_url;?>css/core.css" rel="stylesheet" type="text/css" />
@@ -498,7 +498,6 @@ foreach($q->result() as $LOGO);
 
          <!-- jQuery  -->
 
-        <script src="<?php echo assets_url;?>js/jquery.min.js"></script>
 
         <script src="<?php echo assets_url;?>js/bootstrap.min.js"></script>
 
@@ -564,6 +563,7 @@ foreach($q->result() as $LOGO);
 
         <script src="<?php echo assets_url;?>js/jquery.app.js"></script>
 
+		<script src="<?php echo assets_url;?>plugins/select2/dist/js/select2.min.js" type="text/javascript"></script>
 <script>
 		$(document).ready(function() {
 			if($.fn.select2){
@@ -571,7 +571,6 @@ foreach($q->result() as $LOGO);
 			}
 		});
 		</script>
-		 <script src="<?php echo assets_url;?>plugins/select2/dist/js/select2.min.js" type="text/javascript"></script>
 		 
 
 <script>
@@ -648,9 +647,7 @@ dom: 'lBfrtip',
 
 
 </script>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
 <script language="javascript" type="text/javascript">   
-jQuery.noConflict();
 $(document).ready(function() {
 $("#teamsave").click(function() {
 var business_loc = $("#business_loc").val();

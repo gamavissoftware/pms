@@ -44,6 +44,90 @@ class Salescrm_model extends CI_Model {
 			return $data;
 
 	}
+
+	function get_quote_approval_stage_after_won($lead_id, $default_stage = 37) {
+		$already_won = $this->db->select('id')
+							->from('progress_remarks')
+							->where('lead_id', (int) $lead_id)
+							->where('lead_status', 35)
+							->limit(1)
+							->get();
+
+		if($already_won->num_rows() > 0) {
+			return 35;
+		}
+
+		return $default_stage;
+	}
+
+	function notify_revised_quote_approved_for_order_won($lead_id, $remarks = '') {
+		$lead_id = (int) $lead_id;
+		if($lead_id <= 0) {
+			return FALSE;
+		}
+
+		$query = $this->db->select('a.unique_id, a.added_by, b.company_name, c.title, c.first_name, c.last_name, c.email')
+						  ->from('leads a')
+						  ->join('customer_detail b', 'a.company_name=b.id', 'left')
+						  ->join('system_users c', 'a.added_by=c.user_id', 'left')
+						  ->where('a.id', $lead_id)
+						  ->limit(1)
+						  ->get();
+
+		if($query->num_rows() == 0) {
+			return FALSE;
+		}
+
+		$lead = $query->row();
+		$marketing_user_id = (int) $lead->added_by;
+		$marketing_name = trim($lead->title.' '.$lead->first_name.' '.$lead->last_name);
+		$marketing_name = $marketing_name !== '' ? ucwords(strtolower($marketing_name)) : 'Marketing Team';
+		$company_name = trim((string) $lead->company_name);
+		$company_name = $company_name !== '' ? ucwords(strtolower($company_name)) : 'this opportunity';
+		$opportunity_no = trim((string) $lead->unique_id);
+		$stage_url = page_url.'Leads/lead_stages/35';
+		$plain_message = 'Your revised quotation for '.$company_name;
+		if($opportunity_no !== '') {
+			$plain_message .= ' ('.$opportunity_no.')';
+		}
+		$plain_message .= ' which was earlier marked as Order Won has been approved by Shubham Sir and transferred to Order Won stage again.';
+
+		if($this->db->table_exists('app_notifications') && $marketing_user_id > 0) {
+			$this->db->insert('app_notifications', array(
+				'user_id' => $marketing_user_id,
+				'title' => 'Revised Quotation Approved',
+				'message' => $plain_message,
+				'type' => 'revised_quote_order_won',
+				'reference_id' => $lead_id,
+				'created_at' => date('Y-m-d H:i:s')
+			));
+		}
+
+		if($this->db->table_exists('queue_emails')) {
+			$to_email = trim((string) $lead->email);
+			if($to_email !== '') {
+				$subject = 'Revised quotation approved - Order Won';
+				$message = '<p>Dear '.$marketing_name.',</p>';
+				$message .= '<p>'.$plain_message.'</p>';
+				if(trim((string) $remarks) !== '') {
+					$message .= '<p><strong>Approval Remarks:</strong> '.htmlspecialchars($remarks, ENT_QUOTES, 'UTF-8').'</p>';
+				}
+				$message .= '<p><a href="'.$stage_url.'">Open Order Won Stage</a></p>';
+				$message .= '<p>Regards,<br>Shubham Pack PMS</p>';
+
+				$this->db->insert('queue_emails', array(
+					'to_email' => $to_email,
+					'subject' => $subject,
+					'message' => $message,
+					'attachment' => '',
+					'status' => 0,
+					'created_at' => date('Y-m-d H:i:s')
+				));
+			}
+		}
+
+		return TRUE;
+	}
 	
 		function getLeadType($lead_stage_id) {
 		$res = '';

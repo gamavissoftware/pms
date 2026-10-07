@@ -481,6 +481,45 @@
             gap: 10px;
         }
 
+        .department-schedule-control {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            padding: 8px;
+            border: 1px solid #cdddea;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .department-schedule-field {
+            min-width: 150px;
+        }
+
+        .department-schedule-field label {
+            display: block;
+            margin: 0 0 4px;
+            color: var(--df-muted);
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0;
+        }
+
+        .department-schedule-date {
+            min-width: 150px;
+            height: 38px;
+            border-radius: 6px;
+        }
+
+        .department-schedule-btn {
+            min-height: 38px;
+            border-radius: 6px;
+            padding: 8px 12px;
+            white-space: nowrap;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
         .dirty-badge {
             display: none;
             border-radius: 999px;
@@ -805,6 +844,33 @@
             .department-head {
                 padding: 16px;
             }
+
+            .department-actions,
+            .department-schedule-control {
+                width: 100%;
+            }
+
+            .department-schedule-field {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .department-schedule-date {
+                width: 100%;
+                min-width: 0;
+            }
+        }
+
+        @media (max-width: 520px) {
+            .department-schedule-control {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .department-schedule-btn,
+            .department-save-btn {
+                width: 100%;
+            }
         }
 
         @media (max-width: 520px) {
@@ -846,7 +912,7 @@
                                 <div class="hero-actions">
                                     <button type="button" id="customised-df-refresh" class="btn hero-primary-btn"><i class="fa fa-refresh"></i> Refresh Board</button>
                                     <button type="button" id="customised-df-save-all" class="btn hero-primary-btn save-all-btn" disabled><i class="fa fa-save"></i> Save Changed Tasks</button>
-                                    <a href="<?php echo page_url; ?>Task/finalgantchartWithDetails/<?php echo (int) $df_id; ?>" target="_blank" class="hero-link"><i class="fa fa-sitemap"></i> Gantt View</a>
+                                    <a href="<?php echo page_url; ?>gantt/<?php echo (int) $df_id; ?>" target="_blank" class="hero-link"><i class="fa fa-sitemap"></i> Gantt View</a>
                                     <a href="<?php echo htmlspecialchars($detail_url); ?>" target="_blank" class="hero-link"><i class="fa fa-line-chart"></i> DF Intelligence</a>
                                     <a href="<?php echo htmlspecialchars($back_url); ?>" class="hero-link"><i class="fa fa-arrow-left"></i> Back To DF Review</a>
                                 </div>
@@ -1309,6 +1375,10 @@
                 return true;
             }
 
+            function taskIsEditable(task) {
+                return task && task.status_key !== 'completed' && task.status_key !== 'hold';
+            }
+
             function renderDepartmentFilter(groups) {
                 var currentValue = $('#workspaceDepartmentFilter').val();
                 var html = '<option value="">All Departments</option>';
@@ -1349,6 +1419,8 @@
 
                     var summary = group.summary || {};
                     var departmentDelayed = parseInt(summary.delayed || 0, 10);
+                    var editableTaskCount = group.tasks.filter(taskIsEditable).length;
+                    var scheduleInputId = 'department-schedule-date-' + String(group.department_id || 0).replace(/[^0-9]/g, '');
                     var earliestStart = '';
                     var latestEnd = '';
 
@@ -1377,6 +1449,15 @@
                                     '</div>' +
                                 '</div>' +
                                 '<div class="department-actions">' +
+                                    '<div class="department-schedule-control">' +
+                                        '<div class="department-schedule-field">' +
+                                            '<label for="' + escapeHtml(scheduleInputId) + '">Department Schedule Date</label>' +
+                                            '<input type="date" id="' + escapeHtml(scheduleInputId) + '" class="form-control department-schedule-date" ' + (editableTaskCount > 0 ? '' : 'disabled') + '>' +
+                                        '</div>' +
+                                        '<button type="button" class="btn btn-info department-schedule-btn" data-task-count="' + escapeHtml(editableTaskCount) + '" disabled title="Set the start and due date for every open task in this department">' +
+                                            '<i class="fa fa-calendar-check-o"></i> Schedule All Open Tasks' +
+                                        '</button>' +
+                                    '</div>' +
                                     '<span class="dirty-badge">0 Unsaved</span>' +
                                     '<button type="button" class="btn btn-primary department-save-btn" disabled><i class="fa fa-save"></i> Save Department</button>' +
                                 '</div>' +
@@ -1396,7 +1477,7 @@
                                     '<tbody>';
 
                     visibleTasks.forEach(function (task) {
-                        var isEditable = !(task.status_key === 'completed' || task.status_key === 'hold');
+                        var isEditable = taskIsEditable(task);
                         var taskNote = task.latest_update_text || task.remarks || '';
                         var ticketCount = parseInt(task.open_ticket_count || 0, 10);
 
@@ -1512,6 +1593,43 @@
                 return tasks;
             }
 
+            function buildDepartmentScheduleTasks($card, scheduleDate) {
+                var departmentId = String($card.data('department-id') || '0');
+                var groups = normaliseDepartmentGroups();
+                var selectedGroup = null;
+
+                groups.some(function (group) {
+                    if (String(group.department_id) === departmentId) {
+                        selectedGroup = group;
+                        return true;
+                    }
+                    return false;
+                });
+
+                if (!selectedGroup) {
+                    return [];
+                }
+
+                return selectedGroup.tasks.filter(taskIsEditable).map(function (task) {
+                    var taskId = parseInt(task.task_record_id || 0, 10);
+                    var $visibleRow = $card.find('.planner-row[data-task-id="' + taskId + '"]');
+                    var assignedUser = task.assigned_user || 0;
+
+                    if ($visibleRow.length) {
+                        assignedUser = $visibleRow.find('.customised-df-assignee').val() || 0;
+                    }
+
+                    return {
+                        task_id: taskId,
+                        assigned_user: String(assignedUser),
+                        start_date: scheduleDate,
+                        end_date: scheduleDate
+                    };
+                }).filter(function (task) {
+                    return task.task_id > 0;
+                });
+            }
+
             function renderWorkspace(data) {
                 workspaceData = data || {};
                 departmentUsers = workspaceData.department_users || {};
@@ -1527,12 +1645,13 @@
                 $('#workspaceSyncMeta').text(syncText + latestActivity);
             }
 
-            function saveTasks(tasks, $triggerButton) {
+            function saveTasks(tasks, $triggerButton, saveMode) {
                 if (!tasks.length) {
                     return;
                 }
 
                 var originalHtml = $triggerButton ? $triggerButton.html() : '';
+                var originalDisabled = $triggerButton && $triggerButton.length ? $triggerButton.prop('disabled') : false;
                 if ($triggerButton && $triggerButton.length) {
                     $triggerButton.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Saving');
                 }
@@ -1545,6 +1664,7 @@
                     dataType: 'json',
                     data: {
                         df_id: dfId,
+                        save_mode: saveMode || 'workspace_update',
                         tasks: tasks
                     },
                     success: function (response) {
@@ -1565,7 +1685,7 @@
                     complete: function () {
                         setLoader(false);
                         if ($triggerButton && $triggerButton.length) {
-                            $triggerButton.html(originalHtml);
+                            $triggerButton.html(originalHtml).prop('disabled', originalDisabled);
                             updateDirtyIndicators();
                         }
                     }
@@ -1599,6 +1719,32 @@
                 updateSaveAllButton();
             });
 
+            $('#departmentsBoard').on('change input', '.department-schedule-date', function () {
+                var $input = $(this);
+                var hasDate = /^\d{4}-\d{2}-\d{2}$/.test(String($input.val() || ''));
+                var taskCount = parseInt($input.closest('.department-schedule-control').find('.department-schedule-btn').data('task-count') || 0, 10);
+                $input.closest('.department-schedule-control').find('.department-schedule-btn').prop('disabled', !hasDate || taskCount < 1);
+            });
+
+            $('#departmentsBoard').on('click', '.department-schedule-btn', function () {
+                var $button = $(this);
+                var $card = $button.closest('.department-card');
+                var scheduleDate = String($card.find('.department-schedule-date').val() || '');
+
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) {
+                    showNotice('error', 'Please select a valid department schedule date.');
+                    return;
+                }
+
+                var tasks = buildDepartmentScheduleTasks($card, scheduleDate);
+                if (!tasks.length) {
+                    showNotice('error', 'This department has no open tasks available for scheduling.');
+                    return;
+                }
+
+                saveTasks(tasks, $button, 'department_schedule');
+            });
+
             $('#departmentsBoard').on('click', '.department-save-btn', function () {
                 var $button = $(this);
                 var $card = $button.closest('.department-card');
@@ -1606,7 +1752,7 @@
                 if (!tasks.length) {
                     return;
                 }
-                saveTasks(tasks, $button);
+                saveTasks(tasks, $button, 'department_update');
             });
 
             $('#customised-df-save-all').on('click', function () {

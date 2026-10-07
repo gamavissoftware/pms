@@ -1109,7 +1109,7 @@
                     .removeClass('disabled');
 
                 $('#openGanttLink')
-                    .attr('href', pageBaseUrl + 'Task/dfgantchartNew/' + encodeURIComponent(dfInfo.id))
+                    .attr('href', pageBaseUrl + 'gantt/' + encodeURIComponent(dfInfo.id))
                     .removeClass('disabled');
             }
         }

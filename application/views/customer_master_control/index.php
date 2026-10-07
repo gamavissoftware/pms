@@ -227,6 +227,9 @@ $customer_master_read_only = isset($this->master_profile_guard) && $this->master
                         Loaded <strong><?php echo count($customers); ?></strong> customer records in this view.
                         Marketing: <strong><?php echo (int) $source_counts['marketing']; ?></strong>.
                         Spares: <strong><?php echo (int) $source_counts['spares']; ?></strong>.
+                        <a href="<?php echo page_url; ?>Customer_master_control/duplicate_report" class="btn btn-warning btn-sm pull-right">
+                            <i class="fa fa-files-o"></i> Duplicate &amp; Quotation Audit
+                        </a>
                     </div>
 
                     <form method="get" action="<?php echo page_url; ?>Customer_master_control">

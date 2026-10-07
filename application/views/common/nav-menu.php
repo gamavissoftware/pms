@@ -1,10 +1,32 @@
+<?php
+/* Optional modules (overtime, chat) are deployed separately from the core, so
+ * their helper can legitimately be absent on a given server. CodeIgniter halts
+ * the whole request on a missing helper, which takes down every page that
+ * renders this menu - not just the one entry. So ask before loading, and let a
+ * module that is not installed simply not show up. */
+if (!function_exists('pms_nav_optional_helper')) {
+    function pms_nav_optional_helper($CI, $helper)
+    {
+        static $available = array();
+
+        if (!isset($available[$helper])) {
+            $available[$helper] = file_exists(APPPATH . 'helpers/' . $helper . '_helper.php');
+            if ($available[$helper]) {
+                $CI->load->helper($helper);
+            }
+        }
+
+        return $available[$helper];
+    }
+}
+?>
 <?php 
 $total = 0;
 $businesslocation =$this->session->userdata['logged_in']['business_location'];
 $department_id =$this->session->userdata['logged_in']['department_id'];
 if($businesslocation==2){
 $user_id = $this->session->userdata['logged_in']['user_id'];
-$st = date('Y-m-d',strtotime('-30 days'));
+$st = date('Y-m-d',strtotime('-1 year +1 day'));
 $et = date('Y-m-d');
 $dfid = "ALL";
 $assigned_module=array();
@@ -27,8 +49,8 @@ if($totalassigned>0)
 }
 
 
-$totalassigned = $CI->mis_model->allassignedtask($user_id,$et,$dfid);
-$totaldonetask =  $CI->mis_model->totalassignedworkdone($user_id,$et,$dfid);
+$totalassigned = $CI->mis_model->allassignedtask($user_id,$st,$et,$dfid);
+$totaldonetask =  $CI->mis_model->totalassignedworkdone($user_id,$st,$et,$dfid);
 $diff = $totalassigned-$totaldonetask;
 $per2=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -46,8 +68,8 @@ if($totaldonecount>0)
     }
 
 /** help ticket **/
-$totalassigned = $CI->mis_model->allassigneTickets($user_id,$dfid);
-$totaldonetask =  $CI->mis_model->allassigneTicketsDone($user_id,$dfid);
+$totalassigned = $CI->mis_model->allassigneTickets($user_id,$dfid,$st,$et);
+$totaldonetask =  $CI->mis_model->allassigneTicketsDone($user_id,$dfid,$st,$et);
 $diff = $totalassigned-$totaldonetask;
 $per4=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -56,8 +78,8 @@ if($totalassigned>0)
     }
 
 /** CREATED HELP TICKET **/
-$totalassigned = $CI->mis_model->allCreatedTickets($user_id,$dfid);
- $totaldonetask =  $CI->mis_model->allcreatedTicketsDone($user_id,$dfid);
+$totalassigned = $CI->mis_model->allCreatedTickets($user_id,$dfid,$st,$et);
+ $totaldonetask =  $CI->mis_model->allcreatedTicketsDone($user_id,$dfid,$st,$et);
  $diff = $totalassigned-$totaldonetask;
 $per5=$CI->mis_model->get_percentage($diff,$totalassigned);
 if($totalassigned>0)
@@ -153,7 +175,8 @@ if($mom_done_this_week>0)
 
 if(array_sum($assigned_module)>0)
     {
-    $total=round(ceil($per2+$per3+$per4+$per5+$per6+$per7+$per8+$per9+$per10)/array_sum($assigned_module));
+    $calculated_total=round(($per2+$per3+$per4+$per5+$per6+$per7+$per8+$per9+$per10)/array_sum($assigned_module));
+    $total=$CI->mis_model->get_appraisal_issue_rate($user_id,$calculated_total);
     }else
     {
         $total=0;
@@ -418,7 +441,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
                 <ul class="">
 
                     <!-- <li>
-                                <a data-toggle="collapse" href="#username" aria-controls="username" role="button"
+                                <a data-toggle="collapse" data-target="#username" href="javascript:void(0);" aria-controls="username" role="button"
                                     aria-expanded="false" class="right_arrow">
                                     <div>
                                         <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
@@ -472,7 +495,7 @@ $st = date('Y-m-d',strtotime('-30 days'));
 					
 			?>
                     <li>
-                        <a data-toggle="collapse" href="#master" aria-controls="master" role="button"
+                        <a data-toggle="collapse" data-target="#master" href="javascript:void(0);" aria-controls="master" role="button"
                             aria-expanded="false" class="right_arrow">
                             <div>
                                 <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
@@ -507,9 +530,12 @@ $st = date('Y-m-d',strtotime('-30 days'));
                                     </a></li>
                                     	<?php }?>
 							<?php 
-					$submoduleid = array('7', '8','9','10','11','12');
+					$ot_nav_permissions = pms_nav_optional_helper($this, 'overtime')
+                        ? ot_user_permissions($this->db, (int)$user_id)
+                        : array();
+                    $submoduleid = array('7', '8','9','10','11','12');
 					$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id', $user_id)->where('moduleid', '1')->where_in('submoduleid', $submoduleid)->where('submodule_access', '1')->get();
-					if ($qry->num_rows() > 0) {
+					if ($qry->num_rows() > 0 || !empty($ot_nav_permissions['policy']) || !empty($ot_nav_permissions['leaders'])) {
 								?>
                                 <li><a href="<?php echo page_url; ?>Dashboard/task_master_dashboard">
                                         <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
@@ -644,7 +670,9 @@ $st = date('Y-m-d',strtotime('-30 days'));
                     </li>
 	<?php }
 			if ($has_df_create_permission || $has_df_dashboard_permission || $change_alert_count > 0) {
-				$df_navigation_url = ($has_df_dashboard_permission || $change_alert_count > 0) ? page_url . 'Df_change_control' : page_url . 'Df_change_control/create';
+				// The overview now opens for request raisers too - it simply lists the
+				// requests they raised - so everyone who can reach the module lands there.
+				$df_navigation_url = page_url . 'Df_change_control';
 			?>
                     <li>
                         <div class="dash">
@@ -735,7 +763,24 @@ $st = date('Y-m-d',strtotime('-30 days'));
                     </li>
 <?php }}}?>
 <?php
+/* TASK MANAGEMENT NAV BADGE - two different numbers, one badge.
+ *
+ *   unread updates    somebody RESPONDED on a task this user is part of:
+ *                     the assignee confirmed a due date, posted progress or
+ *                     completed it, or the creator reopened it. Red, with a
+ *                     bell, because it wants attention NOW and clears as soon
+ *                     as the task is opened.
+ *   open assignments  the pre-existing workload count - how much is on this
+ *                     user's plate. Neutral, and it only moves when the work
+ *                     moves.
+ *
+ * The red one wins whenever it is non-zero; the workload count shows the rest
+ * of the time, so neither number is lost. Both are refreshed without a page
+ * reload by the poller in views/task_management/_notification_poller.php,
+ * which is loaded on every page from common/footer.php.
+ */
 $task_management_open_count = 0;
+$task_management_unread_count = 0;
 if ($this->db->table_exists('task_management_items')) {
     $task_management_open_count = (int) $this->db->select('id')
         ->from('task_management_items')
@@ -743,7 +788,47 @@ if ($this->db->table_exists('task_management_items')) {
         ->where('status !=', 'COMPLETED')
         ->count_all_results();
 }
+if ($this->db->table_exists('task_management_notifications')) {
+    $task_management_unread_count = (int) $this->db
+        ->where('user_id', $user_id)
+        ->where('is_read', 0)
+        ->count_all_results('task_management_notifications');
+}
 ?>
+<style>
+/* the badge itself - shared by both states so only the colour changes */
+.tm-nav-badge{position:absolute;right:6px;top:6px;min-width:18px;height:18px;padding:0 5px;
+    border-radius:999px;font-size:10px;font-weight:800;line-height:18px;text-align:center;
+    background:#1f2937;color:#fff;z-index:2;}
+.tm-nav-badge.is-alert{background:#e82646;box-shadow:0 0 0 2px rgba(232,38,70,.22);animation:tmNavPulse 2s ease-in-out infinite;}
+/* the bell only rides along with the red state, so a plain workload count
+   never looks like an alert */
+.tm-nav-bell{position:absolute;right:26px;top:8px;width:14px;fill:#e82646;z-index:2;}
+@keyframes tmNavPulse{
+    0%,100%{box-shadow:0 0 0 2px rgba(232,38,70,.22);}
+    50%{box-shadow:0 0 0 5px rgba(232,38,70,.06);}
+}
+@media (prefers-reduced-motion: reduce){.tm-nav-badge.is-alert{animation:none;}}
+/* OVERTIME NAV BADGE - red and pulsing when overtime is waiting on this user's approval,
+   neutral when it is only unread updates on their own requests. */
+.ot-nav-badge{position:absolute;right:6px;top:6px;min-width:18px;height:18px;padding:0 5px;
+    border-radius:999px;font-size:10px;font-weight:800;line-height:18px;text-align:center;
+    background:#1f2937;color:#fff;z-index:2;}
+.ot-nav-badge.is-alert{background:#e82646;box-shadow:0 0 0 2px rgba(232,38,70,.22);animation:tmNavPulse 2s ease-in-out infinite;}
+@media (prefers-reduced-motion: reduce){.ot-nav-badge.is-alert{animation:none;}}
+</style>
+                    <?php
+                    $ot_nav_permissions = pms_nav_optional_helper($this, 'overtime')
+                        ? ot_user_permissions($this->db, (int)$user_id)
+                        : array();
+                    // The badge costs two counts, so it is only read for users who see the entry.
+                    if (!empty($ot_nav_permissions['requests']) || !empty($ot_nav_permissions['create']) || !empty($ot_nav_permissions['approvals']) || !empty($ot_nav_permissions['reports'])) {
+                    $ot_nav_badge = ot_nav_badge($this->db, (int)$user_id, $ot_nav_permissions);
+                    $ot_entry = !empty($ot_nav_permissions['requests']) ? '' : (!empty($ot_nav_permissions['create']) ? '/create' : (!empty($ot_nav_permissions['approvals']) ? '/approvals' : '/reports'));
+                    // With approvals waiting, the menu entry leads straight to the inbox.
+                    if ($ot_nav_badge['alert'] && !empty($ot_nav_permissions['approvals'])) $ot_entry = '/approvals'; ?>
+                    <li><div class="dash"><a <?php if ($this->uri->segment(1) === 'Overtime') { ?>class="active"<?php } ?> href="<?php echo page_url . 'Overtime' . $ot_entry; ?>"><div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" style="fill:#000;"><path d="M12,0A12,12,0,1,0,24,12,12.014,12.014,0,0,0,12,0Zm0,23A11,11,0,1,1,23,12,11.013,11.013,0,0,1,12,23Zm.5-11.207V5h-1v7.207l4.646,4.647.708-.708Z"/></svg></div><div>Overtime</div><?php if ($ot_nav_badge['count'] > 0) { ?><span class="ot-nav-badge<?php echo $ot_nav_badge['alert'] ? ' is-alert' : ''; ?>" title="<?php echo htmlspecialchars($ot_nav_badge['title'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo $ot_nav_badge['count'] > 99 ? '99+' : (int) $ot_nav_badge['count']; ?></span><?php } ?></a></div></li>
+                    <?php } ?>
                     <li>
                         <div class="dash">
                             <a <?php if ($this->uri->segment(1) == 'Task_management') { ?>class="active" <?php } ?> href="<?php echo page_url; ?>Task_management">
@@ -753,22 +838,45 @@ if ($this->db->table_exists('task_management_items')) {
                                     </svg>
                                 </div>
                                 <div>Task Management</div>
-                                <?php if ($task_management_open_count > 0) { ?>
-                                    <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24" style="fill: #e82646; position: absolute; right: 10px; margin-top: 4px; width: 16px;"><path d="M20.93,7.3c-.34-1.91-2-3.3-3.94-3.3h-.17c.11-.31,.18-.65,.18-1,0-1.65-1.35-3-3-3h-4c-1.65,0-3,1.35-3,3,0,.35,.07,.69,.18,1h-.17c-1.94,0-3.6,1.39-3.94,3.3L.81,19H23.19l-2.27-11.7ZM9,3c0-.55,.45-1,1-1h4c.55,0,1,.45,1,1s-.45,1-1,1h-4c-.55,0-1-.45-1-1Zm-.86,18h7.72c-.45,1.72-2,3-3.86,3s-3.41-1.28-3.86-3Z"/></svg></div>
-                                    <div style="background: black; color: white; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; border-radius: 50%; position: absolute; right: 9px; top: 8px;"><?php echo $task_management_open_count; ?></div>
-                                <?php } ?>
+                                <?php
+                                $tm_badge_alert = $task_management_unread_count > 0;
+                                $tm_badge_value = $tm_badge_alert ? $task_management_unread_count : $task_management_open_count;
+                                ?>
+                                <svg class="tm-nav-bell" data-tm-nav-bell xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"
+                                     <?php if (!$tm_badge_alert) { echo 'style="display:none;"'; } ?>><path d="M20.93,7.3c-.34-1.91-2-3.3-3.94-3.3h-.17c.11-.31,.18-.65,.18-1,0-1.65-1.35-3-3-3h-4c-1.65,0-3,1.35-3,3,0,.35,.07,.69,.18,1h-.17c-1.94,0-3.6,1.39-3.94,3.3L.81,19H23.19l-2.27-11.7ZM9,3c0-.55,.45-1,1-1h4c.55,0,1,.45,1,1s-.45,1-1,1h-4c-.55,0-1-.45-1-1Zm-.86,18h7.72c-.45,1.72-2,3-3.86,3s-3.41-1.28-3.86-3Z"/></svg>
+                                <span class="tm-nav-badge<?php echo $tm_badge_alert ? ' is-alert' : ''; ?>"
+                                      data-tm-nav-badge
+                                      data-open-count="<?php echo (int) $task_management_open_count; ?>"
+                                      title="<?php echo $tm_badge_alert
+                                          ? (int) $task_management_unread_count . ' new update' . ($task_management_unread_count === 1 ? '' : 's') . ' on your tasks'
+                                          : (int) $task_management_open_count . ' open task' . ($task_management_open_count === 1 ? '' : 's') . ' assigned to you'; ?>"
+                                      <?php if ($tm_badge_value <= 0) { echo 'style="display:none;"'; } ?>><?php echo $tm_badge_value > 99 ? '99+' : (int) $tm_badge_value; ?></span>
                             </a>
                         </div>
                     </li>
-	<?php
-			if($_SESSION['logged_in']['adminuser']==1)
+
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) === 'Department_sheet_links' || $this->uri->segment(1) === 'department-sheets') { ?>class="active"<?php } ?> href="<?php echo page_url; ?>department-sheets">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <rect x="3" y="2" width="18" height="20" rx="2" />
+                                        <path d="M3 8h18M3 14h18M9 8v14M15 8v14" />
+                                    </svg>
+                                </div>
+                                <div>Department Sheets</div>
+                            </a>
+                        </div>
+                    </li>
+		       <?php
+				if($_SESSION['logged_in']['adminuser']==1 || $user_id==67)
 			{
 			?>
                     <li>
 
                         <div class="dash">
 
-                            <a href="<?php echo page_url;?>MIS/index/ALL/<?php echo $st;?>/<?php echo $et;?>/ALL">
+                            <a href="<?php echo page_url;?>MIS/index/ALL/<?php echo date('Y-m-d', strtotime('-1 year +1 day'));?>/<?php echo date('Y-m-d');?>/ALL/ALL">
 
                                 <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
                                         viewBox="0 0 24 24">
@@ -782,35 +890,17 @@ if ($this->db->table_exists('task_management_items')) {
                         </div>
                     </li>
                     	<?php } ?>
-                        <?php
-			$module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '4')->get();
-			if ($module->num_rows() > 0) {?>
-                    <!-- <li>
 
-                        <div class="dash">
 
-                            <a href="<?php echo page_url;?>ExcelImport/bomimport">
-                                <div>
-                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
-                                        viewBox="0 0 24 24">
-                                        <path
-                                            d="m1,2.5c0-.827.673-1.5,1.5-1.5h9.5v7h7v1.766c.308-.202.648-.35,1-.472v-2.001L12.707,0H2.5C1.122,0,0,1.122,0,2.5v21.5h9v-1H1V2.5Zm12-.793l5.293,5.293h-5.293V1.707Zm10.268,10.025c-.943-.944-2.592-.944-3.535,0l-8.732,8.732v3.536h3.536l8.732-8.732c.472-.472.732-1.1.732-1.768s-.26-1.296-.732-1.768Zm-.707,2.828l-8.439,8.439h-2.122v-2.122l8.439-8.439c.566-.566,1.555-.566,2.121,0,.283.283.439.66.439,1.061s-.156.777-.439,1.061Z" />
-                                    </svg>
-                                </div>
-
-                                <div>BOM
-                                    Correction Tool</div>
-                            </a>
-                        </div>
-                    </li> -->
-<?php }?>
+                        
+                       
 
 		<?php
 			$module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '5')->get();
 			if ($module->num_rows() > 0) {?>
 
                     <li>
-                        <a data-toggle="collapse" href="#finance" aria-controls="finance" role="button"
+                        <a data-toggle="collapse" data-target="#finance" href="javascript:void(0);" aria-controls="finance" role="button"
                             aria-expanded="false" class="right_arrow <?php if ($this->uri->segment(1) == 'Accounts') { ?> active <?php } ?>">
                             <div>
                                 <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
@@ -841,7 +931,7 @@ if ($this->db->table_exists('task_management_items')) {
 
 							?>	
                                 <li><a
-                                        href="<?php echo page_url;?>Accounts/allrunningdf/<?php echo $threeMonthsAgo;?>/<?php echo $todaysdate;?>/ALL">
+                                        href="<?php echo page_url;?>Accounts/allrunningdf/ALL/ALL/ALL">
 
                                         <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
                                                 viewBox="0 0 24 24">
@@ -862,7 +952,7 @@ if ($this->db->table_exists('task_management_items')) {
 							?>	
 
                                 <li><a
-                                        href="<?php echo page_url;?>Accounts/paymentdashboard/<?php echo $threeMonthsAgo;?>/<?php echo $todaysdate;?>/ALL">
+                                        href="<?php echo page_url;?>Accounts/paymentdashboard/<?php echo $todaysdate;?>/<?php echo date('Y-m-d', strtotime('+30 days'));?>/ALL">
                                         <div><svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
                                                 viewBox="0 0 24 24">
                                                 <path
@@ -971,6 +1061,136 @@ if($qry->num_rows()>0){
                 <?php }?>
 
 <?php
+/* ===== CHAT MODULE — sidebar link =====================================
+   Chat is company-wide: chat_can() lets every logged-in user open the
+   messenger, while the privileged actions (create group, manage members,
+   pin, link records) stay gated by the CHAT module in
+   Master > User management.
+
+   Hidden entirely until CHAT_MODULE_VISIBLE is TRUE in
+   application/config/constants.php — see chat_nav_visible(). */
+if (pms_nav_optional_helper($this, 'chat_access') && chat_nav_visible($this)):
+?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) === 'Chat') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Chat">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM7 9h10v2H7V9zm7 5H7v-2h7v2zm3-6H7V6h10v2z"/></svg>
+                                </div>
+                                <div style="display:flex;align-items:center;">
+                                    Chat
+                                    <span id="ccChatMenuBadge" style="display:none;margin-left:8px;background:#dc2626;color:#fff;border-radius:9px;font-size:10px;font-weight:700;padding:1px 6px;">0</span>
+                                </div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php if (chat_can_manage_df_groups($this)): ?>
+                    <!-- DF groups are marketing's and administrators' to
+                         manage — see chat_can_manage_df_groups(). Everyone
+                         else still takes part in a DF group once added; they
+                         simply do not create them, so this entry is hidden
+                         rather than shown-and-refused.
+
+                         The page itself backfills DFs released before groups
+                         became automatic. -->
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(2) === 'df_groups' || $this->uri->segment(2) === 'df-groups') { ?>class="active" <?php } ?> href="<?php echo page_url;?>chat/df-groups">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                                </div>
+                                <div>DF Chat Groups</div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php endif; ?>
+<?php endif; ?>
+<!-- ===== END CHAT MODULE — sidebar link ===== -->
+
+<!-- ===== APP LOG — sidebar link =====
+     Who has the mobile app, which build they are on, and who is actually
+     opening it. Gated to the same roles App_log's own constructor allows
+     (12 and 41); that controller re-checks on every request, so hiding the
+     link here is presentation only.
+
+     Top-level rather than inside Master on purpose: App_log does not go
+     through module_access / module_capablity at all, so nesting it under
+     Master would hide it from a role that is allowed the page but has no
+     Master access. -->
+<?php if (in_array((int) $user_role, array(12, 41), true)): ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) === 'App_log') { ?>class="active" <?php } ?> href="<?php echo page_url;?>App_log">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+                                </div>
+                                <div>App Log</div>
+                            </a>
+                        </div>
+                    </li>
+<?php endif; ?>
+<!-- ===== END APP LOG — sidebar link ===== -->
+
+<!-- ===== EXCHANGE RATE — sidebar link =====
+     Today's USD / EUR / AED against the rupee. Accounts type it in, everyone
+     shown the link reads the same row the app reads.
+
+     Gated to exactly what Exchange_rate::_me() allows - the Accounts
+     department (20), the two people named when it was asked for, and admins.
+     The controller re-checks all of it on every request and refuses the save
+     regardless, so this condition is presentation only: it decides who is
+     offered the page, never who may write.
+
+     Top-level rather than under Master, for the same reason App_log is:
+     Exchange_rate does not go through module_access at all, so nesting it
+     would hide it from someone allowed the page but not the Master menu. -->
+<?php if ((int) $department_id === 20
+          || in_array((int) $user_id, array(63, 92), true)
+          || (int) $user_role === 12
+          || in_array((int) $user_id, array(139, 161, 61), true)): ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) === 'Exchange_rate') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Exchange_rate">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+                                </div>
+                                <div>Exchange Rate</div>
+                            </a>
+                        </div>
+                    </li>
+<?php endif; ?>
+<!-- ===== END EXCHANGE RATE — sidebar link ===== -->
+
+<!-- ===== ATTENDANCE REPORT — sidebar link =====
+     The web copy of the app's attendance sheet. Gated on the "ATTENDANCE
+     REPORT" permission (userwise permission screen), looked up by NAME
+     because submodule ids differ between installations. Admin-only at
+     launch (2026-09-30); Attendance_report re-checks the same permission on
+     every request, so this condition is presentation only. -->
+<?php
+$att_report_perm = $this->db->select('c.submoduleid')
+    ->from('module_capablity c')
+    ->join('submodule s', 's.id = c.submoduleid', 'inner')
+    ->where('s.submodule', 'ATTENDANCE REPORT')
+    ->where('c.role_id', (int) $this->session->userdata['logged_in']['user_id'])
+    ->where('c.submodule_access', '1')
+    ->limit(1)
+    ->get();
+if ($att_report_perm && $att_report_perm->num_rows() > 0): ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) === 'Attendance_report') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Attendance_report">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9.5 17.5l-3-3 1.41-1.41 1.59 1.58 4.59-4.58L15.5 11.5l-6 6z"/></svg>
+                                </div>
+                                <div>Attendance Report</div>
+                            </a>
+                        </div>
+                    </li>
+<?php endif; ?>
+<!-- ===== END ATTENDANCE REPORT — sidebar link ===== -->
+
+<?php
 $df_weekly_meeting_points_count = 0;
 $df_weekly_meeting_points_show_all = false;
 if (!empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
@@ -1068,34 +1288,122 @@ if($qry->num_rows()>0){
                         </div>
                     </li>
 
+                <?php } ?>
 
-                <?php }?>
-
-
-
-                <?php
-            $module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '17')->get();
-            if ($module->num_rows() > 0) {
-                foreach ($module->result() as $moddata);
-                if ($moddata->access == '1') {
-                    ?>
-                 <li>
-
-
-
-                        <a href="<?php echo page_url; ?>Dashboard/service_spare_dashboard">
-                            <div>
-                                 <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
-                                    viewBox="0 0 24 24">
-                                    <path
-                                        d="M12,12.5h5.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-5.051V4h5.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-6.051V11.5H6.949c-.245-1.692-1.691-3-3.449-3-1.93,0-3.5,1.57-3.5,3.5s1.57,3.5,3.5,3.5c1.758,0,3.204-1.308,3.449-3h4.051v8.5h6.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-5.051v-7.5Zm8.5-3c1.379,0,2.5,1.122,2.5,2.5s-1.121,2.5-2.5,2.5-2.5-1.121-2.5-2.5,1.121-2.5,2.5-2.5Zm0-8.5c1.379,0,2.5,1.122,2.5,2.5s-1.121,2.5-2.5,2.5-2.5-1.122-2.5-2.5,1.121-2.5,2.5-2.5ZM3.5,14.5c-1.379,0-2.5-1.121-2.5-2.5s1.121-2.5,2.5-2.5,2.5,1.122,2.5,2.5-1.121,2.5-2.5,2.5Zm17,3.5c1.379,0,2.5,1.121,2.5,2.5s-1.121,2.5-2.5,2.5-2.5-1.121-2.5-2.5,1.121-2.5,2.5-2.5Z" />
-                                </svg>
-                            </div>
-                            <div>Service & Spares</div>
-                        </a>
-
+                    <?php
+                    $design_dashboard_access = $this->db->select('acessid')->from('module_capablity')
+                        ->where('role_id', $user_id)->where('moduleid', '20')->where('submoduleid', '81')
+                        ->where('submodule_access', '1')->limit(1)->get();
+                    if ($design_dashboard_access->num_rows() > 0) { ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(3) == 'design_department_dashboard') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Master/User_management/design_department_dashboard">
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
+                                        viewBox="0 0 24 24">
+                                        <path
+                                            d="M22.85,4.56,19.44,1.15a3.94,3.94,0,0,0-5.56,0L1.31,13.72A4.46,4.46,0,0,0,0,16.89V24H7.11a4.46,4.46,0,0,0,3.17-1.31L22.85,10.12a3.94,3.94,0,0,0,0-5.56ZM8.87,21.28A2.48,2.48,0,0,1,7.11,22H2V16.89a2.48,2.48,0,0,1,.72-1.76L13,4.86,19.14,11ZM21.44,8.71l-.89.88L14.41,3.45l.88-.89a1.94,1.94,0,0,1,2.74,0L21.44,6a1.94,1.94,0,0,1,0,2.74ZM5,17H7v2H5Z" />
+                                    </svg>
+                                </div>
+                                <div>Design Department Dashboard</div>
+                            </a>
+                        </div>
                     </li>
-                <?php } } ?>
+                    <?php } ?>
+
+                    <?php
+                    $rnd_design_access = $this->db->select('acessid')->from('module_capablity')
+                        ->where('role_id', $user_id)->where('moduleid', '20')->where('submoduleid', '82')
+                        ->where('submodule_access', '1')->limit(1)->get();
+                    if ($rnd_design_access->num_rows() > 0) { ?>
+                    <li>
+                        <div class="dash">
+                            <a <?php if ($this->uri->segment(1) == 'Task_management' && $this->uri->segment(2) == 'rnd_design_dashboard') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Task_management/rnd_design_dashboard">
+                                <div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 21h6v-1H9v1Zm3-21C7.59 0 4 3.59 4 8c0 2.94 1.59 5.51 3.95 6.9L8 18h8l.05-3.1A7.98 7.98 0 0 0 20 8c0-4.41-3.59-8-8-8Zm2.63 13.44-.58.31L14.02 16H9.98l-.03-2.25-.58-.31A5.99 5.99 0 0 1 6 8a6 6 0 0 1 12 0 5.99 5.99 0 0 1-3.37 5.44Z"/></svg></div>
+                                <div>R&amp;D Design Dashboard</div>
+                            </a>
+                        </div>
+                    </li>
+                    <?php } ?>
+
+
+
+<?php
+$service_spares_module_visible = false;
+$module = $this->db->select('access')->from('module_access')->where('role_id', $user_id)->where('moduleid', '17')->get();
+if ($module->num_rows() > 0) {
+    foreach ($module->result() as $moddata);
+    if ($moddata->access == '1') {
+        $service_spares_module_visible = true;
+    }
+}
+
+$spares_execution_mrp_submodule = $this->db->select('id')
+    ->from('submodule')
+    ->where('moduleid', '17')
+    ->where('submodule', 'SPARES EXECUTION PPC MRP SHORTAGES')
+    ->limit(1)
+    ->get()
+    ->row();
+
+$spares_execution_mrp_visible = false;
+if (!empty($spares_execution_mrp_submodule)) {
+    $qry = $this->db->select('id')
+        ->from('module_capablity')
+        ->where('role_id', $user_id)
+        ->where('moduleid', '17')
+        ->where('submoduleid', (int) $spares_execution_mrp_submodule->id)
+        ->where('submodule_access', '1')
+        ->limit(1)
+        ->get();
+
+    if ($qry->num_rows() > 0) {
+        $spares_execution_mrp_visible = true;
+    }
+}
+
+if (!$spares_execution_mrp_visible && !empty($_SESSION['logged_in']['adminuser']) && (int) $_SESSION['logged_in']['adminuser'] === 1) {
+    $spares_execution_mrp_visible = true;
+}
+
+$service_spares_active = ($this->uri->segment(1) == 'Spares_execution' || $this->uri->segment(1) == 'ServiceLeads' || ($this->uri->segment(1) == 'Dashboard' && $this->uri->segment(2) == 'service_spare_dashboard'));
+
+if ($service_spares_module_visible || $spares_execution_mrp_visible) {
+?>
+<li>
+    <a data-toggle="collapse" data-target="#serviceSparesMenu" href="javascript:void(0);" aria-controls="serviceSparesMenu" role="button"
+        aria-expanded="<?php echo $service_spares_active ? 'true' : 'false'; ?>"
+        class="right_arrow <?php echo $service_spares_active ? 'active' : ''; ?>">
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                <path d="M12,12.5h5.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-5.051V4h5.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-6.051V11.5H6.949c-.245-1.692-1.691-3-3.449-3-1.93,0-3.5,1.57-3.5,3.5s1.57,3.5,3.5,3.5c1.758,0,3.204-1.308,3.449-3h4.051v8.5h6.051c.245,1.692,1.691,3,3.449,3,1.93,0,3.5-1.57,3.5-3.5s-1.57-3.5-3.5-3.5c-1.758,0-3.204,1.308-3.449,3h-5.051v-7.5Z" />
+            </svg>
+        </div>
+        <div style="display: flex; align-items: center;">
+            Service &amp; Spares<svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1"
+                viewBox="0 0 24 24" class="collapse_arrow">
+                <path d="m10.279,18.342l-.707-.707,5.281-5.281c.094-.095.146-.22.146-.354s-.052-.259-.146-.354l-5.281-5.281.707-.707,5.281,5.281c.283.283.439.66.439,1.061s-.156.777-.439,1.061l-5.281,5.281Z" />
+            </svg>
+        </div>
+    </a>
+    <div class="collapse <?php echo $service_spares_active ? 'in' : ''; ?>" id="serviceSparesMenu">
+        <ul class="nav">
+            <?php if ($service_spares_module_visible) { ?>
+                <li><a href="<?php echo page_url; ?>Dashboard/service_spare_dashboard">
+                    <div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M23.55,13.38l-6.18-6.72-.74,.68,6.12,6.66H2.5c-.83,0-1.5-.67-1.5-1.5V2H0V12.5c0,1.38,1.12,2.5,2.5,2.5H22.76l-6.12,6.66,.74,.68,6.16-6.71c.62-.62,.62-1.64,.01-2.25Z" /></svg></div>
+                    <div>Service &amp; Spares Dashboard</div>
+                </a></li>
+            <?php } ?>
+            <?php if ($spares_execution_mrp_visible) { ?>
+                <li><a <?php if ($this->uri->segment(1) == 'Spares_execution' && $this->uri->segment(2) == 'mrp_shortages') { ?>class="active" <?php } ?> href="<?php echo page_url; ?>Spares_execution/mrp_shortages">
+                    <div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 5h16v2H4V5Zm0 4h10v2H4V9Zm0 4h8v2H4v-2Zm0 4h8v2H4v-2Zm12.6 1.4-3.1-3.1 1.4-1.4 1.7 1.7 3.9-4 1.4 1.4-5.3 5.4Z"/></svg></div>
+                    <div>PPC MRP Shortages</div>
+                </a></li>
+            <?php } ?>
+        </ul>
+    </div>
+</li>
+<?php } ?>
 
 <?php
 $service_visit_overview_submodule = $this->db->select('id')
@@ -1265,7 +1573,7 @@ if($qry->num_rows()>0){
 
                         <div class="dash">
 
-                            <a <?php if ($this->uri->segment(1) == 'Masters' && in_array($this->uri->segment(2), array('manage_jobs', 'allocate_job', 'view_job_timeline'))) { ?>class="active" <?php } ?> href="<?php echo page_url;?>Masters/manage_jobs">
+                            <a <?php if ($this->uri->segment(1) == 'Masters' && in_array($this->uri->segment(2), array('manage_jobs', 'allocate_job', 'view_job_timeline', 'assembly_machine_report'))) { ?>class="active" <?php } ?> href="<?php echo page_url;?>Masters/manage_jobs">
 
                                 <div>
                                     <svg id="Layer_1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" data-name="Layer 1">
@@ -1308,6 +1616,17 @@ if($qry->num_rows()>0){
                         </div>
                     </li>
 
+                    <?php }?>
+
+
+                                     <?php 
+
+$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','5')->where('submoduleid','80')->where('submodule_access','1')->get();
+
+if($qry->num_rows()>0){
+
+?>
+
                     <li>
                         <div class="dash">
                             <a <?php if ($this->uri->segment(1) == 'Df_dispatch_plan') { ?>class="active" <?php } ?> href="<?php echo page_url;?>Df_dispatch_plan">
@@ -1320,7 +1639,7 @@ if($qry->num_rows()>0){
                             </a>
                         </div>
                     </li>
-                <?php }?>
+                <?php } ?>
 
                 <?php 
 
@@ -1349,6 +1668,34 @@ if($qry->num_rows()>0){
                     </li>
                 <?php }?>
 
+
+
+ <?php 
+
+$qry = $this->db->select('role_id, moduleid, submoduleid, submodule_access')->from('module_capablity')->where('role_id',$user_id)->where('moduleid','19')->where('submoduleid','77')->where('submodule_access','1')->get();
+
+if($qry->num_rows()>0){
+
+?>
+ <li>
+
+                        <div class="dash">
+
+                            <a <?php if ($this->uri->segment(1) == 'abom') { ?>class="active" <?php } ?> href="<?php echo page_url;?>abom/generate">
+
+                                <div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" viewBox="0 0 24 24">
+                                        <path d="M21.5,24c-1.379,0-2.5-1.122-2.5-2.5V13.5c0-.827-.673-1.5-1.5-1.5H6.5c-.827,0-1.5,.673-1.5,1.5v8c0,1.378-1.121,2.5-2.5,2.5s-2.5-1.122-2.5-2.5V9.561c0-1.499,.741-2.893,1.983-3.73L9.483,.77c1.527-1.031,3.504-1.032,5.033,0l7.5,5.061c1.242,.837,1.983,2.232,1.983,3.73v11.939c0,1.378-1.121,2.5-2.5,2.5ZM6.5,11h11c1.379,0,2.5,1.122,2.5,2.5v8c0,.827,.673,1.5,1.5,1.5s1.5-.673,1.5-1.5V9.561c0-1.166-.576-2.25-1.542-2.901L13.958,1.599c-1.189-.803-2.727-.803-3.916,0L2.542,6.66c-.966,.651-1.542,1.736-1.542,2.901v11.939c0,.827,.673,1.5,1.5,1.5s1.5-.673,1.5-1.5V13.5c0-1.378,1.121-2.5,2.5-2.5Zm3.3,13h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Zm1.6-3h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Zm7.6,9h-1.6c-.662,0-1.2-.539-1.2-1.2v-1.6c0-.662,.538-1.2,1.2-1.2h1.6c.662,0,1.2,.539,1.2,1.2v1.6c0,.662-.538,1.2-1.2,1.2Zm-1.6-3c-.11,0-.2,.09-.2,.2v1.6c0,.11,.09,.2,.2,.2h1.6c.11,0,.2-.09,.2-.2v-1.6c0-.11-.09-.2-.2-.2h-1.6Z"/>
+                                    </svg>
+                                </div>
+
+                                <div>Automation BOM Generator</div>
+
+
+                            </a>
+                        </div>
+                    </li>
+                <?php }?>
                 
 
                 </ul>
@@ -1452,7 +1799,7 @@ if($qry->num_rows()>0){
                         <div class="col-md-4 col-sm-12 col-xs-12 hidden-xs" id="blink_text">
                             <div style="margin-top: 13px;">
                                 <a style="background-color: #fdf5dd; padding: 10px 10px 10px 10px; font-size:14px; color:#635221;"
-                                    href='<?php echo page_url;?>MIS/index/ALL/<?php echo $st;?>/<?php echo $et;?>/<?php echo $_SESSION['logged_in']['user_id'];?>'
+                                    href='<?php echo page_url;?>MIS/index/ALL/<?php echo date('Y-m-d', strtotime('-1 year +1 day'));?>/<?php echo date('Y-m-d');?>/<?php echo $_SESSION['logged_in']['user_id'];?>/ALL'
                                     target="_blank">Your Work
                                     Pending/Delayed MIS: <span style="color:#635221;font-weight: 600;font-size:17px"
                                         id="blink_text1"><?php echo $total;?>% &nbsp;<span style="font-size:17px;"><?php echo $icon;?></span></span></a>
@@ -1474,6 +1821,36 @@ if($qry->num_rows()>0){
   <?php } ?>
                         <div class="col-md-4">
                             <ul class="nav navbar-nav navbar-right pull-right">
+
+<?php
+/* ===== CHAT MODULE — topbar icon, unread badge, notifications, dock =====
+   Nothing here renders while CHAT_MODULE_VISIBLE is FALSE, so there is
+   also no background poll before go-live. */
+if (pms_nav_optional_helper($this, 'chat_access') && chat_nav_visible($this)):
+?>
+                                <!-- margin-top:8px centres the 39px icon on the same
+                                     axis as the username and avatar (their centre is
+                                     y=25 in this row). The neighbouring li carries
+                                     margin-top:37px, but that one renders at zero
+                                     height — copying its offset pushed the icon onto
+                                     its own line below the topbar. -->
+                                <li class="dropdown user-box" style="margin-top:8px;">
+                                    <div style="position:relative;">
+                                        <a href="javascript:void(0);" id="ccChatBtn" class="cc-chatbtn" title="Chat" aria-label="Chat" style="display:inline-block;padding:6px 10px;color:#188ae2;font-size:19px;line-height:1;">
+                                            <i class="fa fa-comments-o" aria-hidden="true"></i>
+                                            <span class="cc-chat-badge" id="ccChatBadge">0</span>
+                                        </a>
+                                        <div class="cc-chatpop" id="ccChatPop">
+                                            <h6>Chat notifications
+                                                <a href="<?php echo page_url; ?>Chat"
+                                                   onclick="if(window.ChatDock){event.preventDefault();window.ChatDock.open();this.closest('.cc-chatpop').style.display='none';}">Open chat</a>
+                                            </h6>
+                                            <div class="items" id="ccChatItems"></div>
+                                        </div>
+                                    </div>
+                                </li>
+<?php endif; ?>
+<!-- ===== END CHAT MODULE — topbar icon ===== -->
 
                                 <li class="dropdown user-box saurabh" style="margin-top:37px;">
                                     <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
@@ -1669,3 +2046,66 @@ if($qry->num_rows()>0){
 
 
     </header>
+
+<script>
+(function () {
+    if (window.PmsSidebarCollapseFallbackBound) {
+        return;
+    }
+
+    window.PmsSidebarCollapseFallbackBound = true;
+
+    function bindSidebarCollapseFallback() {
+        if (window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.collapse === 'function') {
+            return;
+        }
+
+        var links = document.querySelectorAll('[data-toggle="collapse"][data-target]');
+        for (var i = 0; i < links.length; i++) {
+            links[i].addEventListener('click', function (event) {
+                var selector = this.getAttribute('data-target');
+                var panel = selector ? document.querySelector(selector) : null;
+                if (!panel) {
+                    return;
+                }
+
+                event.preventDefault();
+                var isOpen = panel.className.indexOf('in') !== -1;
+                if (isOpen) {
+                    panel.className = panel.className.replace(/\bin\b/g, '').replace(/\s{2,}/g, ' ');
+                    panel.style.display = 'none';
+                    this.setAttribute('aria-expanded', 'false');
+                } else {
+                    panel.className += ' in';
+                    panel.style.display = 'block';
+                    this.setAttribute('aria-expanded', 'true');
+                }
+            });
+        }
+    }
+
+    if (document.readyState === 'complete') {
+        bindSidebarCollapseFallback();
+    } else {
+        window.addEventListener('load', bindSidebarCollapseFallback);
+    }
+})();
+</script>
+
+<?php
+/* ===== CHAT MODULE — notification widget + floating dock ==============
+   Deliberately OUTSIDE the topbar's <ul>. Both views emit fixed-position
+   containers and a <style> block; inside a <ul> the HTML parser hoists
+   any non-<li> content out of the list, which moves it somewhere neither
+   view controls. Here they sit at the end of the header, where they are
+   valid and their positioning is their own.
+
+   Nothing renders while CHAT_MODULE_VISIBLE is FALSE. */
+if (pms_nav_optional_helper($this, 'chat_access') && chat_nav_visible($this)) {
+    $this->load->view('chatmodule/_navwidget');
+    // Skipped on the Chat page itself, where the full messenger is
+    // already on screen.
+    if ($this->uri->segment(1) !== 'Chat') $this->load->view('chatmodule/_dock');
+}
+?>
+<!-- ===== END CHAT MODULE ===== -->

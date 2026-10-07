@@ -31,13 +31,29 @@ class Accounts extends CI_Controller {
 
 	}
 
-function allrunningdf(){
+/*
+|--------------------------------------------------------------------------
+| Running DF Finance Control
+|--------------------------------------------------------------------------
+| One row per running DF. Three registers are pulled together:
+|
+|   poreceived                    -> the order book (what the customer committed)
+|   payment_terms_milestone       -> the claim schedule (when each slice falls due)
+|   mcs_dispatch_report_tracking  -> the money (what was invoiced and collected)
+|
+| The ledger is the system of record for money; milestones only decide when an
+| amount becomes claimable. The gap between the two - work finished but not yet
+| invoiced - is the number finance actually needs, so it is computed explicitly
+| rather than inferred.
+*/
+
+function allrunningdf()
+{
 	$filters = $this->get_allrunningdf_filters();
-	$report = $this->build_allrunningdf_report($filters);
 
 	$data = array(
 		'filters' => $filters,
-		'report' => $report,
+		'report' => $this->build_allrunningdf_report($filters),
 		'df_options' => $this->get_allrunningdf_df_options()
 	);
 
@@ -46,28 +62,31 @@ function allrunningdf(){
 
 private function get_allrunningdf_filters()
 {
-	$default_end_date = date('Y-m-d');
-	$default_start_date = date('Y-m-d', strtotime($default_end_date . ' -3 months'));
-
 	$start_raw = trim((string) $this->uri->segment(3));
 	$end_raw = trim((string) $this->uri->segment(4));
 	$df_raw = trim((string) $this->uri->segment(5));
 
-	$use_all_dates = (strtoupper($start_raw) === 'ALL' && strtoupper($end_raw) === 'ALL');
-	$start_date = $use_all_dates ? 'ALL' : $this->normalize_allrunningdf_date($start_raw, $default_start_date);
-	$end_date = $use_all_dates ? 'ALL' : $this->normalize_allrunningdf_date($end_raw, $default_end_date);
+	$start_is_all = ($start_raw === '' || strtoupper($start_raw) === 'ALL');
+	$end_is_all = ($end_raw === '' || strtoupper($end_raw) === 'ALL');
 
-	if (!$use_all_dates && strtotime($start_date) > strtotime($end_date)) {
-		$temp_date = $start_date;
+	// A running DF carries live money whatever its release date, so the default
+	// scope is every running DF. The date range only applies when asked for.
+	$has_date_filter = !($start_is_all && $end_is_all);
+
+	$start_date = $this->normalize_allrunningdf_date($start_raw, date('Y-m-d', strtotime('-12 months')));
+	$end_date = $this->normalize_allrunningdf_date($end_raw, date('Y-m-d'));
+
+	if ($has_date_filter && strtotime($start_date) > strtotime($end_date)) {
+		$swap = $start_date;
 		$start_date = $end_date;
-		$end_date = $temp_date;
+		$end_date = $swap;
 	}
 
 	return array(
-		'start_date' => $start_date,
-		'end_date' => $end_date,
+		'start_date' => $has_date_filter ? $start_date : 'ALL',
+		'end_date' => $has_date_filter ? $end_date : 'ALL',
 		'df_id' => ($df_raw === '' ? 'ALL' : $df_raw),
-		'has_date_filter' => !$use_all_dates
+		'has_date_filter' => $has_date_filter
 	);
 }
 
@@ -90,43 +109,89 @@ private function get_allrunningdf_df_options()
 {
 	$this->db->select('id, df_no, df_description');
 	$this->db->from('df_release');
-	$this->db->where('(df_status = 0 OR df_status = "running" OR df_status IS NULL)', null, false);
+	$this->db->where('df_status', 0);
 	$this->db->where('IFNULL(on_hold, 0) = 0', null, false);
 	$this->db->order_by('df_no', 'ASC');
+
 	return $this->db->get()->result_array();
+}
+
+/*
+| Some payment terms carry more than one generation of milestone mapping - an
+| original set and a later re-map - and both are still live. Terms 14 and 20 are
+| the current example: each totals 100% on its own, so together they bill the
+| order twice. Walk the rows oldest first and cut a generation every time the
+| running percentage completes 100%, then keep only the newest one. If the rows
+| do not split cleanly the whole set is returned untouched and the percentage
+| check downstream reports it instead of this function guessing.
+*/
+private function resolve_allrunningdf_milestone_set($milestone_rows)
+{
+	$generations = array();
+	$current = array();
+	$running_percentage = 0;
+
+	foreach ($milestone_rows as $milestone_row) {
+		$current[] = $milestone_row;
+		$running_percentage += (float) $milestone_row['payment_percentage'];
+
+		if (abs($running_percentage - 100) < 0.01) {
+			$generations[] = $current;
+			$current = array();
+			$running_percentage = 0;
+		}
+	}
+
+	if (!empty($current)) {
+		$generations[] = $current;
+	}
+
+	if (count($generations) < 2) {
+		return array('milestones' => $milestone_rows, 'superseded_count' => 0);
+	}
+
+	$live_generation = array_pop($generations);
+	$superseded_count = 0;
+	foreach ($generations as $generation) {
+		$superseded_count += count($generation);
+	}
+
+	return array('milestones' => $live_generation, 'superseded_count' => $superseded_count);
 }
 
 private function build_allrunningdf_report($filters)
 {
 	$today = date('Y-m-d');
-	$next_seven_days = date('Y-m-d', strtotime($today . ' +7 days'));
 
+	$report = array(
+		'rows' => array(),
+		'summary' => $this->blank_allrunningdf_summary(),
+		'insights' => array(),
+		'action_rows' => array(),
+		'config_issues' => array(),
+		'marketing_summary' => array(),
+		'filter_summary' => array(
+			'date_range_label' => !empty($filters['has_date_filter'])
+				? (date('d M Y', strtotime($filters['start_date'])) . ' to ' . date('d M Y', strtotime($filters['end_date'])))
+				: 'All running DFs',
+			'df_label' => 'All running DFs',
+			'generated_on' => date('d M Y h:i A'),
+			'date_scope_note' => !empty($filters['has_date_filter'])
+				? 'Filtered on DF release date. Running DFs released outside this range are hidden even though their money is still open.'
+				: 'Every running DF is in scope, irrespective of release date.'
+		)
+	);
+
+	/* The DF drives the report, not the PO. A running DF with no PO recorded is
+	   exactly the kind of row finance needs to see, so the PO join is a LEFT one. */
 	$this->db->select('
-		p.id AS po_id,
-		p.df_id,
-		p.payment_term,
-		p.pono,
-		p.podate,
-		p.order_value,
-		p.company_name,
-		p.customer_currency,
-		p.po_attachment,
-		p.amount_in_customer_currency,
-		pt.payment_terms,
-		df.id AS dfprimaryid,
+		df.id AS df_id,
 		df.df_no,
 		df.df_description,
-		df.added_on AS df_release_on,
-		IFNULL(df.on_hold, 0) AS df_on_hold,
-		marketing.title AS marketing_title,
-		marketing.first_name AS marketing_first_name,
-		marketing.last_name AS marketing_last_name
+		df.added_on AS df_release_on
 	');
-	$this->db->from('poreceived p');
-	$this->db->join('df_release df', 'p.df_id = df.id', 'inner');
-	$this->db->join('payment_terms pt', 'p.payment_term = pt.id', 'left');
-	$this->db->join('system_users marketing', 'marketing.user_id = p.added_by', 'left');
-	$this->db->where('(df.df_status = 0 OR df.df_status = "running" OR df.df_status IS NULL)', null, false);
+	$this->db->from('df_release df');
+	$this->db->where('df.df_status', 0);
 	$this->db->where('IFNULL(df.on_hold, 0) = 0', null, false);
 
 	if (!empty($filters['has_date_filter'])) {
@@ -139,713 +204,908 @@ private function build_allrunningdf_report($filters)
 	}
 
 	$this->db->order_by('df.added_on', 'DESC');
-	$this->db->order_by('p.podate', 'DESC');
-	$this->db->order_by('p.id', 'DESC');
+	$df_rows = $this->db->get()->result_array();
 
-	$po_rows = $this->db->get()->result_array();
-
-	$report = array(
-		'rows' => array(),
-			'summary' => array(
-				'po_count' => 0,
-				'df_count' => 0,
-				'total_order_value' => 0,
-			'total_order_value_display' => $this->format_allrunningdf_money(0),
-			'total_received_amount' => 0,
-			'total_received_amount_display' => $this->format_allrunningdf_money(0),
-			'total_pending_amount' => 0,
-			'total_pending_amount_display' => $this->format_allrunningdf_money(0),
-			'total_overdue_amount' => 0,
-			'total_overdue_amount_display' => $this->format_allrunningdf_money(0),
-			'total_upcoming_amount' => 0,
-			'total_upcoming_amount_display' => $this->format_allrunningdf_money(0),
-			'collection_percentage' => 0,
-				'critical_row_count' => 0,
-				'gap_row_count' => 0,
-				'overdue_row_count' => 0,
-				'partial_row_count' => 0,
-				'milestone_count' => 0,
-				'overdue_milestone_count' => 0,
-				'dispatch_tracker_row_count' => 0,
-				'dispatch_tracker_missing_count' => 0,
-				'dispatch_tracker_due_count' => 0,
-				'dispatch_tracker_hold_count' => 0,
-				'dispatch_sync_gap_count' => 0,
-				'dispatch_invoice_amount_total' => 0,
-				'dispatch_invoice_amount_total_display' => $this->format_allrunningdf_money(0),
-				'dispatch_tracker_received_total' => 0,
-				'dispatch_tracker_received_total_display' => $this->format_allrunningdf_money(0),
-				'dispatch_tracker_balance_total' => 0,
-				'dispatch_tracker_balance_total_display' => $this->format_allrunningdf_money(0)
-			),
-		'insights' => array(),
-		'top_risk_rows' => array(),
-		'gap_rows' => array(),
-		'marketing_summary' => array(),
-		'filter_summary' => array(
-				'date_range_label' => !empty($filters['has_date_filter'])
-					? (date('d M Y', strtotime($filters['start_date'])) . ' to ' . date('d M Y', strtotime($filters['end_date'])))
-					: 'All Running DF Timeline',
-				'df_label' => 'All Running DFs',
-				'generated_on' => date('d M Y h:i A'),
-				'date_scope_note' => !empty($filters['has_date_filter'])
-					? 'Filter is based on DF release date. Milestone finance intelligence is now paired with the DF-wise dispatch ledger.'
-					: 'Showing all running DFs irrespective of release date. Milestone finance intelligence is now paired with the DF-wise dispatch ledger.'
-			)
-		);
-
-	if (empty($po_rows)) {
+	if (empty($df_rows)) {
 		return $report;
 	}
 
-	$selected_df_label = 'All Running DFs';
-	foreach ($this->get_allrunningdf_df_options() as $df_option) {
-		if ((string) $df_option['id'] === (string) $filters['df_id']) {
-			$selected_df_label = trim($df_option['df_no'] . ' ' . $df_option['df_description']);
-			break;
-		}
-	}
-	$report['filter_summary']['df_label'] = $selected_df_label;
-
-	$po_row_count_by_df = array();
 	$df_ids = array();
+	foreach ($df_rows as $df_row) {
+		$df_ids[] = (int) $df_row['df_id'];
+	}
+
+	if ((string) $filters['df_id'] !== 'ALL') {
+		foreach ($this->get_allrunningdf_df_options() as $df_option) {
+			if ((string) $df_option['id'] === (string) $filters['df_id']) {
+				$report['filter_summary']['df_label'] = trim($df_option['df_no'] . ' ' . $df_option['df_description']);
+				break;
+			}
+		}
+	}
+
 	$payment_term_ids = array();
-	foreach ($po_rows as $po_row) {
-		$po_df_key = (int) $po_row['df_id'];
-		if (!isset($po_row_count_by_df[$po_df_key])) {
-			$po_row_count_by_df[$po_df_key] = 0;
-		}
-		$po_row_count_by_df[$po_df_key]++;
-		$df_ids[(int) $po_row['df_id']] = (int) $po_row['df_id'];
-		if (!empty($po_row['payment_term'])) {
-			$payment_term_ids[(int) $po_row['payment_term']] = (int) $po_row['payment_term'];
-		}
-	}
-
-	$dispatch_tracking_map = array();
-	if (!empty($df_ids)) {
-		$this->db->select('
-			tracker.*,
-			updater.title AS tracker_updater_title,
-			updater.first_name AS tracker_updater_first_name,
-			updater.last_name AS tracker_updater_last_name
-		');
-		$this->db->from('mcs_dispatch_report_tracking tracker');
-		$this->db->join('system_users updater', 'updater.user_id = tracker.updated_by', 'left');
-		$this->db->where_in('tracker.df_id', array_values($df_ids));
-		$this->db->order_by('tracker.id', 'DESC');
-		$dispatch_tracking_rows = $this->db->get()->result_array();
-
-		foreach ($dispatch_tracking_rows as $dispatch_tracking_row) {
-			$dispatch_df_key = (int) $dispatch_tracking_row['df_id'];
-			if (!isset($dispatch_tracking_map[$dispatch_df_key])) {
-				$dispatch_tracking_map[$dispatch_df_key] = $dispatch_tracking_row;
-			}
-		}
-	}
-
-	$milestones_by_term = array();
 	$milestone_task_ids = array();
-	if (!empty($payment_term_ids)) {
-		$this->db->select('ptm.id, ptm.payment_term_id, ptm.payment_percentage, ptm.milestone AS milestone_task_id, tm.task_name');
-		$this->db->from('payment_terms_milestone ptm');
-		$this->db->join('task_management tm', 'tm.task_id = ptm.milestone', 'left');
-		$this->db->where_in('ptm.payment_term_id', array_values($payment_term_ids));
-		$this->db->order_by('ptm.payment_term_id', 'ASC');
-		$this->db->order_by('ptm.id', 'ASC');
-		$milestone_rows = $this->db->get()->result_array();
+	$term_health = array();
+	$invoice_usage = array();
 
-		foreach ($milestone_rows as $milestone_row) {
-			$term_id = (int) $milestone_row['payment_term_id'];
-			if (!isset($milestones_by_term[$term_id])) {
-				$milestones_by_term[$term_id] = array();
-			}
-			$milestones_by_term[$term_id][] = $milestone_row;
-			$milestone_task_ids[(int) $milestone_row['milestone_task_id']] = (int) $milestone_row['milestone_task_id'];
-		}
-	}
+	$po_map = $this->get_allrunningdf_po_map($df_ids, $payment_term_ids);
+	$milestone_map = $this->get_allrunningdf_milestone_map($payment_term_ids, $milestone_task_ids, $term_health);
+	$task_map = $this->get_allrunningdf_task_map($df_ids, $milestone_task_ids);
+	$ledger_map = $this->get_allrunningdf_ledger_map($df_ids, $invoice_usage);
 
-	$task_candidates_by_df = array();
-	if (!empty($df_ids) && !empty($milestone_task_ids)) {
-		$this->db->select('
-			td.id,
-			td.po_id,
-			td.df_id,
-			td.taskid,
-			td.task_status,
-			td.end_date,
-			td.amount_received,
-			td.amount_received_date,
-			IFNULL(td.paymentstage, 0) AS paymentstage,
-			td.amount_received_by,
-			receiver.title AS receiver_title,
-			receiver.first_name AS receiver_first_name,
-			receiver.last_name AS receiver_last_name
-		');
-		$this->db->from('task_department_wise_scheduling td');
-		$this->db->join('system_users receiver', 'receiver.user_id = td.amount_received_by', 'left');
-		$this->db->where_in('td.df_id', array_values($df_ids));
-		$this->db->where_in('td.taskid', array_values($milestone_task_ids));
-		$this->db->where('IFNULL(td.on_hold, 0) = 0', null, false);
-		$this->db->order_by('td.id', 'DESC');
-		$task_rows = $this->db->get()->result_array();
-
-		foreach ($task_rows as $task_row) {
-			$df_key = (int) $task_row['df_id'];
-			$task_key = (int) $task_row['taskid'];
-			if (!isset($task_candidates_by_df[$df_key])) {
-				$task_candidates_by_df[$df_key] = array();
-			}
-			if (!isset($task_candidates_by_df[$df_key][$task_key])) {
-				$task_candidates_by_df[$df_key][$task_key] = array();
-			}
-			$task_candidates_by_df[$df_key][$task_key][] = $task_row;
-		}
-	}
-
-	$scheduled_task_ids = array();
-	foreach ($task_candidates_by_df as $task_group) {
-		foreach ($task_group as $task_rows) {
-			foreach ($task_rows as $task_row) {
-				$scheduled_task_ids[(int) $task_row['id']] = (int) $task_row['id'];
-			}
-		}
-	}
-
-	$followup_map = $this->get_allrunningdf_followup_map(array_values($scheduled_task_ids));
-
-	$marketing_summary = array();
-	$unique_df_tracker = array();
-	$dispatch_summary_df_seen = array();
 	$rows = array();
+	$marketing_summary = array();
+	$config_issues = array();
 
-	foreach ($po_rows as $po_row) {
-		$order_value = (float) $po_row['order_value'];
-		$payment_term_id = (int) $po_row['payment_term'];
-		$milestone_definitions = isset($milestones_by_term[$payment_term_id]) ? $milestones_by_term[$payment_term_id] : array();
+	foreach ($df_rows as $df_row) {
+		$df_id = (int) $df_row['df_id'];
+		$po_list = isset($po_map[$df_id]) ? $po_map[$df_id] : array();
 
-		$row_data = array(
-			'po_id' => (int) $po_row['po_id'],
-			'df_id' => (int) $po_row['df_id'],
-			'company_name' => $this->format_allrunningdf_title_case($po_row['company_name']),
-			'customer_currency' => trim((string) $po_row['customer_currency']),
-			'df_no' => strtoupper(trim((string) $po_row['df_no'])),
-			'df_description' => trim((string) $po_row['df_description']),
-			'df_release_date' => $this->format_allrunningdf_date($po_row['df_release_on']),
-			'po_no' => trim((string) $po_row['pono']),
-			'po_date' => $this->format_allrunningdf_date($po_row['podate']),
-			'order_value' => $order_value,
-			'order_value_display' => $this->format_allrunningdf_money($order_value),
-			'payment_term_name' => trim((string) $po_row['payment_terms']),
-			'marketing_person' => $this->format_allrunningdf_person_name($po_row['marketing_title'], $po_row['marketing_first_name'], $po_row['marketing_last_name']),
-			'po_download_url' => !empty($po_row['po_attachment']) ? (sfdocument . 'Taskdocument/' . $po_row['po_attachment']) : '',
-			'gantt_url' => page_url . 'Task/finalgantchartWithDetails/' . (int) $po_row['df_id'],
-			'df_detail_url' => page_url . 'Dashboard/df_full_detail?df_id=' . (int) $po_row['df_id'],
-			'milestones' => array(),
-			'issues' => array(),
-			'configured_percentage_total' => 0,
-			'expected_collection_amount' => 0,
-			'received_amount' => 0,
-			'pending_amount' => 0,
-			'overdue_amount' => 0,
-			'upcoming_amount' => 0,
-			'collection_pending_amount' => 0,
-			'partial_amount' => 0,
+		$row = array(
+			'df_id' => $df_id,
+			'df_no' => strtoupper(trim((string) $df_row['df_no'])),
+			'df_description' => trim((string) $df_row['df_description']),
+			'df_release_date' => $this->format_allrunningdf_date($df_row['df_release_on']),
+			'df_detail_url' => page_url . 'Dashboard/df_full_detail?df_id=' . $df_id,
+			'gantt_url' => page_url . 'gantt/' . $df_id,
+			'company_name' => '',
+			'marketing_person' => 'Not mapped',
+			'currencies' => array(),
+			'pos' => array(),
+			'po_count' => count($po_list),
+			'order_value' => 0,
+			'claimable_amount' => 0,
+			'claimable_count' => 0,
+			'slipped_amount' => 0,
+			'slipped_count' => 0,
 			'milestone_count' => 0,
-			'overdue_milestone_count' => 0,
-			'missing_mapping_count' => 0,
-				'followup_due_count' => 0,
-				'health_key' => 'stable',
-				'health_label' => 'Stable',
-				'health_priority' => 1,
-				'latest_followup_text' => '',
-				'latest_followup_on' => '',
-				'latest_followup_on_display' => 'No follow-up logged',
-				'dispatch_tracker_available' => false,
-				'dispatch_nos_of_machines' => 'N/A',
-				'dispatch_invoice_no' => '',
-				'dispatch_invoice_date' => 'N/A',
-				'dispatch_invoice_amount' => 0,
-				'dispatch_invoice_amount_display' => $this->format_allrunningdf_money(0),
-				'dispatch_taxable_sale' => 0,
-				'dispatch_taxable_sale_display' => $this->format_allrunningdf_money(0),
-				'dispatch_payment_received' => 0,
-				'dispatch_payment_received_display' => $this->format_allrunningdf_money(0),
-				'dispatch_balance_amount' => 0,
-				'dispatch_balance_amount_display' => $this->format_allrunningdf_money(0),
-				'dispatch_payment_due_status_raw' => '',
-				'dispatch_payment_due_status' => 'Not Updated',
-				'dispatch_due_date' => 'Not Planned',
-				'dispatch_due_state_key' => 'not_updated',
-				'dispatch_due_state_label' => 'Not Updated',
-				'dispatch_remarks' => '',
-				'dispatch_commissioning_status' => '',
-				'dispatch_inc_date' => 'N/A',
-				'dispatch_last_updated_by' => 'Not Updated',
-				'dispatch_last_updated_on' => 'Not Updated',
-				'dispatch_sync_gap' => false,
-				'dispatch_sync_gap_note' => '',
-				'dispatch_tracker_note' => 'DF-wise dispatch billing ledger is not updated yet for this row.'
-			);
-			$row_data['df_po_row_count'] = isset($po_row_count_by_df[(int) $po_row['df_id']]) ? (int) $po_row_count_by_df[(int) $po_row['df_id']] : 1;
+			'has_config_issue' => false,
+			'issues' => array()
+		);
 
-			if ($row_data['marketing_person'] === '') {
-				$row_data['marketing_person'] = 'Not Mapped';
+		foreach ($po_list as $po_row) {
+			$po = $this->build_allrunningdf_po_block($po_row, $df_id, $milestone_map, $term_health, $task_map, $today, $config_issues);
+
+			$row['pos'][] = $po;
+			$row['order_value'] += $po['order_value'];
+			$row['claimable_amount'] += $po['claimable_amount'];
+			$row['claimable_count'] += $po['claimable_count'];
+			$row['slipped_amount'] += $po['slipped_amount'];
+			$row['slipped_count'] += $po['slipped_count'];
+			$row['milestone_count'] += count($po['milestones']);
+
+			if ($row['company_name'] === '') {
+				$row['company_name'] = $po['company_name'];
 			}
-
-			$dispatch_tracking_row = isset($dispatch_tracking_map[(int) $po_row['df_id']]) ? $dispatch_tracking_map[(int) $po_row['df_id']] : array();
-			if (!empty($dispatch_tracking_row)) {
-				$dispatch_due_state = $this->get_allrunningdf_dispatch_due_state(isset($dispatch_tracking_row['payment_due_status']) ? $dispatch_tracking_row['payment_due_status'] : '');
-				$dispatch_invoice_amount = isset($dispatch_tracking_row['invoice_amount']) ? (float) $dispatch_tracking_row['invoice_amount'] : 0;
-				$dispatch_payment_received = isset($dispatch_tracking_row['payment_received']) ? (float) $dispatch_tracking_row['payment_received'] : 0;
-				$dispatch_balance_amount = 0;
-
-				if (isset($dispatch_tracking_row['balance_amount']) && $dispatch_tracking_row['balance_amount'] !== '' && $dispatch_tracking_row['balance_amount'] !== null) {
-					$dispatch_balance_amount = (float) $dispatch_tracking_row['balance_amount'];
-				} else {
-					$dispatch_balance_amount = round(max(0, $dispatch_invoice_amount - $dispatch_payment_received), 2);
-				}
-
-				$dispatch_last_updated_by = $this->format_allrunningdf_person_name(
-					isset($dispatch_tracking_row['tracker_updater_title']) ? $dispatch_tracking_row['tracker_updater_title'] : '',
-					isset($dispatch_tracking_row['tracker_updater_first_name']) ? $dispatch_tracking_row['tracker_updater_first_name'] : '',
-					isset($dispatch_tracking_row['tracker_updater_last_name']) ? $dispatch_tracking_row['tracker_updater_last_name'] : ''
-				);
-
-				$row_data['dispatch_tracker_available'] = true;
-				$row_data['dispatch_nos_of_machines'] = !empty($dispatch_tracking_row['nos_of_machines']) ? $dispatch_tracking_row['nos_of_machines'] : '1';
-				$row_data['dispatch_invoice_no'] = trim((string) $dispatch_tracking_row['invoice_no']);
-				$row_data['dispatch_invoice_date'] = $this->format_allrunningdf_date(isset($dispatch_tracking_row['invoice_date']) ? $dispatch_tracking_row['invoice_date'] : '');
-				$row_data['dispatch_invoice_amount'] = round($dispatch_invoice_amount, 2);
-				$row_data['dispatch_invoice_amount_display'] = $this->format_allrunningdf_money($dispatch_invoice_amount);
-				$row_data['dispatch_taxable_sale'] = isset($dispatch_tracking_row['taxable_sale']) ? (float) $dispatch_tracking_row['taxable_sale'] : 0;
-				$row_data['dispatch_taxable_sale_display'] = $this->format_allrunningdf_money($row_data['dispatch_taxable_sale']);
-				$row_data['dispatch_payment_received'] = round($dispatch_payment_received, 2);
-				$row_data['dispatch_payment_received_display'] = $this->format_allrunningdf_money($dispatch_payment_received);
-				$row_data['dispatch_balance_amount'] = round($dispatch_balance_amount, 2);
-				$row_data['dispatch_balance_amount_display'] = $this->format_allrunningdf_money($dispatch_balance_amount);
-				$row_data['dispatch_payment_due_status_raw'] = trim((string) $dispatch_tracking_row['payment_due_status']);
-				$row_data['dispatch_payment_due_status'] = $dispatch_due_state['label'];
-				$row_data['dispatch_due_date'] = $this->format_allrunningdf_date(isset($dispatch_tracking_row['due_date']) ? $dispatch_tracking_row['due_date'] : '');
-				$row_data['dispatch_due_state_key'] = $dispatch_due_state['key'];
-				$row_data['dispatch_due_state_label'] = $dispatch_due_state['label'];
-				$row_data['dispatch_remarks'] = trim((string) $dispatch_tracking_row['remarks']);
-				$row_data['dispatch_commissioning_status'] = trim((string) $dispatch_tracking_row['commissioning_status']);
-				$row_data['dispatch_inc_date'] = $this->format_allrunningdf_date(isset($dispatch_tracking_row['inc_date']) ? $dispatch_tracking_row['inc_date'] : '');
-				$row_data['dispatch_last_updated_by'] = $dispatch_last_updated_by !== '' ? $dispatch_last_updated_by : 'Not Updated';
-				$row_data['dispatch_last_updated_on'] = $this->format_allrunningdf_datetime(isset($dispatch_tracking_row['updated_on']) ? $dispatch_tracking_row['updated_on'] : '');
-				$row_data['dispatch_tracker_note'] = 'Invoice '
-					. ($row_data['dispatch_invoice_no'] !== '' ? $row_data['dispatch_invoice_no'] : 'not yet updated')
-					. ' | Machines ' . $row_data['dispatch_nos_of_machines']
-					. ' | Due status ' . $row_data['dispatch_due_state_label'] . '.';
-				if ($row_data['df_po_row_count'] > 1) {
-					$row_data['dispatch_tracker_note'] .= ' This DF appears in ' . $row_data['df_po_row_count'] . ' visible PO rows, so the dispatch ledger is shared across them.';
-				}
+			if ($row['marketing_person'] === 'Not mapped' && $po['marketing_person'] !== '') {
+				$row['marketing_person'] = $po['marketing_person'];
 			}
-
-			if ($payment_term_id === 0 || $row_data['payment_term_name'] === '') {
-				$row_data['issues'][] = 'Payment term is not linked with this PO.';
+			if ($po['currency'] !== '' && !in_array($po['currency'], $row['currencies'], true)) {
+				$row['currencies'][] = $po['currency'];
 			}
-
-		if (empty($milestone_definitions) && $payment_term_id > 0) {
-			$row_data['issues'][] = 'No milestone configuration found for the selected payment term.';
-		}
-
-		foreach ($milestone_definitions as $milestone_definition) {
-			$milestone_task_id = (int) $milestone_definition['milestone_task_id'];
-			$milestone_percentage = (float) $milestone_definition['payment_percentage'];
-			$scheduled_amount = round(($order_value * $milestone_percentage) / 100, 2);
-			$row_data['configured_percentage_total'] += $milestone_percentage;
-			$row_data['expected_collection_amount'] += $scheduled_amount;
-			$row_data['milestone_count']++;
-
-			$task_candidates = isset($task_candidates_by_df[(int) $po_row['df_id']][$milestone_task_id])
-				? $task_candidates_by_df[(int) $po_row['df_id']][$milestone_task_id]
-				: array();
-			$matched_task = $this->pick_allrunningdf_task_candidate($task_candidates, (int) $po_row['po_id']);
-
-			$amount_received = 0;
-			$outstanding_amount = $scheduled_amount;
-			$work_status_key = 'unmapped';
-			$work_status_label = 'Not Mapped';
-			$payment_status_key = 'gap';
-			$payment_status_label = 'Milestone Task Missing';
-			$receiver_name = '';
-			$record_id = 0;
-			$target_date = 'N/A';
-			$target_date_raw = '';
-			$target_is_overdue = false;
-			$target_is_upcoming = false;
-			$latest_followup_text = '';
-			$latest_followup_date = '';
-			$latest_followup_date_display = 'No follow-up logged';
-			$next_followup_display = 'Not Planned';
-			$next_followup_raw = '';
-
-			if (!empty($matched_task)) {
-				$record_id = (int) $matched_task['id'];
-				$target_date_raw = trim((string) $matched_task['end_date']);
-				$target_date = $this->format_allrunningdf_date($target_date_raw);
-				$amount_received = (float) $matched_task['amount_received'];
-				$receiver_name = $this->format_allrunningdf_person_name(
-					isset($matched_task['receiver_title']) ? $matched_task['receiver_title'] : '',
-					isset($matched_task['receiver_first_name']) ? $matched_task['receiver_first_name'] : '',
-					isset($matched_task['receiver_last_name']) ? $matched_task['receiver_last_name'] : ''
-				);
-				$outstanding_amount = round(max(0, $scheduled_amount - $amount_received), 2);
-				$task_status = (int) $matched_task['task_status'];
-
-				if ($task_status === 1) {
-					$work_status_key = 'completed';
-					$work_status_label = 'Completed';
-				} elseif ($task_status === 2) {
-					$work_status_key = 'approval';
-					$work_status_label = 'Waiting Approval';
-				} elseif ($target_date_raw !== '' && $target_date_raw !== '0000-00-00' && $target_date_raw < $today) {
-					$work_status_key = 'delayed';
-					$work_status_label = 'Delayed';
-				} else {
-					$work_status_key = 'pending';
-					$work_status_label = 'Ongoing';
-				}
-
-				$target_is_overdue = ($target_date_raw !== '' && $target_date_raw !== '0000-00-00' && $target_date_raw < $today);
-				$target_is_upcoming = ($target_date_raw !== '' && $target_date_raw !== '0000-00-00' && $target_date_raw >= $today && $target_date_raw <= $next_seven_days);
-
-				if ($amount_received > 0 && $outstanding_amount > 0) {
-					$payment_status_key = $target_is_overdue ? 'partial_overdue' : 'partial';
-					$payment_status_label = 'Part Received';
-				} elseif ($amount_received > 0) {
-					$payment_status_key = 'received';
-					$payment_status_label = 'Received';
-				} elseif ($task_status === 1) {
-					$payment_status_key = 'collection_pending';
-					$payment_status_label = 'Collection Pending';
-				} elseif ($target_is_overdue) {
-					$payment_status_key = 'overdue';
-					$payment_status_label = 'Overdue';
-				} else {
-					$payment_status_key = 'planned';
-					$payment_status_label = 'Planned';
-				}
-
-				if (isset($followup_map[$record_id])) {
-					$latest_followup_text = trim((string) $followup_map[$record_id]['remarks']);
-					$latest_followup_date = trim((string) $followup_map[$record_id]['added_on']);
-					$latest_followup_date_display = $this->format_allrunningdf_datetime($latest_followup_date);
-					$next_followup_raw = trim((string) $followup_map[$record_id]['next_followup']);
-					if ($next_followup_raw !== '' && $next_followup_raw !== '0000-00-00') {
-						$next_followup_display = $this->format_allrunningdf_date($next_followup_raw);
-					}
-				}
-			} else {
-				$row_data['missing_mapping_count']++;
+			if (!empty($po['has_config_issue'])) {
+				$row['has_config_issue'] = true;
 			}
-
-			$row_data['received_amount'] += $amount_received;
-			if ($outstanding_amount > 0) {
-				if ($target_is_overdue) {
-					$row_data['overdue_amount'] += $outstanding_amount;
-					$row_data['overdue_milestone_count']++;
-				} elseif ($target_is_upcoming) {
-					$row_data['upcoming_amount'] += $outstanding_amount;
-				}
+			foreach ($po['issues'] as $po_issue) {
+				$row['issues'][] = $po_issue;
 			}
-
-			if ($amount_received > 0 && $outstanding_amount > 0) {
-				$row_data['partial_amount'] += $outstanding_amount;
-			}
-
-			if ($work_status_key === 'completed' && $outstanding_amount > 0) {
-				$row_data['collection_pending_amount'] += $outstanding_amount;
-			}
-
-			if ($outstanding_amount > 0 && $next_followup_raw !== '' && $next_followup_raw !== '0000-00-00' && $next_followup_raw < $today) {
-				$row_data['followup_due_count']++;
-			}
-
-			if ($latest_followup_date !== '' && ($row_data['latest_followup_on'] === '' || strtotime($latest_followup_date) > strtotime($row_data['latest_followup_on']))) {
-				$row_data['latest_followup_on'] = $latest_followup_date;
-				$row_data['latest_followup_text'] = $latest_followup_text;
-				$row_data['latest_followup_on_display'] = $latest_followup_date_display;
-			}
-
-			$row_data['milestones'][] = array(
-				'task_name' => trim((string) $milestone_definition['task_name']),
-				'payment_percentage' => $milestone_percentage,
-				'scheduled_amount' => $scheduled_amount,
-				'scheduled_amount_display' => $this->format_allrunningdf_money($scheduled_amount),
-				'amount_received' => $amount_received,
-				'amount_received_display' => $this->format_allrunningdf_money($amount_received),
-				'outstanding_amount' => $outstanding_amount,
-				'outstanding_amount_display' => $this->format_allrunningdf_money($outstanding_amount),
-				'work_status_key' => $work_status_key,
-				'work_status_label' => $work_status_label,
-				'payment_status_key' => $payment_status_key,
-				'payment_status_label' => $payment_status_label,
-				'target_date' => $target_date,
-				'target_date_raw' => $target_date_raw,
-				'record_id' => $record_id,
-				'receiver_name' => $receiver_name !== '' ? $receiver_name : 'Not Updated',
-				'payment_received_on' => !empty($matched_task['amount_received_date']) ? $this->format_allrunningdf_date($matched_task['amount_received_date']) : 'Not Updated',
-				'followup_text' => $latest_followup_text,
-				'followup_logged_on' => $latest_followup_date_display,
-				'next_followup' => $next_followup_display,
-				'can_update_receipt' => ($record_id > 0 && $outstanding_amount > 0),
-				'prefill_receipt_amount' => $amount_received > 0 ? $amount_received : $scheduled_amount,
-				'target_receipt_amount' => $scheduled_amount,
-				'current_received_amount' => $amount_received
-			);
 		}
 
-		$row_data['received_amount'] = round($row_data['received_amount'], 2);
-		$row_data['pending_amount'] = round(max(0, $order_value - $row_data['received_amount']), 2);
-		$row_data['overdue_amount'] = round($row_data['overdue_amount'], 2);
-		$row_data['upcoming_amount'] = round($row_data['upcoming_amount'], 2);
-		$row_data['collection_pending_amount'] = round($row_data['collection_pending_amount'], 2);
-		$row_data['partial_amount'] = round($row_data['partial_amount'], 2);
-		$row_data['received_amount_display'] = $this->format_allrunningdf_money($row_data['received_amount']);
-		$row_data['pending_amount_display'] = $this->format_allrunningdf_money($row_data['pending_amount']);
-		$row_data['overdue_amount_display'] = $this->format_allrunningdf_money($row_data['overdue_amount']);
-		$row_data['upcoming_amount_display'] = $this->format_allrunningdf_money($row_data['upcoming_amount']);
-			$row_data['collection_pending_amount_display'] = $this->format_allrunningdf_money($row_data['collection_pending_amount']);
-			$row_data['collection_percentage'] = $order_value > 0 ? round(($row_data['received_amount'] / $order_value) * 100) : 0;
-
-			if ($row_data['dispatch_tracker_available']) {
-				if ($row_data['df_po_row_count'] > 1) {
-					$row_data['dispatch_sync_gap_note'] = 'Dispatch ledger is captured DF-wise and this DF is visible across ' . $row_data['df_po_row_count'] . ' PO rows, so reconciliation should be read at the DF total level.';
-				} else {
-					$dispatch_gap_amount = round(abs($row_data['dispatch_payment_received'] - $row_data['received_amount']), 2);
-					$row_data['dispatch_sync_gap'] = ($dispatch_gap_amount > 0.01);
-					$row_data['dispatch_sync_gap_note'] = $row_data['dispatch_sync_gap']
-						? ('DF-wise dispatch ledger shows ' . $row_data['dispatch_payment_received_display'] . ' received while finance milestone capture shows ' . $row_data['received_amount_display'] . '.')
-						: 'DF-wise dispatch ledger and finance milestone capture are aligned.';
-
-					if ($row_data['dispatch_sync_gap']) {
-						$row_data['issues'][] = $row_data['dispatch_sync_gap_note'];
-					}
-				}
-
-				if ($row_data['dispatch_payment_due_status_raw'] !== '' && strtolower($row_data['dispatch_payment_due_status_raw']) === 'due' && $row_data['dispatch_due_date'] === 'N/A') {
-					$row_data['issues'][] = 'Dispatch ledger marks this row as Due but no due date is captured there.';
-				}
-
-				if ($row_data['dispatch_invoice_no'] !== '' && $row_data['dispatch_invoice_amount'] <= 0) {
-					$row_data['issues'][] = 'Dispatch ledger has an invoice number but invoice amount is not updated.';
-				}
-			}
-
-			if ($row_data['payment_term_name'] !== '' && abs($row_data['configured_percentage_total'] - 100) > 0.01) {
-				$row_data['issues'][] = 'Milestone percentage total is ' . rtrim(rtrim(number_format($row_data['configured_percentage_total'], 2, '.', ''), '0'), '.') . '%, not 100%.';
-			}
-
-		if ($row_data['missing_mapping_count'] > 0) {
-			$row_data['issues'][] = $row_data['missing_mapping_count'] . ' milestone task(s) are not mapped against the scheduled DF work.';
+		if ($row['company_name'] === '') {
+			$row['company_name'] = 'Customer not mapped';
 		}
 
-		if ($row_data['overdue_amount'] > 0) {
-			$row_data['issues'][] = 'Overdue collection exposure is ' . $this->format_allrunningdf_money($row_data['overdue_amount']) . '.';
-		}
+		$row['order_value'] = round($row['order_value'], 2);
+		$row['claimable_amount'] = round($row['claimable_amount'], 2);
+		$row['slipped_amount'] = round($row['slipped_amount'], 2);
+		$row['order_value_display'] = $this->format_allrunningdf_money($row['order_value']);
+		$row['claimable_amount_display'] = $this->format_allrunningdf_money($row['claimable_amount']);
+		$row['slipped_amount_display'] = $this->format_allrunningdf_money($row['slipped_amount']);
 
-		if ($row_data['followup_due_count'] > 0) {
-			$row_data['issues'][] = $row_data['followup_due_count'] . ' milestone(s) have a next follow-up date already crossed.';
-		}
+		$row = array_merge($row, $this->apply_allrunningdf_ledger($row, isset($ledger_map[$df_id]) ? $ledger_map[$df_id] : array(), $invoice_usage, $today));
+		$row = array_merge($row, $this->grade_allrunningdf_row($row));
 
-		if ($row_data['latest_followup_text'] === '' && $row_data['overdue_amount'] > 0) {
-			$row_data['issues'][] = 'No finance follow-up note is logged for the overdue exposure.';
-		}
+		$rows[] = $row;
+		$this->accumulate_allrunningdf_summary($report['summary'], $row);
 
-		if ($row_data['received_amount'] > ($order_value + 0.01)) {
-			$row_data['issues'][] = 'Received amount is greater than order value. Please verify the receipt entries.';
-		}
-
-		if ($row_data['payment_term_name'] === '' || empty($milestone_definitions) || $row_data['missing_mapping_count'] > 0) {
-			$row_data['health_key'] = 'gap';
-			$row_data['health_label'] = 'Configuration Gap';
-			$row_data['health_priority'] = 4;
-		} elseif ($row_data['overdue_amount'] > 0) {
-			$row_data['health_key'] = 'critical';
-			$row_data['health_label'] = 'Overdue';
-			$row_data['health_priority'] = 3;
-		} elseif ($row_data['pending_amount'] <= 0.01) {
-			$row_data['health_key'] = 'collected';
-			$row_data['health_label'] = 'Collected';
-			$row_data['health_priority'] = 0;
-		} elseif ($row_data['upcoming_amount'] > 0 || $row_data['partial_amount'] > 0 || $row_data['collection_pending_amount'] > 0) {
-			$row_data['health_key'] = 'watch';
-			$row_data['health_label'] = 'Watch';
-			$row_data['health_priority'] = 2;
-		} else {
-			$row_data['health_key'] = 'active';
-			$row_data['health_label'] = 'Active';
-			$row_data['health_priority'] = 1;
-		}
-
-		if ($row_data['latest_followup_text'] === '') {
-			$row_data['latest_followup_on_display'] = 'No follow-up logged';
-		}
-
-		$rows[] = $row_data;
-		$unique_df_tracker[(int) $po_row['df_id']] = true;
-
-		$report['summary']['po_count']++;
-		$report['summary']['total_order_value'] += $order_value;
-		$report['summary']['total_received_amount'] += $row_data['received_amount'];
-			$report['summary']['total_pending_amount'] += $row_data['pending_amount'];
-			$report['summary']['total_overdue_amount'] += $row_data['overdue_amount'];
-			$report['summary']['total_upcoming_amount'] += $row_data['upcoming_amount'];
-			$report['summary']['milestone_count'] += $row_data['milestone_count'];
-			$report['summary']['overdue_milestone_count'] += $row_data['overdue_milestone_count'];
-			if (!isset($dispatch_summary_df_seen[(int) $po_row['df_id']])) {
-				$dispatch_summary_df_seen[(int) $po_row['df_id']] = true;
-				if ($row_data['dispatch_tracker_available']) {
-					$report['summary']['dispatch_tracker_row_count']++;
-					$report['summary']['dispatch_invoice_amount_total'] += $row_data['dispatch_invoice_amount'];
-					$report['summary']['dispatch_tracker_received_total'] += $row_data['dispatch_payment_received'];
-					$report['summary']['dispatch_tracker_balance_total'] += $row_data['dispatch_balance_amount'];
-
-					if ($row_data['dispatch_due_state_key'] === 'due') {
-						$report['summary']['dispatch_tracker_due_count']++;
-					}
-
-					if ($row_data['dispatch_due_state_key'] === 'hold') {
-						$report['summary']['dispatch_tracker_hold_count']++;
-					}
-
-					if ($row_data['dispatch_sync_gap']) {
-						$report['summary']['dispatch_sync_gap_count']++;
-					}
-				} else {
-					$report['summary']['dispatch_tracker_missing_count']++;
-				}
-			}
-
-		if ($row_data['health_priority'] >= 3) {
-			$report['summary']['critical_row_count']++;
-		}
-		if (!empty($row_data['issues'])) {
-			$report['summary']['gap_row_count']++;
-		}
-		if ($row_data['overdue_amount'] > 0) {
-			$report['summary']['overdue_row_count']++;
-		}
-		if ($row_data['partial_amount'] > 0) {
-			$report['summary']['partial_row_count']++;
-		}
-
-		$marketing_key = $row_data['marketing_person'];
+		$marketing_key = $row['marketing_person'];
 		if (!isset($marketing_summary[$marketing_key])) {
 			$marketing_summary[$marketing_key] = array(
-				'label' => $marketing_key,
-				'df_count' => 0,
-				'order_value' => 0,
-				'received_amount' => 0,
-				'pending_amount' => 0,
-				'overdue_amount' => 0
+				'label' => $marketing_key, 'df_count' => 0, 'order_value' => 0,
+				'received_amount' => 0, 'balance_amount' => 0, 'unbilled_amount' => 0
 			);
 		}
 		$marketing_summary[$marketing_key]['df_count']++;
-		$marketing_summary[$marketing_key]['order_value'] += $order_value;
-		$marketing_summary[$marketing_key]['received_amount'] += $row_data['received_amount'];
-		$marketing_summary[$marketing_key]['pending_amount'] += $row_data['pending_amount'];
-		$marketing_summary[$marketing_key]['overdue_amount'] += $row_data['overdue_amount'];
+		$marketing_summary[$marketing_key]['order_value'] += $row['order_value'];
+		$marketing_summary[$marketing_key]['received_amount'] += $row['received_amount'];
+		$marketing_summary[$marketing_key]['balance_amount'] += $row['balance_amount'];
+		$marketing_summary[$marketing_key]['unbilled_amount'] += $row['unbilled_amount'];
 	}
 
-	$report['summary']['df_count'] = count($unique_df_tracker);
-	$report['summary']['collection_percentage'] = $report['summary']['total_order_value'] > 0
-		? round(($report['summary']['total_received_amount'] / $report['summary']['total_order_value']) * 100)
-		: 0;
-	$report['summary']['total_order_value'] = round($report['summary']['total_order_value'], 2);
-	$report['summary']['total_received_amount'] = round($report['summary']['total_received_amount'], 2);
-		$report['summary']['total_pending_amount'] = round($report['summary']['total_pending_amount'], 2);
-		$report['summary']['total_overdue_amount'] = round($report['summary']['total_overdue_amount'], 2);
-		$report['summary']['total_upcoming_amount'] = round($report['summary']['total_upcoming_amount'], 2);
-		$report['summary']['dispatch_invoice_amount_total'] = round($report['summary']['dispatch_invoice_amount_total'], 2);
-		$report['summary']['dispatch_tracker_received_total'] = round($report['summary']['dispatch_tracker_received_total'], 2);
-		$report['summary']['dispatch_tracker_balance_total'] = round($report['summary']['dispatch_tracker_balance_total'], 2);
-		$report['summary']['total_order_value_display'] = $this->format_allrunningdf_money($report['summary']['total_order_value']);
-		$report['summary']['total_received_amount_display'] = $this->format_allrunningdf_money($report['summary']['total_received_amount']);
-		$report['summary']['total_pending_amount_display'] = $this->format_allrunningdf_money($report['summary']['total_pending_amount']);
-		$report['summary']['total_overdue_amount_display'] = $this->format_allrunningdf_money($report['summary']['total_overdue_amount']);
-		$report['summary']['total_upcoming_amount_display'] = $this->format_allrunningdf_money($report['summary']['total_upcoming_amount']);
-		$report['summary']['dispatch_invoice_amount_total_display'] = $this->format_allrunningdf_money($report['summary']['dispatch_invoice_amount_total']);
-		$report['summary']['dispatch_tracker_received_total_display'] = $this->format_allrunningdf_money($report['summary']['dispatch_tracker_received_total']);
-		$report['summary']['dispatch_tracker_balance_total_display'] = $this->format_allrunningdf_money($report['summary']['dispatch_tracker_balance_total']);
-
-	usort($rows, function($left, $right) {
-		if ((int) $left['health_priority'] === (int) $right['health_priority']) {
-			if ((float) $left['overdue_amount'] === (float) $right['overdue_amount']) {
-				if ((float) $left['pending_amount'] === (float) $right['pending_amount']) {
-					return strcmp((string) $left['df_no'], (string) $right['df_no']);
-				}
-				return ((float) $left['pending_amount'] > (float) $right['pending_amount']) ? -1 : 1;
-			}
-			return ((float) $left['overdue_amount'] > (float) $right['overdue_amount']) ? -1 : 1;
-		}
-		return ((int) $left['health_priority'] > (int) $right['health_priority']) ? -1 : 1;
-	});
-
-	$report['rows'] = $rows;
-	$report['top_risk_rows'] = array_slice($rows, 0, 5);
-
-	$gap_rows = array();
-	foreach ($rows as $row_data) {
-		if (!empty($row_data['issues'])) {
-			$gap_rows[] = $row_data;
-		}
-	}
-	$report['gap_rows'] = array_slice($gap_rows, 0, 5);
-
-	foreach ($marketing_summary as $marketing_key => $marketing_row) {
-		$marketing_summary[$marketing_key]['order_value_display'] = $this->format_allrunningdf_money($marketing_row['order_value']);
-		$marketing_summary[$marketing_key]['received_amount_display'] = $this->format_allrunningdf_money($marketing_row['received_amount']);
-		$marketing_summary[$marketing_key]['pending_amount_display'] = $this->format_allrunningdf_money($marketing_row['pending_amount']);
-		$marketing_summary[$marketing_key]['overdue_amount_display'] = $this->format_allrunningdf_money($marketing_row['overdue_amount']);
-	}
-
-	$marketing_summary = array_values($marketing_summary);
-	usort($marketing_summary, function($left, $right) {
-		if ((float) $left['overdue_amount'] === (float) $right['overdue_amount']) {
-			if ((float) $left['pending_amount'] === (float) $right['pending_amount']) {
-				return strcmp((string) $left['label'], (string) $right['label']);
-			}
-			return ((float) $left['pending_amount'] > (float) $right['pending_amount']) ? -1 : 1;
-		}
-		return ((float) $left['overdue_amount'] > (float) $right['overdue_amount']) ? -1 : 1;
-	});
-	$report['marketing_summary'] = array_slice($marketing_summary, 0, 6);
-
-	if (!empty($report['top_risk_rows'][0]) && $report['top_risk_rows'][0]['overdue_amount'] > 0) {
-		$report['insights'][] = $report['top_risk_rows'][0]['df_no'] . ' carries the highest overdue exposure at ' . $report['top_risk_rows'][0]['overdue_amount_display'] . '.';
-	}
-
-	if ($report['summary']['gap_row_count'] > 0) {
-		$report['insights'][] = $report['summary']['gap_row_count'] . ' row(s) have payment-term or milestone-mapping configuration gaps that need correction.';
-	}
-
-	if ($report['summary']['partial_row_count'] > 0) {
-		$report['insights'][] = $report['summary']['partial_row_count'] . ' row(s) already have partial payment captured but still carry a balance to be followed up.';
-	}
-
-		if ($report['summary']['total_upcoming_amount'] > 0) {
-			$report['insights'][] = 'Upcoming milestone pressure in the next 7 days is ' . $report['summary']['total_upcoming_amount_display'] . '.';
-		}
-
-		if ($report['summary']['dispatch_tracker_row_count'] > 0) {
-			$report['insights'][] = $report['summary']['dispatch_tracker_row_count'] . ' DF(s) already carry DF-wise dispatch ledger data, with billed balance exposure of ' . $report['summary']['dispatch_tracker_balance_total_display'] . '.';
-		}
-
-		if ($report['summary']['dispatch_sync_gap_count'] > 0) {
-			$report['insights'][] = $report['summary']['dispatch_sync_gap_count'] . ' DF(s) show mismatch between the DF-wise dispatch ledger and finance milestone receipts. These need reconciliation.';
-		}
-
-		if (empty($report['insights'])) {
-			$report['insights'][] = 'No critical finance signal detected in the current filtered view. This report is stable for routine management review.';
-		}
+	$report['rows'] = $this->sort_allrunningdf_rows($rows);
+	$report['summary'] = $this->finalise_allrunningdf_summary($report['summary']);
+	$report['config_issues'] = $this->summarise_allrunningdf_config_issues($config_issues);
+	$report['marketing_summary'] = $this->finalise_allrunningdf_marketing($marketing_summary);
+	$report['action_rows'] = $this->build_allrunningdf_action_rows($report['rows']);
+	$report['insights'] = $this->build_allrunningdf_insights($report['summary'], $report['rows'], $report['config_issues']);
 
 	return $report;
 }
 
+private function get_allrunningdf_po_map($df_ids, &$payment_term_ids)
+{
+	$payment_term_ids = array();
+	$po_map = array();
+
+	if (empty($df_ids)) {
+		return $po_map;
+	}
+
+	$this->db->select('
+		p.id AS po_id, p.df_id, p.pono, p.podate, p.order_value, p.company_name,
+		p.customer_currency, p.amount_in_customer_currency, p.po_attachment,
+		p.payment_term, p.orderhold,
+		pt.payment_terms,
+		marketing.title AS marketing_title,
+		marketing.first_name AS marketing_first_name,
+		marketing.last_name AS marketing_last_name
+	');
+	$this->db->from('poreceived p');
+	$this->db->join('payment_terms pt', 'p.payment_term = pt.id', 'left');
+	$this->db->join('system_users marketing', 'marketing.user_id = p.added_by', 'left');
+	$this->db->where_in('p.df_id', $df_ids);
+	$this->db->order_by('p.podate', 'DESC');
+	$this->db->order_by('p.id', 'DESC');
+
+	foreach ($this->db->get()->result_array() as $po_row) {
+		$po_map[(int) $po_row['df_id']][] = $po_row;
+		if ((int) $po_row['payment_term'] > 0) {
+			$payment_term_ids[(int) $po_row['payment_term']] = (int) $po_row['payment_term'];
+		}
+	}
+
+	return $po_map;
+}
+
+private function get_allrunningdf_milestone_map($payment_term_ids, &$milestone_task_ids, &$term_health)
+{
+	$milestone_task_ids = array();
+	$term_health = array();
+	$milestone_map = array();
+
+	if (empty($payment_term_ids)) {
+		return $milestone_map;
+	}
+
+	$this->db->select('ptm.id, ptm.payment_term_id, ptm.payment_percentage, ptm.milestone AS milestone_task_id, tm.task_name');
+	$this->db->from('payment_terms_milestone ptm');
+	$this->db->join('task_management tm', 'tm.task_id = ptm.milestone', 'left');
+	$this->db->where_in('ptm.payment_term_id', array_values($payment_term_ids));
+	$this->db->order_by('ptm.payment_term_id', 'ASC');
+	$this->db->order_by('ptm.id', 'ASC');
+
+	$raw_by_term = array();
+	foreach ($this->db->get()->result_array() as $milestone_row) {
+		$raw_by_term[(int) $milestone_row['payment_term_id']][] = $milestone_row;
+	}
+
+	foreach ($payment_term_ids as $term_id) {
+		$raw_rows = isset($raw_by_term[$term_id]) ? $raw_by_term[$term_id] : array();
+		$resolved = $this->resolve_allrunningdf_milestone_set($raw_rows);
+
+		$percentage_total = 0;
+		$missing_task_count = 0;
+		foreach ($resolved['milestones'] as $milestone_row) {
+			$percentage_total += (float) $milestone_row['payment_percentage'];
+			$milestone_task_ids[(int) $milestone_row['milestone_task_id']] = (int) $milestone_row['milestone_task_id'];
+			if (trim((string) $milestone_row['task_name']) === '') {
+				$missing_task_count++;
+			}
+		}
+
+		$milestone_map[$term_id] = $resolved['milestones'];
+		$term_health[$term_id] = array(
+			'percentage_total' => round($percentage_total, 2),
+			'superseded_count' => $resolved['superseded_count'],
+			'missing_task_count' => $missing_task_count,
+			'milestone_count' => count($resolved['milestones'])
+		);
+	}
+
+	return $milestone_map;
+}
+
+private function get_allrunningdf_task_map($df_ids, $milestone_task_ids)
+{
+	$task_map = array();
+
+	if (empty($df_ids) || empty($milestone_task_ids)) {
+		return $task_map;
+	}
+
+	$this->db->select('
+		td.id, td.po_id, td.df_id, td.taskid, td.task_status, td.end_date,
+		td.task_completed_on, IFNULL(td.paymentstage, 0) AS paymentstage
+	');
+	$this->db->from('task_department_wise_scheduling td');
+	$this->db->where_in('td.df_id', $df_ids);
+	$this->db->where_in('td.taskid', array_values($milestone_task_ids));
+	$this->db->where('IFNULL(td.on_hold, 0) = 0', null, false);
+	$this->db->order_by('td.id', 'DESC');
+
+	foreach ($this->db->get()->result_array() as $task_row) {
+		$task_map[(int) $task_row['df_id']][(int) $task_row['taskid']][] = $task_row;
+	}
+
+	return $task_map;
+}
+
+/* One ledger row per DF - mcs_dispatch_report_tracking.df_id is unique. An
+   invoice number shared across DFs is recorded so its amount is not counted
+   twice in the totals. */
+private function get_allrunningdf_ledger_map($df_ids, &$invoice_usage)
+{
+	$invoice_usage = array();
+	$ledger_map = array();
+
+	if (empty($df_ids)) {
+		return $ledger_map;
+	}
+
+	$this->db->select('
+		tracker.*,
+		updater.title AS tracker_updater_title,
+		updater.first_name AS tracker_updater_first_name,
+		updater.last_name AS tracker_updater_last_name
+	');
+	$this->db->from('mcs_dispatch_report_tracking tracker');
+	$this->db->join('system_users updater', 'updater.user_id = tracker.updated_by', 'left');
+	$this->db->where_in('tracker.df_id', $df_ids);
+
+	foreach ($this->db->get()->result_array() as $ledger_row) {
+		$ledger_map[(int) $ledger_row['df_id']] = $ledger_row;
+
+		$invoice_no = strtoupper(trim((string) $ledger_row['invoice_no']));
+		if ($invoice_no !== '') {
+			$invoice_usage[$invoice_no][] = (int) $ledger_row['df_id'];
+		}
+	}
+
+	return $ledger_map;
+}
+
+private function build_allrunningdf_po_block($po_row, $df_id, $milestone_map, $term_health, $task_map, $today, &$config_issues)
+{
+	$order_value = (float) $po_row['order_value'];
+	$term_id = (int) $po_row['payment_term'];
+	$term_name = trim((string) $po_row['payment_terms']);
+	$milestones = isset($milestone_map[$term_id]) ? $milestone_map[$term_id] : array();
+	$health = isset($term_health[$term_id]) ? $term_health[$term_id] : array();
+
+	$po = array(
+		'po_id' => (int) $po_row['po_id'],
+		'po_no' => trim((string) $po_row['pono']),
+		'po_date' => $this->format_allrunningdf_date($po_row['podate']),
+		'po_date_raw' => trim((string) $po_row['podate']),
+		'order_value' => $order_value,
+		'order_value_display' => $this->format_allrunningdf_money($order_value),
+		'company_name' => $this->format_allrunningdf_title_case($po_row['company_name']),
+		'currency' => strtoupper(trim((string) $po_row['customer_currency'])),
+		'currency_amount' => (float) $po_row['amount_in_customer_currency'],
+		'marketing_person' => $this->format_allrunningdf_person_name(
+			$po_row['marketing_title'], $po_row['marketing_first_name'], $po_row['marketing_last_name']
+		),
+		'payment_term_id' => $term_id,
+		'payment_term_name' => $term_name,
+		'download_url' => !empty($po_row['po_attachment']) ? (sfdocument . 'Taskdocument/' . $po_row['po_attachment']) : '',
+		'order_on_hold' => ((int) $po_row['orderhold'] === 1),
+		'milestones' => array(),
+		'claimable_amount' => 0,
+		'claimable_count' => 0,
+		'slipped_amount' => 0,
+		'slipped_count' => 0,
+		'percentage_total' => isset($health['percentage_total']) ? $health['percentage_total'] : 0,
+		'has_config_issue' => false,
+		'issues' => array()
+	);
+
+	$po['currency_amount_display'] = ($po['currency'] !== '' && $po['currency'] !== 'INR' && $po['currency_amount'] > 0)
+		? ($po['currency'] . ' ' . number_format($po['currency_amount'], 2, '.', ','))
+		: '';
+
+	$po_label = ($po['po_no'] !== '' ? $po['po_no'] : 'PO not numbered');
+
+	if ($po['order_on_hold']) {
+		$po['issues'][] = $po_label . ' is flagged as an order on hold.';
+	}
+
+	if ($term_id === 0 || $term_name === '') {
+		$po['issues'][] = $po_label . ' has no payment term linked, so no claim schedule can be built.';
+		$po['has_config_issue'] = true;
+		$this->record_allrunningdf_config_issue($config_issues, 0, 'Payment term not linked', $df_id, $order_value);
+		return $po;
+	}
+
+	if (empty($milestones)) {
+		$po['issues'][] = 'Payment term "' . $term_name . '" has no milestones configured, so nothing can be claimed against it.';
+		$po['has_config_issue'] = true;
+		$this->record_allrunningdf_config_issue($config_issues, $term_id, 'No milestones configured', $df_id, $order_value, $term_name);
+		return $po;
+	}
+
+	if (!empty($health['superseded_count'])) {
+		$po['issues'][] = 'Payment term "' . $term_name . '" carries an older milestone mapping as well. '
+			. $health['superseded_count'] . ' superseded milestone(s) were ignored so the order is not billed twice.';
+		$po['has_config_issue'] = true;
+		$this->record_allrunningdf_config_issue($config_issues, $term_id, 'Duplicate milestone generations', $df_id, $order_value, $term_name);
+	}
+
+	if (abs($po['percentage_total'] - 100) > 0.01) {
+		$po['issues'][] = 'Milestone percentages on "' . $term_name . '" total '
+			. rtrim(rtrim(number_format($po['percentage_total'], 2, '.', ''), '0'), '.') . '%, not 100%.';
+		$po['has_config_issue'] = true;
+		$this->record_allrunningdf_config_issue($config_issues, $term_id, 'Percentages do not total 100', $df_id, $order_value, $term_name);
+	}
+
+	if (!empty($health['missing_task_count'])) {
+		$po['issues'][] = 'Payment term "' . $term_name . '" points at ' . $health['missing_task_count']
+			. ' milestone task(s) that no longer exist in the task master.';
+		$po['has_config_issue'] = true;
+		$this->record_allrunningdf_config_issue($config_issues, $term_id, 'Milestone task no longer exists', $df_id, $order_value, $term_name);
+	}
+
+	$unmapped_count = 0;
+
+	foreach ($milestones as $milestone_row) {
+		$task_id = (int) $milestone_row['milestone_task_id'];
+		$percentage = (float) $milestone_row['payment_percentage'];
+		$amount = round(($order_value * $percentage) / 100, 2);
+
+		$candidates = isset($task_map[$df_id][$task_id]) ? $task_map[$df_id][$task_id] : array();
+		$matched = $this->pick_allrunningdf_task_candidate($candidates, $po['po_id']);
+
+		$milestone = array(
+			'task_name' => trim((string) $milestone_row['task_name']) !== ''
+				? trim((string) $milestone_row['task_name'])
+				: 'Task #' . $task_id . ' (missing from task master)',
+			'percentage' => $percentage,
+			'percentage_display' => rtrim(rtrim(number_format($percentage, 2, '.', ''), '0'), '.') . '%',
+			'amount' => $amount,
+			'amount_display' => $this->format_allrunningdf_money($amount),
+			'trigger_date' => 'Not scheduled',
+			'trigger_date_raw' => '',
+			'claim_status_key' => 'unmapped',
+			'claim_status_label' => 'Not scheduled',
+			'is_claimable' => false
+		);
+
+		if (empty($matched)) {
+			if (trim((string) $milestone_row['task_name']) !== '') {
+				$unmapped_count++;
+			}
+		} else {
+			$task_status = (int) $matched['task_status'];
+			$end_date = trim((string) $matched['end_date']);
+			$completed_on = trim((string) $matched['task_completed_on']);
+
+			if ($task_status === 1) {
+				$milestone['is_claimable'] = true;
+				$milestone['claim_status_key'] = 'claimable';
+				$milestone['claim_status_label'] = 'Claimable';
+				$milestone['trigger_date_raw'] = ($completed_on !== '' ? substr($completed_on, 0, 10) : $end_date);
+				$milestone['trigger_date'] = $this->format_allrunningdf_date($milestone['trigger_date_raw']);
+			} elseif ($task_status === 2) {
+				$milestone['claim_status_key'] = 'approval';
+				$milestone['claim_status_label'] = 'Awaiting approval';
+				$milestone['trigger_date_raw'] = $end_date;
+				$milestone['trigger_date'] = $this->format_allrunningdf_date($end_date);
+			} elseif ($end_date !== '' && $end_date !== '0000-00-00' && $end_date < $today) {
+				$milestone['claim_status_key'] = 'slipped';
+				$milestone['claim_status_label'] = 'Trigger overdue';
+				$milestone['trigger_date_raw'] = $end_date;
+				$milestone['trigger_date'] = $this->format_allrunningdf_date($end_date);
+				$po['slipped_amount'] += $amount;
+				$po['slipped_count']++;
+			} else {
+				$milestone['claim_status_key'] = 'planned';
+				$milestone['claim_status_label'] = 'Planned';
+				$milestone['trigger_date_raw'] = $end_date;
+				$milestone['trigger_date'] = $this->format_allrunningdf_date($end_date);
+			}
+
+			if ($milestone['is_claimable']) {
+				$po['claimable_amount'] += $amount;
+				$po['claimable_count']++;
+			}
+		}
+
+		$po['milestones'][] = $milestone;
+	}
+
+	if ($unmapped_count > 0) {
+		$po['issues'][] = $unmapped_count . ' milestone(s) on this PO have no matching task scheduled on the DF, so they can never turn claimable.';
+		$po['has_config_issue'] = true;
+		$this->record_allrunningdf_config_issue($config_issues, $term_id, 'Milestone task not scheduled on the DF', $df_id, $order_value, $term_name);
+	}
+
+	$po['claimable_amount'] = round($po['claimable_amount'], 2);
+	$po['slipped_amount'] = round($po['slipped_amount'], 2);
+
+	return $po;
+}
+
+private function record_allrunningdf_config_issue(&$config_issues, $term_id, $problem, $df_id, $order_value, $term_name = '')
+{
+	$key = $term_id . '|' . $problem;
+
+	if (!isset($config_issues[$key])) {
+		$config_issues[$key] = array(
+			'payment_term_id' => (int) $term_id,
+			'payment_term_name' => $term_name !== '' ? $term_name : 'Payment term not linked',
+			'problem' => $problem,
+			'df_ids' => array(),
+			'order_value' => 0
+		);
+	}
+
+	if (!in_array((int) $df_id, $config_issues[$key]['df_ids'], true)) {
+		$config_issues[$key]['df_ids'][] = (int) $df_id;
+		$config_issues[$key]['order_value'] += (float) $order_value;
+	}
+}
+
+private function apply_allrunningdf_ledger($row, $ledger_row, $invoice_usage, $today)
+{
+	$issues = $row['issues'];
+
+	$out = array(
+		'ledger_available' => false,
+		'invoice_no' => '',
+		'invoice_date' => 'Not invoiced',
+		'invoice_date_raw' => '',
+		'invoiced_amount' => 0,
+		'taxable_sale' => 0,
+		'received_amount' => 0,
+		'balance_amount' => 0,
+		'due_date' => 'Not set',
+		'due_date_raw' => '',
+		'due_status_key' => 'not_updated',
+		'due_status_label' => 'Not updated',
+		'overdue_balance' => 0,
+		'days_overdue' => 0,
+		'nos_of_machines' => '',
+		'remarks' => '',
+		'commissioning_status' => '',
+		'last_updated_by' => 'Not updated',
+		'last_updated_on' => 'Not updated',
+		'invoice_shared_with' => array()
+	);
+
+	if (!empty($ledger_row)) {
+		$invoiced = (float) $ledger_row['invoice_amount'];
+		$received = (float) $ledger_row['payment_received'];
+
+		/* Balance is always recomputed. The stored column is maintained by the
+		   dispatch screen and can fall behind when one of the two amounts is
+		   edited outside it. */
+		$balance = round($invoiced - $received, 2);
+		$stored_balance = (float) $ledger_row['balance_amount'];
+
+		$due_state = $this->get_allrunningdf_dispatch_due_state($ledger_row['payment_due_status']);
+		$due_date_raw = trim((string) $ledger_row['due_date']);
+		$invoice_no = strtoupper(trim((string) $ledger_row['invoice_no']));
+
+		$out['ledger_available'] = true;
+		$out['invoice_no'] = $invoice_no;
+		$out['invoice_date'] = $this->format_allrunningdf_date($ledger_row['invoice_date']);
+		$out['invoice_date_raw'] = trim((string) $ledger_row['invoice_date']);
+		$out['invoiced_amount'] = round($invoiced, 2);
+		$out['taxable_sale'] = round((float) $ledger_row['taxable_sale'], 2);
+		$out['received_amount'] = round($received, 2);
+		$out['balance_amount'] = $balance;
+		$out['due_date'] = $due_date_raw !== '' && $due_date_raw !== '0000-00-00'
+			? $this->format_allrunningdf_date($due_date_raw) : 'Not set';
+		$out['due_date_raw'] = $due_date_raw;
+		$out['due_status_key'] = $due_state['key'];
+		$out['due_status_label'] = $due_state['label'];
+		$out['nos_of_machines'] = trim((string) $ledger_row['nos_of_machines']);
+		$out['remarks'] = trim((string) $ledger_row['remarks']);
+		$out['commissioning_status'] = trim((string) $ledger_row['commissioning_status']);
+		$out['last_updated_on'] = $this->format_allrunningdf_datetime($ledger_row['updated_on']);
+
+		$updated_by = $this->format_allrunningdf_person_name(
+			$ledger_row['tracker_updater_title'],
+			$ledger_row['tracker_updater_first_name'],
+			$ledger_row['tracker_updater_last_name']
+		);
+		$out['last_updated_by'] = $updated_by !== '' ? $updated_by : 'Not updated';
+
+		if ($balance > 0.01 && $due_date_raw !== '' && $due_date_raw !== '0000-00-00' && $due_date_raw < $today) {
+			$out['overdue_balance'] = $balance;
+			$out['days_overdue'] = (int) floor((strtotime($today) - strtotime($due_date_raw)) / 86400);
+		}
+
+		if (abs($stored_balance - $balance) > 0.01) {
+			$issues[] = 'Stored balance on the dispatch ledger is ' . $this->format_allrunningdf_money($stored_balance)
+				. ' but invoice minus receipt works out to ' . $this->format_allrunningdf_money($balance) . '.';
+		}
+
+		if ($received > $invoiced + 0.01) {
+			$issues[] = 'Receipts exceed the invoiced amount on the dispatch ledger. Please verify the entries.';
+		}
+
+		if ($invoice_no !== '' && $invoiced <= 0) {
+			$issues[] = 'Dispatch ledger carries invoice ' . $invoice_no . ' but no invoice amount.';
+		}
+
+		if ($invoice_no !== '' && isset($invoice_usage[$invoice_no]) && count($invoice_usage[$invoice_no]) > 1) {
+			$out['invoice_shared_with'] = $invoice_usage[$invoice_no];
+			$issues[] = 'Invoice ' . $invoice_no . ' is recorded against ' . count($invoice_usage[$invoice_no])
+				. ' DFs. Its amount is counted once in the totals, but the split per DF needs confirming.';
+		}
+
+		if ($balance > 0.01 && ($due_date_raw === '' || $due_date_raw === '0000-00-00')) {
+			$issues[] = 'A balance of ' . $this->format_allrunningdf_money($balance) . ' is outstanding but no due date is set on the ledger.';
+		}
+	}
+
+	$out['unbilled_amount'] = round(max(0, $row['claimable_amount'] - $out['invoiced_amount']), 2);
+	$out['pipeline_amount'] = round(max(0, $row['order_value'] - $row['claimable_amount']), 2);
+	$out['outstanding_amount'] = round(max(0, $row['order_value'] - $out['received_amount']), 2);
+	$out['collection_percentage'] = $row['order_value'] > 0
+		? round(($out['received_amount'] / $row['order_value']) * 100)
+		: 0;
+
+	foreach (array(
+		'invoiced_amount', 'taxable_sale', 'received_amount', 'balance_amount', 'overdue_balance',
+		'unbilled_amount', 'pipeline_amount', 'outstanding_amount'
+	) as $money_field) {
+		$out[$money_field . '_display'] = $this->format_allrunningdf_money($out[$money_field]);
+	}
+
+	$out['issues'] = $issues;
+
+	return $out;
+}
+
+private function grade_allrunningdf_row($row)
+{
+	if ($row['po_count'] === 0) {
+		return array('health_key' => 'nopo', 'health_label' => 'No PO recorded', 'health_priority' => 6,
+			'focus' => 'This DF is running but no purchase order is recorded against it.');
+	}
+
+	if (!empty($row['has_config_issue']) && $row['claimable_amount'] <= 0) {
+		return array('health_key' => 'config', 'health_label' => 'Configuration gap', 'health_priority' => 5,
+			'focus' => 'Payment setup is incomplete, so this order cannot be tracked to collection.');
+	}
+
+	if ($row['overdue_balance'] > 0.01) {
+		return array('health_key' => 'overdue', 'health_label' => 'Payment overdue', 'health_priority' => 4,
+			'focus' => $row['overdue_balance_display'] . ' is past its due date by ' . $row['days_overdue'] . ' day(s).');
+	}
+
+	if ($row['unbilled_amount'] > 0.01) {
+		return array('health_key' => 'unbilled', 'health_label' => 'Ready to invoice', 'health_priority' => 3,
+			'focus' => $row['unbilled_amount_display'] . ' has become claimable but is not invoiced yet.');
+	}
+
+	if (!empty($row['has_config_issue'])) {
+		return array('health_key' => 'config', 'health_label' => 'Configuration gap', 'health_priority' => 5,
+			'focus' => 'Payment setup needs correction before the numbers can be relied on.');
+	}
+
+	if ($row['balance_amount'] > 0.01) {
+		return array('health_key' => 'watch', 'health_label' => 'Awaiting payment', 'health_priority' => 2,
+			'focus' => $row['balance_amount_display'] . ' is invoiced and within its due date.');
+	}
+
+	if ($row['received_amount'] > 0 && $row['outstanding_amount'] <= 0.01) {
+		return array('health_key' => 'collected', 'health_label' => 'Fully collected', 'health_priority' => 0,
+			'focus' => 'The full order value has been collected.');
+	}
+
+	return array('health_key' => 'ontrack', 'health_label' => 'On track', 'health_priority' => 1,
+		'focus' => 'Nothing is claimable or overdue right now.');
+}
+
+private function blank_allrunningdf_summary()
+{
+	return array(
+		'df_count' => 0, 'po_count' => 0,
+		'order_value' => 0, 'claimable_amount' => 0, 'pipeline_amount' => 0,
+		'invoiced_amount' => 0, 'received_amount' => 0, 'balance_amount' => 0,
+		'unbilled_amount' => 0, 'overdue_amount' => 0, 'outstanding_amount' => 0, 'slipped_amount' => 0,
+		'slipped_df_count' => 0,
+		'collection_percentage' => 0,
+		'overdue_df_count' => 0, 'unbilled_df_count' => 0, 'config_df_count' => 0,
+		'no_po_df_count' => 0, 'no_ledger_df_count' => 0, 'shared_invoice_df_count' => 0,
+		'_counted_invoices' => array()
+	);
+}
+
+private function accumulate_allrunningdf_summary(&$summary, $row)
+{
+	$summary['df_count']++;
+	$summary['po_count'] += $row['po_count'];
+	$summary['order_value'] += $row['order_value'];
+	$summary['claimable_amount'] += $row['claimable_amount'];
+	$summary['pipeline_amount'] += $row['pipeline_amount'];
+	$summary['unbilled_amount'] += $row['unbilled_amount'];
+	$summary['slipped_amount'] += $row['slipped_amount'];
+	if ($row['slipped_amount'] > 0.01) {
+		$summary['slipped_df_count']++;
+	}
+
+	/* One invoice can be recorded against several DFs. Counting its amount once
+	   keeps the invoiced and collected totals honest. */
+	$invoice_key = $row['invoice_no'] !== '' ? $row['invoice_no'] : ('DF#' . $row['df_id']);
+	if (!isset($summary['_counted_invoices'][$invoice_key])) {
+		$summary['_counted_invoices'][$invoice_key] = true;
+		$summary['invoiced_amount'] += $row['invoiced_amount'];
+		$summary['received_amount'] += $row['received_amount'];
+		$summary['balance_amount'] += $row['balance_amount'];
+		$summary['overdue_amount'] += $row['overdue_balance'];
+	}
+
+	if (!empty($row['invoice_shared_with'])) {
+		$summary['shared_invoice_df_count']++;
+	}
+	if ($row['overdue_balance'] > 0.01) {
+		$summary['overdue_df_count']++;
+	}
+	if ($row['unbilled_amount'] > 0.01) {
+		$summary['unbilled_df_count']++;
+	}
+	if (!empty($row['has_config_issue'])) {
+		$summary['config_df_count']++;
+	}
+	if ($row['po_count'] === 0) {
+		$summary['no_po_df_count']++;
+	}
+	if (!$row['ledger_available']) {
+		$summary['no_ledger_df_count']++;
+	}
+}
+
+private function finalise_allrunningdf_summary($summary)
+{
+	unset($summary['_counted_invoices']);
+
+	$summary['outstanding_amount'] = round(max(0, $summary['order_value'] - $summary['received_amount']), 2);
+	$summary['collection_percentage'] = $summary['order_value'] > 0
+		? round(($summary['received_amount'] / $summary['order_value']) * 100)
+		: 0;
+
+	foreach (array(
+		'order_value', 'claimable_amount', 'pipeline_amount', 'invoiced_amount', 'received_amount',
+		'balance_amount', 'unbilled_amount', 'overdue_amount', 'outstanding_amount', 'slipped_amount'
+	) as $money_field) {
+		$summary[$money_field] = round($summary[$money_field], 2);
+		$summary[$money_field . '_display'] = $this->format_allrunningdf_money($summary[$money_field]);
+	}
+
+	return $summary;
+}
+
+private function sort_allrunningdf_rows($rows)
+{
+	usort($rows, function ($left, $right) {
+		if ((int) $left['health_priority'] !== (int) $right['health_priority']) {
+			return ((int) $left['health_priority'] > (int) $right['health_priority']) ? -1 : 1;
+		}
+		foreach (array('overdue_balance', 'unbilled_amount', 'balance_amount', 'order_value') as $money_field) {
+			if (abs((float) $left[$money_field] - (float) $right[$money_field]) > 0.01) {
+				return ((float) $left[$money_field] > (float) $right[$money_field]) ? -1 : 1;
+			}
+		}
+		return strcmp((string) $left['df_no'], (string) $right['df_no']);
+	});
+
+	return $rows;
+}
+
+private function summarise_allrunningdf_config_issues($config_issues)
+{
+	$summarised = array();
+
+	foreach ($config_issues as $issue) {
+		$issue['df_count'] = count($issue['df_ids']);
+		$issue['order_value'] = round($issue['order_value'], 2);
+		$issue['order_value_display'] = $this->format_allrunningdf_money($issue['order_value']);
+		$summarised[] = $issue;
+	}
+
+	usort($summarised, function ($left, $right) {
+		if (abs((float) $left['order_value'] - (float) $right['order_value']) > 0.01) {
+			return ((float) $left['order_value'] > (float) $right['order_value']) ? -1 : 1;
+		}
+		return strcmp((string) $left['problem'], (string) $right['problem']);
+	});
+
+	return $summarised;
+}
+
+private function finalise_allrunningdf_marketing($marketing_summary)
+{
+	foreach ($marketing_summary as $key => $marketing_row) {
+		foreach (array('order_value', 'received_amount', 'balance_amount', 'unbilled_amount') as $money_field) {
+			$marketing_summary[$key][$money_field] = round($marketing_row[$money_field], 2);
+			$marketing_summary[$key][$money_field . '_display'] = $this->format_allrunningdf_money($marketing_row[$money_field]);
+		}
+	}
+
+	$marketing_summary = array_values($marketing_summary);
+	usort($marketing_summary, function ($left, $right) {
+		foreach (array('unbilled_amount', 'balance_amount', 'order_value') as $money_field) {
+			if (abs((float) $left[$money_field] - (float) $right[$money_field]) > 0.01) {
+				return ((float) $left[$money_field] > (float) $right[$money_field]) ? -1 : 1;
+			}
+		}
+		return strcmp((string) $left['label'], (string) $right['label']);
+	});
+
+	return array_slice($marketing_summary, 0, 8);
+}
+
+/* The rows a finance user should act on today, each with the one thing to do. */
+private function build_allrunningdf_action_rows($rows)
+{
+	$actions = array();
+
+	foreach ($rows as $row) {
+		if ($row['overdue_balance'] > 0.01) {
+			$actions[] = array(
+				'df_no' => $row['df_no'], 'company_name' => $row['company_name'],
+				'action' => 'Chase payment', 'amount_display' => $row['overdue_balance_display'],
+				'detail' => 'Overdue by ' . $row['days_overdue'] . ' day(s) against invoice '
+					. ($row['invoice_no'] !== '' ? $row['invoice_no'] : 'not numbered') . '.',
+				'tone' => 'red', 'amount' => $row['overdue_balance']
+			);
+		} elseif ($row['unbilled_amount'] > 0.01) {
+			$actions[] = array(
+				'df_no' => $row['df_no'], 'company_name' => $row['company_name'],
+				'action' => 'Raise invoice', 'amount_display' => $row['unbilled_amount_display'],
+				'detail' => $row['claimable_count'] . ' milestone(s) have become claimable but are not invoiced.',
+				'tone' => 'amber', 'amount' => $row['unbilled_amount']
+			);
+		} elseif ($row['po_count'] === 0) {
+			$actions[] = array(
+				'df_no' => $row['df_no'], 'company_name' => $row['company_name'],
+				'action' => 'Record the PO', 'amount_display' => 'No value',
+				'detail' => 'DF is released and running with no purchase order against it.',
+				'tone' => 'red', 'amount' => 0
+			);
+		}
+	}
+
+	usort($actions, function ($left, $right) {
+		return ((float) $left['amount'] >= (float) $right['amount']) ? -1 : 1;
+	});
+
+	return array_slice($actions, 0, 8);
+}
+
+private function build_allrunningdf_insights($summary, $rows, $config_issues)
+{
+	$insights = array();
+
+	if ($summary['unbilled_amount'] > 0.01) {
+		$insights[] = $summary['unbilled_amount_display'] . ' across ' . $summary['unbilled_df_count']
+			. ' DF(s) has become claimable under the payment terms but is not invoiced yet. This is the fastest cash available.';
+	}
+
+	if ($summary['overdue_amount'] > 0.01) {
+		$insights[] = $summary['overdue_amount_display'] . ' is invoiced and past its due date across '
+			. $summary['overdue_df_count'] . ' DF(s).';
+	}
+
+	if ($summary['slipped_amount'] > 0.01) {
+		$insights[] = $summary['slipped_amount_display'] . ' of billing is blocked behind milestone work that is past its target date, across '
+			. $summary['slipped_df_count'] . ' DF(s). Clearing that work is what turns it into an invoice.';
+	}
+
+	if ($summary['no_ledger_df_count'] > 0) {
+		$insights[] = $summary['no_ledger_df_count'] . ' of ' . $summary['df_count']
+			. ' running DF(s) have no dispatch ledger entry, so nothing invoiced or collected is recorded against them.';
+	}
+
+	if (!empty($config_issues)) {
+		$config_value = 0;
+		foreach ($config_issues as $issue) {
+			$config_value += $issue['order_value'];
+		}
+		$insights[] = $this->format_allrunningdf_money($config_value)
+			. ' of order value sits on payment terms that need correction. Those rows cannot be tracked to collection until the terms are fixed.';
+	}
+
+	if ($summary['shared_invoice_df_count'] > 0) {
+		$insights[] = $summary['shared_invoice_df_count'] . ' DF(s) share an invoice number with another DF. '
+			. 'Each invoice is counted once in the totals above.';
+	}
+
+	if ($summary['no_po_df_count'] > 0) {
+		$insights[] = $summary['no_po_df_count'] . ' running DF(s) have no purchase order recorded at all.';
+	}
+
+	if (empty($insights)) {
+		$insights[] = 'Nothing is claimable, overdue or misconfigured in the current view.';
+	}
+
+	return $insights;
+}
+
+/*
+| Invoice and receipt capture for a running DF, writing to the same ledger the
+| dispatch report screen uses (mcs_dispatch_report_tracking, one row per DF).
+| Finance can record the money where they are already reading it, instead of
+| switching to Machine/mcsdispatchreport.
+*/
+public function update_df_ledger()
+{
+	$user_id = $this->session->userdata['logged_in']['user_id'];
+	$df_id = (int) $this->input->post('df_id');
+	$redirect_url = page_url . 'Accounts/allrunningdf/' . $this->uri->segment(3) . '/' . $this->uri->segment(4) . '/' . $this->uri->segment(5);
+
+	if ($df_id <= 0 || $this->db->where('id', $df_id)->count_all_results('df_release') === 0) {
+		$this->session->set_flashdata('message', '<div class="alert alert-danger alert-dismissable">That DF could not be found.</div>');
+		redirect($redirect_url);
+	}
+
+	$invoice_amount = (float) $this->input->post('invoice_amount');
+	$payment_received = (float) $this->input->post('payment_received');
+	$taxable_sale = (float) $this->input->post('taxable_sale');
+
+	if ($invoice_amount < 0 || $payment_received < 0 || $taxable_sale < 0) {
+		$this->session->set_flashdata('message', '<div class="alert alert-danger alert-dismissable">Amounts cannot be negative.</div>');
+		redirect($redirect_url);
+	}
+
+	date_default_timezone_set('Asia/Kolkata');
+
+	$save_data = array(
+		'invoice_no' => trim((string) $this->input->post('invoice_no')),
+		'invoice_date' => $this->post_date_or_null('invoice_date'),
+		'invoice_amount' => $invoice_amount,
+		'taxable_sale' => $taxable_sale,
+		'payment_received' => $payment_received,
+		'balance_amount' => round($invoice_amount - $payment_received, 2),
+		'due_date' => $this->post_date_or_null('due_date'),
+		'payment_due_status' => trim((string) $this->input->post('payment_due_status')),
+		'remarks' => trim((string) $this->input->post('remarks')),
+		'updated_by' => $user_id,
+		'updated_on' => date('Y-m-d H:i:s')
+	);
+
+	if ($this->db->where('df_id', $df_id)->count_all_results('mcs_dispatch_report_tracking') > 0) {
+		$this->db->where('df_id', $df_id);
+		$this->db->update('mcs_dispatch_report_tracking', $save_data);
+	} else {
+		$save_data['df_id'] = $df_id;
+		$save_data['created_on'] = date('Y-m-d H:i:s');
+		$this->db->insert('mcs_dispatch_report_tracking', $save_data);
+	}
+
+	$this->session->set_flashdata('message', '<div class="alert alert-success alert-dismissable">Dispatch ledger updated for this DF.</div>');
+	redirect($redirect_url);
+}
+
+private function post_date_or_null($field)
+{
+	$value = trim((string) $this->input->post($field));
+	if ($value === '' || $value === '0000-00-00') {
+		return null;
+	}
+
+	$timestamp = strtotime($value);
+
+	return $timestamp === false ? null : date('Y-m-d', $timestamp);
+}
+
+/* A milestone task can be scheduled more than once on a DF. Prefer the row
+   booked against this PO, then one already marked as a payment stage, then the
+   most recent. */
 private function pick_allrunningdf_task_candidate($candidates, $po_id)
 {
 	if (empty($candidates)) {
@@ -857,6 +1117,7 @@ private function pick_allrunningdf_task_candidate($candidates, $po_id)
 
 	foreach ($candidates as $candidate) {
 		$candidate_po_id = isset($candidate['po_id']) ? (int) $candidate['po_id'] : 0;
+
 		$po_score = 1;
 		if ($po_id > 0 && $candidate_po_id === (int) $po_id) {
 			$po_score = 3;
@@ -864,61 +1125,15 @@ private function pick_allrunningdf_task_candidate($candidates, $po_id)
 			$po_score = 2;
 		}
 
-		$paymentstage_score = ((int) $candidate['paymentstage'] === 1) ? 1 : 0;
-		$id_score = (int) $candidate['id'];
-		$current_score = array($po_score, $paymentstage_score, $id_score);
+		$current_score = array($po_score, ((int) $candidate['paymentstage'] === 1) ? 1 : 0, (int) $candidate['id']);
 
-		if (
-			$current_score[0] > $best_score[0] ||
-			($current_score[0] === $best_score[0] && $current_score[1] > $best_score[1]) ||
-			($current_score[0] === $best_score[0] && $current_score[1] === $best_score[1] && $current_score[2] > $best_score[2])
-		) {
+		if ($current_score > $best_score) {
 			$best_score = $current_score;
 			$best_candidate = $candidate;
 		}
 	}
 
 	return $best_candidate;
-}
-
-private function get_allrunningdf_followup_map($record_ids)
-{
-	$followup_map = array();
-	if (empty($record_ids)) {
-		return $followup_map;
-	}
-
-	$clean_ids = array();
-	foreach ($record_ids as $record_id) {
-		$clean_ids[] = (int) $record_id;
-	}
-	$clean_ids = array_unique($clean_ids);
-
-	$query = "
-		SELECT
-			pf.record_id,
-			pf.remarks,
-			pf.next_followup,
-			pf.added_on,
-			u.title,
-			u.first_name,
-			u.last_name
-		FROM payment_followup pf
-		INNER JOIN (
-			SELECT MAX(id) AS latest_id
-			FROM payment_followup
-			WHERE record_id IN (" . implode(',', $clean_ids) . ")
-			GROUP BY record_id
-		) latest_followup ON latest_followup.latest_id = pf.id
-		LEFT JOIN system_users u ON u.user_id = pf.added_by
-	";
-
-	$followup_rows = $this->db->query($query)->result_array();
-	foreach ($followup_rows as $followup_row) {
-		$followup_map[(int) $followup_row['record_id']] = $followup_row;
-	}
-
-	return $followup_map;
 }
 
 private function format_allrunningdf_money($amount)
@@ -934,11 +1149,8 @@ private function format_allrunningdf_date($value)
 	}
 
 	$timestamp = strtotime($value);
-	if ($timestamp === false) {
-		return $value;
-	}
 
-	return date('d-m-Y', $timestamp);
+	return $timestamp === false ? $value : date('d-m-Y', $timestamp);
 }
 
 private function format_allrunningdf_datetime($value)
@@ -949,11 +1161,8 @@ private function format_allrunningdf_datetime($value)
 	}
 
 	$timestamp = strtotime($value);
-	if ($timestamp === false) {
-		return $value;
-	}
 
-	return date('d-m-Y h:i A', $timestamp);
+	return $timestamp === false ? $value : date('d-m-Y h:i A', $timestamp);
 }
 
 private function format_allrunningdf_title_case($value)
@@ -963,8 +1172,7 @@ private function format_allrunningdf_title_case($value)
 		return '';
 	}
 
-	$value = preg_replace('/\s+/', ' ', $value);
-	return ucwords(strtolower($value));
+	return ucwords(strtolower(preg_replace('/\s+/', ' ', $value)));
 }
 
 private function format_allrunningdf_person_name($title, $first_name, $last_name)
@@ -982,21 +1190,105 @@ private function format_allrunningdf_person_name($title, $first_name, $last_name
 
 private function get_allrunningdf_dispatch_due_state($status)
 {
-	$status = strtolower(trim((string) $status));
-
-	switch ($status) {
+	switch (strtolower(trim((string) $status))) {
 		case 'due':
 			return array('key' => 'due', 'label' => 'Due');
 		case 'not due':
-			return array('key' => 'not_due', 'label' => 'Not Due');
+			return array('key' => 'not_due', 'label' => 'Not due');
 		case 'received':
 			return array('key' => 'received', 'label' => 'Received');
 		case 'hold':
 			return array('key' => 'hold', 'label' => 'Hold');
 		default:
-			return array('key' => 'not_updated', 'label' => 'Not Updated');
+			return array('key' => 'not_updated', 'label' => 'Not updated');
 	}
 }
+
+
+	public function paymentdashboard()
+	{
+		$filters = $this->get_finance_calendar_filters();
+
+		$data = array(
+			'filters' => $filters,
+			'calendar' => $this->build_finance_calendar($filters['start_date'], $filters['end_date'], $filters['df_id']),
+			'df_options' => $this->get_allrunningdf_df_options()
+		);
+
+		$this->load->view('accounts/upcomingpayments', $data);
+	}
+
+	private function get_finance_calendar_filters()
+	{
+		$start_raw = trim((string) $this->uri->segment(3));
+		$end_raw = trim((string) $this->uri->segment(4));
+		$df_raw = trim((string) $this->uri->segment(5));
+
+		$start_date = $this->normalize_allrunningdf_date($start_raw, date('Y-m-d'));
+		$end_date = $this->normalize_allrunningdf_date($end_raw, date('Y-m-d', strtotime('+7 days')));
+
+		if (strtotime($start_date) > strtotime($end_date)) {
+			$swap = $start_date;
+			$start_date = $end_date;
+			$end_date = $swap;
+		}
+
+		return array(
+			'start_date' => $start_date,
+			'end_date' => $end_date,
+			'df_id' => ($df_raw === '' ? 'ALL' : $df_raw)
+		);
+	}
+
+	public function overduepaymentdashboard()
+	{
+		$this->load->view('accounts/overduepayments', array(
+			'receivables' => $this->build_finance_receivables()
+		));
+	}
+
+	/* Kept for the marketing payment dashboard, which shows these two as tiles.
+	   Both now read the dispatch ledger rather than the unused milestone
+	   receipt columns, so they agree with the pages they link to. */
+	public function upcomingpaymentsthisweek()
+	{
+		return $this->format_allrunningdf_money(
+			$this->get_ledger_balance_due_between(date('Y-m-d'), date('Y-m-d', strtotime('+7 days')))
+		);
+	}
+
+	public function overduepayments()
+	{
+		$summary = $this->build_finance_receivables();
+
+		return $summary['summary']['overdue_total_display'];
+	}
+
+	private function get_ledger_balance_due_between($start_date, $end_date)
+	{
+		$this->db->select('invoice_no, invoice_amount, payment_received, due_date');
+		$this->db->from('mcs_dispatch_report_tracking');
+		// escaping off: this is an expression, not a column name
+		$this->db->where('(invoice_amount - payment_received) > 0.01', null, false);
+		$this->db->where('due_date >=', $start_date);
+		$this->db->where('due_date <=', $end_date);
+
+		$total = 0;
+		$counted = array();
+
+		foreach ($this->db->get()->result_array() as $row) {
+			$invoice_no = strtoupper(trim((string) $row['invoice_no']));
+			$key = $invoice_no !== '' ? $invoice_no : uniqid('inv', true);
+			if (isset($counted[$key])) {
+				continue;
+			}
+			$counted[$key] = true;
+			$total += (float) $row['invoice_amount'] - (float) $row['payment_received'];
+		}
+
+		return round($total, 2);
+	}
+
 
 public function allrunningdflist()
 	{
@@ -1107,14 +1399,6 @@ public function allrunningdflist()
 		echo json_encode($results);
 	}
 
-	public function paymentdashboard(){
-		//$this->updatepaymentstage();
-		$thisweekpayment = $this->upcomingpaymentsthisweek();
-		$overduepayments = $this->overduepayments();
-		$data['thisweekpayment'] = $thisweekpayment;
-		$data['overduepayments'] = $overduepayments;
-		$this->load->view('accounts/upcomingpayments',$data);
-	}
 
 	public function upcomingpaymentlist()
 	{
@@ -1345,66 +1629,30 @@ public function allrunningdflist()
 	}
 
 	public function filterbydateanddf(){
-		$startdate = date('Y-m-d',strtotime($this->input->post('start_date')));
-		$enddate = date('Y-m-d',strtotime($this->input->post('end_date')));
-		$dfno = $this->input->post('df_no');
+		$startdate = trim((string) $this->input->post('start_date'));
+		$enddate = trim((string) $this->input->post('end_date'));
+		$dfno = trim((string) $this->input->post('df_no'));
+
+		if ($dfno === '') {
+			$dfno = 'ALL';
+		}
+
+		// An empty date would become 1970-01-01 through strtotime, so fall back
+		// to the default week instead of sending the user to a dead window.
+		$startdate = $this->normalize_allrunningdf_date($startdate, date('Y-m-d'));
+		$enddate = $this->normalize_allrunningdf_date($enddate, date('Y-m-d', strtotime('+7 days')));
+
+		if (strtotime($startdate) > strtotime($enddate)) {
+			$tempdate = $startdate;
+			$startdate = $enddate;
+			$enddate = $tempdate;
+		}
+
 		redirect(page_url.'Accounts/paymentdashboard/'.$startdate."/".$enddate."/".$dfno);
-
 	}
 
-	public function upcomingpaymentsthisweek(){
-		$calculatedvalue[] = array();
-		$calculatedvalue[] = 0;
-		$startdate = date('Y-m-d');
-		$currentDate = new DateTime();
-		$currentDate->add(new DateInterval('P7D'));
-		$endate = $currentDate->format('Y-m-d');
-		$this->db->select('a.id as recordid, a.end_date, a.df_id, a.task_status, c.company_name, c.pono, c.podate, c.payment_term, f.payment_terms, c.order_value, d.df_no, c.po_attachment, e.task_name')->from('task_department_wise_scheduling a')->join('poreceived c','a.df_id=c.df_id')->join('df_release d','a.df_id=d.id')->join('task_management e','a.taskid=e.task_id')->join('payment_terms f','c.payment_term=f.id')->where('a.paymentstage',1)->order_by('a.end_date','asc');
-			$this->db->where('a.end_date BETWEEN "'.$startdate. '" and "'.$endate.'"');
-			$q = $this->db->get();
-			if($q->num_rows()>0){
-			foreach($q->result() as $row){
-				 $q = $this->db->select('a.payment_percentage, a.milestone, b.task_name,c.id as scheduledtaskid, c.task_status, c.end_date, c.amount_received, c.amount_received_date, d.first_name, d.last_name')->from('payment_terms_milestone a')->join('task_management b','a.milestone=b.task_id','left')->join('task_department_wise_scheduling c','b.task_id=c.taskid')->join('system_users d','c.amount_received_by=d.user_id','left')->where('a.payment_term_id',$row->payment_term)->where('c.id',$row->recordid)->get();
 
-				 	foreach($q->result() as $row1);
-				$receivedmsg = "";	
-				$ordervalue = $row->order_value;
-				$calculatedvalue[] = ($ordervalue*$row1->payment_percentage)/100;
 
-			}
-		}	
-				$sumtotal = array_sum($calculatedvalue);
-				$moneyformat = number_format($sumtotal, 2, '.', ','); 
-				$partpayment = '₹' . $moneyformat;
-				return $partpayment;
-	}
-
-		public function overduepayments(){
-		$calculatedvalue[] = array();
-		$calculatedvalue[] = 0;
-		$this->db->select('a.id as recordid, a.end_date, a.df_id, a.task_status, c.company_name, c.pono, c.podate, c.payment_term, f.payment_terms, c.order_value, d.df_no, c.po_attachment, e.task_name')->from('task_department_wise_scheduling a')->join('poreceived c','a.df_id=c.df_id')->join('df_release d','a.df_id=d.id')->join('task_management e','a.taskid=e.task_id')->join('payment_terms f','c.payment_term=f.id')->where('a.paymentstage',1)->order_by('a.end_date','asc')->where('a.task_status',1)->where('a.end_date<=',date('Y-m-d'));
-			
-			$q = $this->db->get();
-				if($q->num_rows()>0){
-			foreach($q->result() as $row){
-				 $q1 = $this->db->select('a.payment_percentage, a.milestone, b.task_name,c.id as scheduledtaskid, c.task_status, c.end_date, c.amount_received, c.amount_received_date, d.first_name, d.last_name')->from('payment_terms_milestone a')->join('task_management b','a.milestone=b.task_id','left')->join('task_department_wise_scheduling c','b.task_id=c.taskid')->join('system_users d','c.amount_received_by=d.user_id','left')->where('a.payment_term_id',$row->payment_term)->where('c.id',$row->recordid)->get();
-				 if($q1->num_rows()>0){
-				 	foreach($q1->result() as $row1);
-				$receivedmsg = "";	
-				$ordervalue = $row->order_value;
-				$calculatedvalue[] = ($ordervalue*$row1->payment_percentage)/100;
-				}
-			}
-		}	
-				$sumtotal = array_sum($calculatedvalue);
-				$moneyformat = number_format($sumtotal, 2, '.', ','); 
-				$partpayment = '₹' . $moneyformat;
-				return $partpayment;
-	}
-
-	public function overduepaymentdashboard(){
-		$this->load->view('accounts/overduepayments');
-	}
 	public function overduepaymentslist()
 	{
 		$i=1;
@@ -1966,5 +2214,508 @@ $fileNL=$filelocation."/Store_purchase_report_".date('Y-m-d').".pdf"; //Linux
     
 }
 
+
+
+/*
+|--------------------------------------------------------------------------
+| Receivables
+|--------------------------------------------------------------------------
+| What is actually owed, from the dispatch ledger. Deliberately NOT limited to
+| running DFs: a machine that has shipped closes its DF while its money is
+| still outstanding, so the whole receivable sits on closed DFs. Grouped by
+| invoice number, because one invoice can be recorded against several DFs.
+*/
+private function build_finance_receivables()
+{
+	$today = date('Y-m-d');
+
+	$this->db->select('
+		t.df_id, t.invoice_no, t.invoice_date, t.invoice_amount, t.payment_received,
+		t.balance_amount, t.due_date, t.payment_due_status, t.remarks, t.updated_on,
+		df.df_no, df.df_description, df.df_status, IFNULL(df.on_hold, 0) AS on_hold,
+		updater.title AS updater_title, updater.first_name AS updater_first_name,
+		updater.last_name AS updater_last_name
+	');
+	$this->db->from('mcs_dispatch_report_tracking t');
+	$this->db->join('df_release df', 'df.id = t.df_id', 'inner');
+	$this->db->join('system_users updater', 'updater.user_id = t.updated_by', 'left');
+	$this->db->order_by('t.due_date', 'ASC');
+	$ledger_rows = $this->db->get()->result_array();
+
+	$report = array(
+		'invoices' => array(),
+		'buckets' => $this->blank_receivable_buckets(),
+		'summary' => array(
+			'invoice_count' => 0, 'df_count' => 0,
+			'invoiced_total' => 0, 'received_total' => 0, 'balance_total' => 0,
+			'overdue_total' => 0, 'overdue_count' => 0,
+			'not_due_total' => 0, 'no_due_date_total' => 0, 'no_due_date_count' => 0,
+			'oldest_days' => 0, 'closed_df_balance' => 0
+		),
+		'insights' => array()
+	);
+
+	if (empty($ledger_rows)) {
+		$report['summary'] = $this->finalise_receivable_summary($report['summary']);
+		$report['insights'][] = 'The dispatch ledger has no entries yet, so no receivable can be reported.';
+		return $report;
+	}
+
+	$company_map = $this->get_receivable_company_map($ledger_rows);
+
+	/* One invoice can span several DFs. Fold them together so the balance is
+	   counted once and the DFs it covers stay visible. */
+	$grouped = array();
+	foreach ($ledger_rows as $ledger_row) {
+		$invoice_no = strtoupper(trim((string) $ledger_row['invoice_no']));
+		$key = $invoice_no !== '' ? 'INV:' . $invoice_no : 'DF:' . (int) $ledger_row['df_id'];
+
+		if (!isset($grouped[$key])) {
+			$grouped[$key] = array('invoice_no' => $invoice_no, 'rows' => array());
+		}
+		$grouped[$key]['rows'][] = $ledger_row;
+	}
+
+	foreach ($grouped as $group) {
+		$invoice = $this->build_receivable_invoice($group, $company_map, $today);
+
+		if ($invoice['balance'] <= 0.01) {
+			continue;
+		}
+
+		$report['invoices'][] = $invoice;
+		$report['buckets'][$invoice['bucket_key']]['amount'] += $invoice['balance'];
+		$report['buckets'][$invoice['bucket_key']]['count']++;
+
+		$report['summary']['invoice_count']++;
+		$report['summary']['df_count'] += count($invoice['df_nos']);
+		$report['summary']['invoiced_total'] += $invoice['invoiced'];
+		$report['summary']['received_total'] += $invoice['received'];
+		$report['summary']['balance_total'] += $invoice['balance'];
+
+		if ($invoice['is_overdue']) {
+			$report['summary']['overdue_total'] += $invoice['balance'];
+			$report['summary']['overdue_count']++;
+			$report['summary']['oldest_days'] = max($report['summary']['oldest_days'], $invoice['days_overdue']);
+		} elseif ($invoice['bucket_key'] === 'no_due_date') {
+			$report['summary']['no_due_date_total'] += $invoice['balance'];
+			$report['summary']['no_due_date_count']++;
+		} else {
+			$report['summary']['not_due_total'] += $invoice['balance'];
+		}
+
+		if ($invoice['df_closed']) {
+			$report['summary']['closed_df_balance'] += $invoice['balance'];
+		}
+	}
+
+	usort($report['invoices'], function ($left, $right) {
+		if ((int) $left['sort_rank'] !== (int) $right['sort_rank']) {
+			return ((int) $left['sort_rank'] > (int) $right['sort_rank']) ? -1 : 1;
+		}
+		return ((float) $left['balance'] > (float) $right['balance']) ? -1 : 1;
+	});
+
+	$report['summary'] = $this->finalise_receivable_summary($report['summary']);
+	$report['buckets'] = $this->finalise_receivable_buckets($report['buckets']);
+	$report['insights'] = $this->build_receivable_insights($report['summary'], $report['invoices']);
+
+	return $report;
+}
+
+private function blank_receivable_buckets()
+{
+	$buckets = array();
+	foreach (array(
+		'not_due' => 'Not yet due',
+		'no_due_date' => 'No due date set',
+		'1_30' => 'Overdue 1-30 days',
+		'31_60' => 'Overdue 31-60 days',
+		'61_90' => 'Overdue 61-90 days',
+		'90_plus' => 'Overdue 90+ days'
+	) as $key => $label) {
+		$buckets[$key] = array('key' => $key, 'label' => $label, 'amount' => 0, 'count' => 0);
+	}
+
+	return $buckets;
+}
+
+/* The ledger has no customer name of its own, so it is read off the PO. */
+private function get_receivable_company_map($ledger_rows)
+{
+	$df_ids = array();
+	foreach ($ledger_rows as $ledger_row) {
+		$df_ids[] = (int) $ledger_row['df_id'];
+	}
+
+	$company_map = array();
+	if (empty($df_ids)) {
+		return $company_map;
+	}
+
+	$this->db->select('
+		p.df_id, p.company_name, p.pono, p.order_value, p.customer_currency,
+		marketing.title AS marketing_title, marketing.first_name AS marketing_first_name,
+		marketing.last_name AS marketing_last_name
+	');
+	$this->db->from('poreceived p');
+	$this->db->join('system_users marketing', 'marketing.user_id = p.added_by', 'left');
+	$this->db->where_in('p.df_id', array_unique($df_ids));
+	$this->db->order_by('p.id', 'DESC');
+
+	foreach ($this->db->get()->result_array() as $po_row) {
+		$df_key = (int) $po_row['df_id'];
+		if (!isset($company_map[$df_key])) {
+			$company_map[$df_key] = $po_row;
+		}
+	}
+
+	return $company_map;
+}
+
+private function build_receivable_invoice($group, $company_map, $today)
+{
+	$rows = $group['rows'];
+	$first = $rows[0];
+
+	/* Rows sharing an invoice number carry the same invoice figures repeated per
+	   DF, so take the maximum rather than the sum. */
+	$invoiced = 0;
+	$received = 0;
+	$stored_balance = 0;
+	$df_nos = array();
+	$df_ids = array();
+	$df_closed = true;
+
+	foreach ($rows as $row) {
+		$invoiced = max($invoiced, (float) $row['invoice_amount']);
+		$received = max($received, (float) $row['payment_received']);
+		$stored_balance = max($stored_balance, (float) $row['balance_amount']);
+		$df_nos[] = strtoupper(trim((string) $row['df_no']));
+		$df_ids[] = (int) $row['df_id'];
+		if ((int) $row['df_status'] === 0) {
+			$df_closed = false;
+		}
+	}
+
+	$balance = round($invoiced - $received, 2);
+	$due_date_raw = trim((string) $first['due_date']);
+	$has_due_date = ($due_date_raw !== '' && $due_date_raw !== '0000-00-00');
+	$days_overdue = 0;
+	$is_overdue = false;
+
+	if ($has_due_date && $balance > 0.01 && $due_date_raw < $today) {
+		$is_overdue = true;
+		$days_overdue = (int) floor((strtotime($today) - strtotime($due_date_raw)) / 86400);
+	}
+
+	if ($is_overdue) {
+		if ($days_overdue <= 30) {
+			$bucket_key = '1_30';
+			$sort_rank = 3;
+		} elseif ($days_overdue <= 60) {
+			$bucket_key = '31_60';
+			$sort_rank = 4;
+		} elseif ($days_overdue <= 90) {
+			$bucket_key = '61_90';
+			$sort_rank = 5;
+		} else {
+			$bucket_key = '90_plus';
+			$sort_rank = 6;
+		}
+	} elseif (!$has_due_date) {
+		$bucket_key = 'no_due_date';
+		$sort_rank = 2;
+	} else {
+		$bucket_key = 'not_due';
+		$sort_rank = 1;
+	}
+
+	$po_row = isset($company_map[$df_ids[0]]) ? $company_map[$df_ids[0]] : array();
+	$company_name = isset($po_row['company_name']) ? $this->format_allrunningdf_title_case($po_row['company_name']) : '';
+	$marketing_person = isset($po_row['marketing_title'])
+		? $this->format_allrunningdf_person_name($po_row['marketing_title'], $po_row['marketing_first_name'], $po_row['marketing_last_name'])
+		: '';
+
+	$updated_by = $this->format_allrunningdf_person_name(
+		$first['updater_title'], $first['updater_first_name'], $first['updater_last_name']
+	);
+
+	$buckets = $this->blank_receivable_buckets();
+	$issues = array();
+
+	if (!$has_due_date && $balance > 0.01) {
+		$issues[] = 'No payment due date is set on the ledger, so this balance cannot be aged or chased on a date.';
+	}
+	if (abs($stored_balance - $balance) > 0.01) {
+		$issues[] = 'Ledger stores a balance of ' . $this->format_allrunningdf_money($stored_balance)
+			. ' but invoice minus receipt is ' . $this->format_allrunningdf_money($balance) . '.';
+	}
+	if ($received > $invoiced + 0.01) {
+		$issues[] = 'Receipts exceed the invoiced amount. Please verify the entries.';
+	}
+	if (count($df_ids) > 1) {
+		$issues[] = 'This invoice is recorded against ' . count($df_ids) . ' DFs. It is counted once here.';
+	}
+	if (trim((string) $first['invoice_no']) === '') {
+		$issues[] = 'No invoice number is recorded against this balance.';
+	}
+
+	return array(
+		'invoice_no' => $group['invoice_no'] !== '' ? $group['invoice_no'] : 'Not numbered',
+		'invoice_date' => $this->format_allrunningdf_date($first['invoice_date']),
+		'df_nos' => array_values(array_unique($df_nos)),
+		'df_ids' => array_values(array_unique($df_ids)),
+		'df_label' => implode(', ', array_values(array_unique($df_nos))),
+		'df_closed' => $df_closed,
+		'df_status_label' => $df_closed ? 'DF closed' : 'DF running',
+		'df_detail_url' => page_url . 'Dashboard/df_full_detail?df_id=' . (int) $df_ids[0],
+		'company_name' => $company_name !== '' ? $company_name : 'Customer not mapped',
+		'marketing_person' => $marketing_person !== '' ? $marketing_person : 'Not mapped',
+		'invoiced' => round($invoiced, 2),
+		'invoiced_display' => $this->format_allrunningdf_money($invoiced),
+		'received' => round($received, 2),
+		'received_display' => $this->format_allrunningdf_money($received),
+		'balance' => $balance,
+		'balance_display' => $this->format_allrunningdf_money($balance),
+		'collection_percentage' => $invoiced > 0 ? round(($received / $invoiced) * 100) : 0,
+		'due_date' => $has_due_date ? $this->format_allrunningdf_date($due_date_raw) : 'Not set',
+		'due_date_raw' => $due_date_raw,
+		'has_due_date' => $has_due_date,
+		'is_overdue' => $is_overdue,
+		'days_overdue' => $days_overdue,
+		'bucket_key' => $bucket_key,
+		'bucket_label' => $buckets[$bucket_key]['label'],
+		'sort_rank' => $sort_rank,
+		'due_status_label' => $this->get_allrunningdf_dispatch_due_state($first['payment_due_status']),
+		'remarks' => trim((string) $first['remarks']),
+		'last_updated_by' => $updated_by !== '' ? $updated_by : 'Not updated',
+		'last_updated_on' => $this->format_allrunningdf_datetime($first['updated_on']),
+		'issues' => $issues
+	);
+}
+
+private function finalise_receivable_summary($summary)
+{
+	foreach (array(
+		'invoiced_total', 'received_total', 'balance_total', 'overdue_total',
+		'not_due_total', 'no_due_date_total', 'closed_df_balance'
+	) as $money_field) {
+		$summary[$money_field] = round($summary[$money_field], 2);
+		$summary[$money_field . '_display'] = $this->format_allrunningdf_money($summary[$money_field]);
+	}
+
+	$summary['collection_percentage'] = $summary['invoiced_total'] > 0
+		? round(($summary['received_total'] / $summary['invoiced_total']) * 100)
+		: 0;
+
+	return $summary;
+}
+
+private function finalise_receivable_buckets($buckets)
+{
+	foreach ($buckets as $key => $bucket) {
+		$buckets[$key]['amount'] = round($bucket['amount'], 2);
+		$buckets[$key]['amount_display'] = $this->format_allrunningdf_money($bucket['amount']);
+	}
+
+	return array_values($buckets);
+}
+
+private function build_receivable_insights($summary, $invoices)
+{
+	$insights = array();
+
+	if ($summary['overdue_total'] > 0.01) {
+		$insights[] = $summary['overdue_total_display'] . ' is overdue across ' . $summary['overdue_count']
+			. ' invoice(s), the oldest by ' . $summary['oldest_days'] . ' days.';
+	}
+
+	if ($summary['no_due_date_total'] > 0.01) {
+		$insights[] = $summary['no_due_date_total_display'] . ' is outstanding on ' . $summary['no_due_date_count']
+			. ' invoice(s) with no due date recorded, so it cannot be aged. Setting the due dates is the first fix.';
+	}
+
+	if ($summary['closed_df_balance'] > 0.01) {
+		$insights[] = $summary['closed_df_balance_display']
+			. ' of the outstanding balance sits on DFs that are already closed. Closing a DF does not close its money.';
+	}
+
+	if (!empty($invoices) && $invoices[0]['balance'] > 0.01) {
+		$insights[] = 'Largest single exposure is ' . $invoices[0]['balance_display'] . ' on invoice '
+			. $invoices[0]['invoice_no'] . ' (' . $invoices[0]['company_name'] . ').';
+	}
+
+	if ($summary['balance_total'] <= 0.01) {
+		$insights[] = 'Nothing is outstanding on the dispatch ledger.';
+	}
+
+	return $insights;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Payment calendar
+|--------------------------------------------------------------------------
+| Forward view over a date window. Three things matter to a collections week:
+| invoices falling due inside it, milestones that will become billable inside
+| it, and whatever is already billable or overdue and has been carried in.
+| Milestone data is taken from the running-DF report so all three finance
+| screens agree with each other.
+*/
+private function build_finance_calendar($start_date, $end_date, $df_filter)
+{
+	$today = date('Y-m-d');
+
+	$calendar = array(
+		'due_invoices' => array(),
+		'becoming_claimable' => array(),
+		'ready_now' => array(),
+		'overdue_carry_in' => array(),
+		'summary' => array(
+			'window_label' => date('d M Y', strtotime($start_date)) . ' to ' . date('d M Y', strtotime($end_date)),
+			'window_days' => (int) floor((strtotime($end_date) - strtotime($start_date)) / 86400) + 1,
+			'due_in_window' => 0, 'due_in_window_count' => 0,
+			'becoming_claimable' => 0, 'becoming_claimable_count' => 0,
+			'ready_now' => 0, 'ready_now_count' => 0,
+			'overdue_carry_in' => 0, 'overdue_carry_in_count' => 0,
+			'expected_collection' => 0
+		),
+		'insights' => array()
+	);
+
+	$report = $this->build_allrunningdf_report(array(
+		'start_date' => 'ALL', 'end_date' => 'ALL',
+		'df_id' => $df_filter, 'has_date_filter' => false
+	));
+
+	/* Collection is about invoices, and an invoice outlives its DF - so the two
+	   money sections come from the receivables register (every DF), not from the
+	   running-DF report. Billing sections below stay on running DFs, because
+	   only a running DF can still earn a new milestone. */
+	$receivables = $this->build_finance_receivables();
+
+	foreach ($receivables['invoices'] as $invoice) {
+		$context = array(
+			'df_id' => $invoice['df_ids'][0],
+			'df_no' => $invoice['df_label'],
+			'company_name' => $invoice['company_name'],
+			'marketing_person' => $invoice['marketing_person'],
+			'df_detail_url' => $invoice['df_detail_url'],
+			'invoice_no' => $invoice['invoice_no'],
+			'amount' => $invoice['balance'],
+			'amount_display' => $invoice['balance_display'],
+			'due_date' => $invoice['due_date']
+		);
+
+		if ($invoice['is_overdue']) {
+			$calendar['overdue_carry_in'][] = array_merge($context, array('days_overdue' => $invoice['days_overdue']));
+			$calendar['summary']['overdue_carry_in'] += $invoice['balance'];
+			$calendar['summary']['overdue_carry_in_count']++;
+		} elseif ($invoice['has_due_date'] && $invoice['due_date_raw'] >= $start_date && $invoice['due_date_raw'] <= $end_date) {
+			$calendar['due_invoices'][] = array_merge($context, array('due_date_raw' => $invoice['due_date_raw']));
+			$calendar['summary']['due_in_window'] += $invoice['balance'];
+			$calendar['summary']['due_in_window_count']++;
+		}
+	}
+
+	foreach ($report['rows'] as $row) {
+		$context = array(
+			'df_id' => $row['df_id'],
+			'df_no' => $row['df_no'],
+			'company_name' => $row['company_name'],
+			'marketing_person' => $row['marketing_person'],
+			'df_detail_url' => $row['df_detail_url']
+		);
+
+		if ($row['unbilled_amount'] > 0.01) {
+			$calendar['ready_now'][] = array_merge($context, array(
+				'amount' => $row['unbilled_amount'],
+				'amount_display' => $row['unbilled_amount_display'],
+				'detail' => $row['claimable_count'] . ' milestone(s) complete and not invoiced.'
+			));
+			$calendar['summary']['ready_now'] += $row['unbilled_amount'];
+			$calendar['summary']['ready_now_count']++;
+		}
+
+		foreach ($row['pos'] as $po) {
+			foreach ($po['milestones'] as $milestone) {
+				if ($milestone['is_claimable'] || $milestone['trigger_date_raw'] === '' || $milestone['trigger_date_raw'] === '0000-00-00') {
+					continue;
+				}
+				if ($milestone['trigger_date_raw'] < $start_date || $milestone['trigger_date_raw'] > $end_date) {
+					continue;
+				}
+
+				$calendar['becoming_claimable'][] = array_merge($context, array(
+					'task_name' => $milestone['task_name'],
+					'percentage_display' => $milestone['percentage_display'],
+					'amount' => $milestone['amount'],
+					'amount_display' => $milestone['amount_display'],
+					'trigger_date' => $milestone['trigger_date'],
+					'trigger_date_raw' => $milestone['trigger_date_raw'],
+					'claim_status_key' => $milestone['claim_status_key'],
+					'claim_status_label' => $milestone['claim_status_label'],
+					'po_no' => $po['po_no'] !== '' ? $po['po_no'] : 'PO not numbered'
+				));
+				$calendar['summary']['becoming_claimable'] += $milestone['amount'];
+				$calendar['summary']['becoming_claimable_count']++;
+			}
+		}
+	}
+
+	foreach (array('due_invoices', 'overdue_carry_in', 'ready_now') as $section) {
+		usort($calendar[$section], function ($left, $right) {
+			return ((float) $left['amount'] >= (float) $right['amount']) ? -1 : 1;
+		});
+	}
+	usort($calendar['becoming_claimable'], function ($left, $right) {
+		if ($left['trigger_date_raw'] !== $right['trigger_date_raw']) {
+			return strcmp($left['trigger_date_raw'], $right['trigger_date_raw']);
+		}
+		return ((float) $left['amount'] >= (float) $right['amount']) ? -1 : 1;
+	});
+
+	$calendar['summary']['expected_collection'] = $calendar['summary']['due_in_window'] + $calendar['summary']['overdue_carry_in'];
+
+	foreach (array('due_in_window', 'becoming_claimable', 'ready_now', 'overdue_carry_in', 'expected_collection') as $money_field) {
+		$calendar['summary'][$money_field] = round($calendar['summary'][$money_field], 2);
+		$calendar['summary'][$money_field . '_display'] = $this->format_allrunningdf_money($calendar['summary'][$money_field]);
+	}
+
+	$calendar['insights'] = $this->build_calendar_insights($calendar['summary'], $report['summary']);
+	$calendar['running_df_summary'] = $report['summary'];
+
+	return $calendar;
+}
+
+private function build_calendar_insights($summary, $running_summary)
+{
+	$insights = array();
+
+	if ($summary['expected_collection'] > 0.01) {
+		$insights[] = $summary['expected_collection_display'] . ' is collectable in this window: '
+			. $summary['due_in_window_display'] . ' falling due plus ' . $summary['overdue_carry_in_display'] . ' already overdue.';
+	} else {
+		$insights[] = 'No invoice falls due in this window. Collection pressure here comes from billing, not from chasing.';
+	}
+
+	if ($summary['ready_now'] > 0.01) {
+		$insights[] = $summary['ready_now_display'] . ' across ' . $summary['ready_now_count']
+			. ' DF(s) is already claimable and not invoiced. Raising those invoices is what creates next month\'s collection.';
+	}
+
+	if ($summary['becoming_claimable'] > 0.01) {
+		$insights[] = $summary['becoming_claimable_display'] . ' becomes claimable in this window across '
+			. $summary['becoming_claimable_count'] . ' milestone(s), provided the triggering work lands on time.';
+	}
+
+	if (!empty($running_summary['slipped_amount']) && $running_summary['slipped_amount'] > 0.01) {
+		$insights[] = $running_summary['slipped_amount_display']
+			. ' of billing is already blocked behind milestone work that has passed its target date.';
+	}
+
+	return $insights;
+}
 
 }

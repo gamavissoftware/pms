@@ -1,16 +1,27 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php
-$workflow_labels = array(
-    'IN_STOCK' => 'In Stock',
-    'STANDARD' => 'Standard Procurement',
-    'CUSTOM' => 'Custom Production',
-);
+$workflow_labels = !empty($workflows) ? $workflows : array();
 $filters = !empty($filters) ? $filters : array();
 $show_filter = !empty($filters['show']) ? $filters['show'] : 'active';
 $workflow_type_filter = !empty($filters['workflow_type']) ? $filters['workflow_type'] : '';
 $task_status_filter = !empty($filters['task_status']) ? $filters['task_status'] : '';
 $assigned_to_filter = isset($filters['assigned_to']) ? $filters['assigned_to'] : '';
 $search_filter = !empty($filters['search']) ? $filters['search'] : '';
+$mrp_orders = !empty($mrp_orders) ? $mrp_orders : array();
+$show_mrp_window = !empty($show_mrp_window);
+$mrp_pending_count = 0;
+$mrp_shortage_order_count = 0;
+$mrp_total_shortage_qty = 0;
+
+foreach ($mrp_orders as $mrp_order) {
+    if (empty($mrp_order->mrp_run_id)) {
+        $mrp_pending_count++;
+    }
+    if (!empty($mrp_order->shortage_items) && (int) $mrp_order->shortage_items > 0) {
+        $mrp_shortage_order_count++;
+        $mrp_total_shortage_qty += (float) $mrp_order->total_shortage_qty;
+    }
+}
 
 if (!function_exists('spares_execution_department_status_class')) {
     function spares_execution_department_status_class($status)
@@ -35,7 +46,7 @@ if (!function_exists('spares_execution_department_filter_url')) {
         $params = array_merge($filters, $overrides);
 
         foreach ($params as $key => $value) {
-            if ($value === '' || $value === null || ($key === 'show' && $value === 'active')) {
+            if ($key === 'limit' || $value === '' || $value === null || ($key === 'show' && $value === 'active')) {
                 unset($params[$key]);
             }
         }
@@ -52,7 +63,7 @@ if (!function_exists('spares_execution_department_export_url')) {
         $params = array();
 
         foreach ($filters as $key => $value) {
-            if ($value === '' || $value === null || ($key === 'show' && $value === 'active')) {
+            if ($key === 'limit' || $value === '' || $value === null || ($key === 'show' && $value === 'active')) {
                 continue;
             }
 
@@ -71,6 +82,20 @@ if (!function_exists('spares_execution_department_tracker_url')) {
         $query = (int) $execution_task_id > 0 ? '?focus_task_id=' . (int) $execution_task_id : '';
 
         return page_url . 'Spares_execution/order/' . (int) $order_id . $query;
+    }
+}
+
+if (!function_exists('spares_execution_department_short_date')) {
+    function spares_execution_department_short_date($date)
+    {
+        return !empty($date) ? date('d M Y', strtotime($date)) : '-';
+    }
+}
+
+if (!function_exists('spares_execution_department_short_datetime')) {
+    function spares_execution_department_short_datetime($date)
+    {
+        return !empty($date) ? date('d M Y, h:i A', strtotime($date)) : '-';
     }
 }
 ?>
@@ -112,6 +137,20 @@ if (!function_exists('spares_execution_department_tracker_url')) {
         .priority-chip { display: inline-block; padding: 3px 10px; border-radius: 999px; background: #fff3dd; color: #9a6700; font-size: 11px; font-weight: 600; }
         .priority-chip.priority-critical { background: #fdebec; color: #b42318; }
         .priority-chip.priority-low { background: #eef2f6; color: #5f6f81; }
+        .mrp-window { margin-bottom: 20px; }
+        .mrp-window-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 14px; }
+        .mrp-window-title { margin: 0; color: #223247; font-weight: 700; }
+        .mrp-window-note { color: #7f8a9a; font-size: 12px; margin-top: 4px; }
+        .mrp-mini-card { border: 1px solid #edf1f5; border-left: 4px solid #2b7cff; border-radius: 8px; padding: 12px; margin-bottom: 14px; background: #fbfcff; min-height: 78px; }
+        .mrp-mini-card.warning { border-left-color: #f59e0b; }
+        .mrp-mini-card.danger { border-left-color: #dc2626; }
+        .mrp-mini-label { font-size: 11px; color: #7f8a9a; text-transform: uppercase; font-weight: 700; }
+        .mrp-mini-value { font-size: 22px; line-height: 1.2; font-weight: 700; color: #223247; margin-top: 5px; }
+        .mrp-status { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+        .mrp-status.pending { background: #fff4dd; color: #9a6700; }
+        .mrp-status.shortage { background: #fdecec; color: #b42318; }
+        .mrp-status.available { background: #e4f9ef; color: #18794e; }
+        .mrp-action-stack .btn, .mrp-action-stack form { display: inline-block; margin: 0 4px 4px 0; }
         .owner-chip { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #eef2f6; color: #425466; }
         .owner-chip.unassigned { background: #fff4dd; color: #9a6700; }
         .queue-title { font-weight: 600; color: #223247; }
@@ -125,6 +164,7 @@ if (!function_exists('spares_execution_department_tracker_url')) {
         @media (max-width: 991px) {
             .queue-metric { border-right: 0; border-bottom: 1px solid #edf1f5; padding-bottom: 15px; margin-bottom: 15px; }
             .queue-metric:last-child { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
+            .mrp-window-header { display: block; }
         }
     </style>
 </head>
@@ -185,6 +225,101 @@ if (!function_exists('spares_execution_department_tracker_url')) {
                     </div>
                 </div>
             </div>
+
+            <?php if ($show_mrp_window): ?>
+                <div class="row">
+                    <div class="col-lg-12">
+                        <div class="card-box mrp-window">
+                            <div class="mrp-window-header">
+                                <div>
+                                    <h4 class="mrp-window-title">BOM MRP & Shortage Window</h4>
+                                    <div class="mrp-window-note">Released SF orders assigned to PPC for MRP run and shortage review.</div>
+                                </div>
+                                <a href="<?php echo page_url; ?>Spares_execution/mrp_shortages" class="btn btn-default btn-sm"><i class="fa fa-external-link"></i> Full MRP Queue</a>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mrp-mini-card">
+                                        <div class="mrp-mini-label">Released SF For PPC</div>
+                                        <div class="mrp-mini-value"><?php echo count($mrp_orders); ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mrp-mini-card warning">
+                                        <div class="mrp-mini-label">Pending MRP</div>
+                                        <div class="mrp-mini-value"><?php echo (int) $mrp_pending_count; ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mrp-mini-card danger">
+                                        <div class="mrp-mini-label">Orders With Shortage</div>
+                                        <div class="mrp-mini-value"><?php echo (int) $mrp_shortage_order_count; ?> <small><?php echo number_format($mrp_total_shortage_qty, 3); ?> qty</small></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th style="min-width:180px;">Order / Customer</th>
+                                            <th style="min-width:130px;">MRP Status</th>
+                                            <th style="min-width:150px;">Shortage</th>
+                                            <th style="min-width:120px;">MRP Due</th>
+                                            <th style="min-width:120px;">Shortage Report</th>
+                                            <th style="min-width:190px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (!empty($mrp_orders)): ?>
+                                            <?php foreach ($mrp_orders as $mrp_order): ?>
+                                                <?php
+                                                $has_shortage = !empty($mrp_order->shortage_items) && (int) $mrp_order->shortage_items > 0;
+                                                $mrp_status_class = empty($mrp_order->mrp_run_id) ? 'pending' : ($has_shortage ? 'shortage' : 'available');
+                                                $mrp_status_text = empty($mrp_order->mrp_run_id) ? 'MRP Pending' : ($has_shortage ? 'Shortage' : 'Available');
+                                                ?>
+                                                <tr>
+                                                    <td>
+                                                        <div class="queue-title"><?php echo htmlspecialchars($mrp_order->company_name); ?></div>
+                                                        <div class="queue-subtitle">SO-<?php echo (int) $mrp_order->order_id; ?><?php if (!empty($mrp_order->op_no)): ?> | OP <?php echo htmlspecialchars($mrp_order->op_no); ?><?php endif; ?></div>
+                                                        <div class="queue-subtitle"><?php echo !empty($mrp_order->sf_no) ? 'SF: ' . htmlspecialchars($mrp_order->sf_no) : 'SF released'; ?></div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="mrp-status <?php echo $mrp_status_class; ?>"><?php echo $mrp_status_text; ?></span>
+                                                        <div class="queue-subtitle" style="margin-top:6px;"><?php echo spares_execution_department_short_datetime($mrp_order->latest_mrp_run_at); ?></div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="queue-title"><?php echo (int) $mrp_order->shortage_items; ?> item(s)</div>
+                                                        <div class="queue-subtitle"><?php echo number_format((float) $mrp_order->total_shortage_qty, 3); ?> qty shortage</div>
+                                                        <?php if ((int) $mrp_order->missing_master_items > 0): ?>
+                                                            <div class="overdue-note"><?php echo (int) $mrp_order->missing_master_items; ?> not in master</div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td><?php echo spares_execution_department_short_date($mrp_order->run_mrp_due_date); ?></td>
+                                                    <td>
+                                                        <span class="status-badge <?php echo spares_execution_department_status_class($mrp_order->shortage_task_status ?: 'Pending'); ?>"><?php echo htmlspecialchars($mrp_order->shortage_task_status ?: 'Pending'); ?></span>
+                                                        <div class="queue-subtitle" style="margin-top:6px;"><?php echo spares_execution_department_short_date($mrp_order->shortage_due_date); ?></div>
+                                                    </td>
+                                                    <td class="mrp-action-stack">
+                                                        <a href="<?php echo page_url; ?>Spares_execution/mrp_shortages/<?php echo (int) $mrp_order->order_id; ?>" class="btn btn-primary btn-xs">Open Report</a>
+                                                        <form method="post" action="<?php echo page_url; ?>Spares_execution/run_mrp/<?php echo (int) $mrp_order->order_id; ?>">
+                                                            <button type="submit" class="btn btn-success btn-xs" onclick="return confirm('Run MRP with current inventory qty?');">Run MRP</button>
+                                                        </form>
+                                                        <a href="<?php echo spares_execution_department_tracker_url((int) $mrp_order->order_id, (int) $mrp_order->run_mrp_task_id); ?>" class="btn btn-default btn-xs">Tracker</a>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <tr>
+                                                <td colspan="6" class="text-center text-muted">No released SF assigned to PPC for MRP right now.</td>
+                                            </tr>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <div class="row">
                 <div class="col-lg-12">
@@ -469,7 +604,7 @@ if (!function_exists('spares_execution_department_tracker_url')) {
                                         <?php endforeach; ?>
                                     <?php else: ?>
                                         <tr>
-                                            <td colspan="10" class="text-center text-muted">No Spares execution tasks found for this department filter.</td>
+                                            <td colspan="11" class="text-center text-muted">No Spares execution tasks found for this department filter.</td>
                                         </tr>
                                     <?php endif; ?>
                                 </tbody>

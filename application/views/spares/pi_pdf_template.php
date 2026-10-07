@@ -2,7 +2,8 @@
 defined('BASEPATH') or exit('No direct script access allowed');
 
 $currency = strtoupper(trim((string) ($pi->currency ?? 'INR')));
-$currency_symbol = $currency === 'USD' ? '$' : '₹';
+$currency_symbols = ['INR' => '₹', 'USD' => '$', 'EUR' => '€'];
+$currency_symbol = $currency_symbols[$currency] ?? $currency;
 $company_color = $company_profile['colorcode'] ?? '#003366';
 $notes_lines = preg_split('/\r\n|\r|\n/', (string) ($pi->notes ?? ''), -1, PREG_SPLIT_NO_EMPTY);
 $has_line_item_discount = false;

@@ -27,6 +27,10 @@ class Spares_execution extends CI_Controller
     public function dashboard()
     {
         $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access($user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
         $filters = $this->get_dashboard_filters();
         $dashboard_filters = $this->build_dashboard_query_filters($filters, $user_id);
         $execution_filters = $dashboard_filters['execution_filters'];
@@ -38,29 +42,11 @@ class Spares_execution extends CI_Controller
         $data['workflows'] = $this->spares_execution->get_workflow_types();
         $data['filters'] = $filters;
         $data['status_options'] = array('Scheduled', 'In Progress', 'On Hold', 'Completed', 'Cancelled');
-        $data['priority_options'] = array('Low', 'Medium', 'High', 'Critical');
         $data['metrics'] = $this->spares_execution->get_execution_dashboard_metrics();
         $data['unscheduled_orders'] = $this->spares_execution->get_unscheduled_orders(25, $unscheduled_filters);
         $data['execution_orders'] = $this->spares_execution->get_execution_orders($execution_filters);
         $data['overdue_tasks'] = $this->spares_execution->get_overdue_tasks(15, $queue_filters);
-        $data['stale_after_days'] = 3;
-        $data['stale_tasks'] = $this->spares_execution->get_stale_tasks(15, $queue_filters, $data['stale_after_days']);
         $data['pending_extensions'] = $this->spares_execution->get_pending_extension_queue(15, $queue_filters);
-        $data['recent_task_activity'] = $this->spares_execution->get_recent_task_activity(20, array(
-            'manager_user_id' => !empty($queue_filters['manager_user_id']) ? (int) $queue_filters['manager_user_id'] : null,
-            'workflow_type' => !empty($filters['workflow_type']) ? $filters['workflow_type'] : null,
-            'priority' => !empty($filters['priority']) ? $filters['priority'] : null,
-            'search' => !empty($filters['search']) ? $filters['search'] : null,
-        ));
-        $data['recent_alerts'] = $this->spares_execution->get_recent_alert_log(20);
-        $data['recent_alert_runs'] = $this->spares_execution->get_recent_alert_runs(20);
-        $data['unread_execution_alerts'] = $this->spares_execution->count_user_execution_alerts($user_id, true);
-        $data['my_execution_alerts'] = $this->spares_execution->get_user_execution_alerts($user_id, false, 8);
-        $data['cron_command_example'] = 'php index.php Spares_execution cron_daily_alerts';
-        $cron_key = $this->get_execution_cron_key();
-        $data['cron_web_requires_key'] = !empty($cron_key);
-        $data['cron_web_url_example'] = !empty($cron_key) ? page_url . 'Spares_execution/cron_daily_alerts?key=' . $cron_key : page_url . 'Spares_execution/cron_daily_alerts';
-        $data['module_health'] = $this->build_module_health_snapshot($data['metrics'], $data['recent_alert_runs']);
 
         $this->load->view('spares_execution/dashboard_view', $data);
     }
@@ -73,6 +59,10 @@ class Spares_execution extends CI_Controller
         }
 
         $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access($user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
         $filters = $this->get_dashboard_filters();
         $dashboard_filters = $this->build_dashboard_query_filters($filters, $user_id);
         $timestamp = date('Ymd_His');
@@ -215,6 +205,10 @@ class Spares_execution extends CI_Controller
     public function my_tasks()
     {
         $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access($user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
         $filters = $this->get_task_queue_filters(false, 200);
 
         $data['page_title'] = 'My Spares Tasks';
@@ -231,6 +225,10 @@ class Spares_execution extends CI_Controller
     public function export_my_tasks()
     {
         $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access($user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
         $filters = $this->get_task_queue_filters(false, 5000);
         $rows = $this->spares_execution->get_user_task_queue($user_id, $filters);
         $headers = array('SO Reference', 'Customer', 'Opportunity No', 'Workflow', 'Task', 'Department', 'Task Status', 'Progress %', 'Planned End', 'Commit Date', 'Priority', 'Execution Status', 'Dependency', 'Last Activity', 'Last Note');
@@ -269,6 +267,10 @@ class Spares_execution extends CI_Controller
     public function department_tasks()
     {
         $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access($user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
         $department_id = (int) $this->session->userdata['logged_in']['department_id'];
 
         if (empty($department_id)) {
@@ -293,12 +295,22 @@ class Spares_execution extends CI_Controller
         $data['queue_counts'] = $this->spares_execution->get_department_task_queue_counts($department_id);
         $data['tasks'] = $this->spares_execution->get_department_task_queue($department_id, $filters);
         $data['unread_execution_alerts'] = $this->spares_execution->count_user_execution_alerts($user_id, true);
+        $is_admin = !empty($this->session->userdata['logged_in']['adminuser']) && (int) $this->session->userdata['logged_in']['adminuser'] === 1;
+        $has_mrp_permission = $is_admin || $this->spares_execution->can_user_access_spares_submodule($user_id, Spares_execution_model::SPARES_EXECUTION_MRP_SUBMODULE, true);
+        $department_has_mrp_work = $this->spares_execution->is_ppc_department_name($department->department) || $this->spares_execution->department_has_mrp_tasks($department_id);
+        $data['show_mrp_window'] = $has_mrp_permission && $department_has_mrp_work;
+        $data['mrp_orders'] = $data['show_mrp_window'] ? $this->spares_execution->get_department_mrp_queue($department_id, 25) : array();
 
         $this->load->view('spares_execution/department_tasks_view', $data);
     }
 
     public function export_department_tasks()
     {
+        $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access($user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
         $department_id = (int) $this->session->userdata['logged_in']['department_id'];
 
         if (empty($department_id)) {
@@ -452,8 +464,14 @@ class Spares_execution extends CI_Controller
 
     public function task_master($task_master_id = null)
     {
+        $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access($user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
         $data['page_title'] = 'Spares Execution Task Master';
         $data['workflows'] = $this->spares_execution->get_workflow_types();
+        $data['quotation_workflows'] = $this->spares_execution->get_quotation_workflow_types();
         $data['departments'] = $this->spares_execution->get_departments();
         $data['tasks'] = $this->spares_execution->get_task_master();
         $data['edit_task'] = !empty($task_master_id) ? $this->spares_execution->get_task_master_by_id($task_master_id) : null;
@@ -463,11 +481,16 @@ class Spares_execution extends CI_Controller
 
     public function save_task_master()
     {
-        $this->form_validation->set_rules('workflow_type', 'Workflow Type', 'required|trim');
+        $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access($user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
+        $this->form_validation->set_rules('workflow_type', 'Quotation Type', 'required|trim');
         $this->form_validation->set_rules('task_code', 'Task Code', 'required|trim');
         $this->form_validation->set_rules('task_name', 'Task Name', 'required|trim');
         $this->form_validation->set_rules('sequence_no', 'Sequence', 'required|integer');
-        $this->form_validation->set_rules('sla_days', 'SLA Days', 'required|integer');
+        $this->form_validation->set_rules('sla_days', 'TAT Days', 'required|integer');
 
         $task_master_id = $this->input->post('task_master_id');
 
@@ -478,9 +501,15 @@ class Spares_execution extends CI_Controller
 
         $user_id = $this->session->userdata['logged_in']['user_id'];
         $now = date('Y-m-d H:i:s');
+        $workflow_type = $this->input->post('workflow_type', true);
+
+        if (!$this->spares_execution->is_valid_workflow_type($workflow_type)) {
+            $this->session->set_flashdata('error', 'Please select a valid quotation type.');
+            redirect(page_url . 'Spares_execution/task_master' . (!empty($task_master_id) ? '/' . $task_master_id : ''));
+        }
 
         $data = array(
-            'workflow_type' => $this->input->post('workflow_type', true),
+            'workflow_type' => $workflow_type,
             'task_code' => strtoupper(trim($this->input->post('task_code', true))),
             'task_name' => trim($this->input->post('task_name', true)),
             'department_id' => $this->input->post('department_id') ? (int) $this->input->post('department_id') : null,
@@ -521,6 +550,10 @@ class Spares_execution extends CI_Controller
     public function toggle_task_master($task_master_id, $status)
     {
         $user_id = $this->session->userdata['logged_in']['user_id'];
+        if ($this->spares_execution->user_has_only_spares_execution_mrp_access((int) $user_id)) {
+            redirect(page_url . 'Spares_execution/mrp_shortages');
+        }
+
         $this->spares_execution->set_task_master_status((int) $task_master_id, (int) $status, $user_id);
         $this->session->set_flashdata('success', 'Task master status updated.');
         redirect(page_url . 'Spares_execution/task_master');
@@ -531,7 +564,10 @@ class Spares_execution extends CI_Controller
         $workflow_type = $this->input->get('workflow_type', true);
         $commit_date = $this->input->get('commit_date', true);
 
-        $tasks = $this->spares_execution->build_schedule_preview($workflow_type, $commit_date);
+        $tasks = array();
+        if ($this->spares_execution->is_valid_workflow_type($workflow_type)) {
+            $tasks = $this->spares_execution->build_schedule_preview($workflow_type, $commit_date);
+        }
 
         $this->output
             ->set_content_type('application/json')
@@ -577,6 +613,11 @@ class Spares_execution extends CI_Controller
         $data['page_title'] = 'Schedule Spares Order Tasks';
         $data['order_snapshot'] = $order_snapshot;
         $data['workflows'] = $this->spares_execution->get_workflow_types();
+        $data['default_workflow_type'] = $this->spares_execution->map_quote_fields_to_workflow(
+            $order_snapshot->quotation_type ?? '',
+            $order_snapshot->custom_engg_type ?? '',
+            $order_snapshot->execution_workflow_type ?? ''
+        );
         $data['departments'] = $this->spares_execution->get_departments();
 
         $this->load->view('spares_execution/schedule_order_view', $data);
@@ -605,6 +646,7 @@ class Spares_execution extends CI_Controller
         $data['execution_order'] = $execution_order;
         $data['tasks'] = $this->spares_execution->get_execution_tasks((int) $execution_order->execution_order_id);
         $data['workflows'] = $this->spares_execution->get_workflow_types();
+        $data['default_workflow_type'] = $execution_order->workflow_type;
         $data['departments'] = $this->spares_execution->get_departments();
 
         $this->load->view('spares_execution/schedule_order_view', $data);
@@ -613,7 +655,7 @@ class Spares_execution extends CI_Controller
     public function save_schedule()
     {
         $this->form_validation->set_rules('order_id', 'Order', 'required|integer');
-        $this->form_validation->set_rules('workflow_type', 'Workflow Type', 'required|trim');
+        $this->form_validation->set_rules('workflow_type', 'Quotation Type', 'required|trim');
         $this->form_validation->set_rules('commit_date', 'Commit Date', 'required|trim');
         $this->form_validation->set_rules('priority', 'Priority', 'required|trim');
 
@@ -630,8 +672,14 @@ class Spares_execution extends CI_Controller
         }
 
         $commit_date = trim((string) $this->input->post('commit_date', true));
+        $workflow_type = $this->input->post('workflow_type', true);
         if (!$this->is_valid_iso_date($commit_date)) {
             $this->session->set_flashdata('error', 'Please enter a valid commit date.');
+            redirect(page_url . 'Spares_execution/schedule/' . $order_id);
+        }
+
+        if (!$this->spares_execution->is_valid_workflow_type($workflow_type)) {
+            $this->session->set_flashdata('error', 'Please select a valid quotation type.');
             redirect(page_url . 'Spares_execution/schedule/' . $order_id);
         }
 
@@ -639,33 +687,27 @@ class Spares_execution extends CI_Controller
         $now = date('Y-m-d H:i:s');
 
         $task_master_ids = $this->input->post('task_master_id');
-        $task_codes = $this->input->post('task_code');
-        $task_names = $this->input->post('task_name');
-        $department_ids = $this->input->post('department_id');
-        $assigned_to = $this->input->post('assigned_to');
-        $sequence_no = $this->input->post('sequence_no');
         $planned_start_date = $this->input->post('planned_start_date');
         $planned_end_date = $this->input->post('planned_end_date');
-        $depends_on_code = $this->input->post('depends_on_code');
-        $can_start_parallel = $this->input->post('can_start_parallel');
 
         $task_rows = array();
 
-        if (!empty($task_names) && is_array($task_names)) {
-            foreach ($task_names as $index => $task_name) {
-                if (trim($task_name) === '') {
+        if (!empty($task_master_ids) && is_array($task_master_ids)) {
+            foreach ($task_master_ids as $index => $task_master_id) {
+                $task_master = !empty($task_master_id) ? $this->spares_execution->get_task_master_by_id((int) $task_master_id) : null;
+                if (!$task_master || $task_master->workflow_type !== $workflow_type) {
                     continue;
                 }
 
                 $task_rows[] = array(
-                    'task_master_id' => !empty($task_master_ids[$index]) ? (int) $task_master_ids[$index] : null,
-                    'task_code' => trim($task_codes[$index]),
-                    'task_name' => trim($task_name),
-                    'department_id' => !empty($department_ids[$index]) ? (int) $department_ids[$index] : null,
-                    'assigned_to' => !empty($assigned_to[$index]) ? (int) $assigned_to[$index] : null,
-                    'sequence_no' => !empty($sequence_no[$index]) ? (int) $sequence_no[$index] : 0,
-                    'depends_on_code' => !empty($depends_on_code[$index]) ? trim($depends_on_code[$index]) : null,
-                    'can_start_parallel' => !empty($can_start_parallel[$index]) ? 1 : 0,
+                    'task_master_id' => (int) $task_master->task_master_id,
+                    'task_code' => $task_master->task_code,
+                    'task_name' => $task_master->task_name,
+                    'department_id' => !empty($task_master->department_id) ? (int) $task_master->department_id : null,
+                    'assigned_to' => !empty($task_master->default_owner_id) ? (int) $task_master->default_owner_id : null,
+                    'sequence_no' => !empty($task_master->sequence_no) ? (int) $task_master->sequence_no : 0,
+                    'depends_on_code' => !empty($task_master->depends_on_code) ? trim($task_master->depends_on_code) : null,
+                    'can_start_parallel' => !empty($task_master->can_start_parallel) ? 1 : 0,
                     'planned_start_date' => !empty($planned_start_date[$index]) ? $planned_start_date[$index] : null,
                     'planned_end_date' => !empty($planned_end_date[$index]) ? $planned_end_date[$index] : null,
                     'created_by' => $user_id,
@@ -687,7 +729,7 @@ class Spares_execution extends CI_Controller
 
         $execution_data = array(
             'order_id' => $order_id,
-            'workflow_type' => $this->input->post('workflow_type', true),
+            'workflow_type' => $workflow_type,
             'commit_date' => $commit_date,
             'priority' => $this->input->post('priority', true),
             'execution_status' => 'Scheduled',
@@ -799,6 +841,261 @@ class Spares_execution extends CI_Controller
         $data['focus_update_id'] = (int) $this->input->get('focus_update_id');
 
         $this->load->view('spares_execution/order_tasks_view', $data);
+    }
+
+    public function sf_form($order_id)
+    {
+        $order_snapshot = $this->spares_execution->get_order_snapshot((int) $order_id);
+        if (!$order_snapshot) {
+            show_404();
+        }
+
+        $execution_order = $this->spares_execution->get_execution_order_by_order((int) $order_id);
+        if (!$execution_order) {
+            redirect(page_url . 'Spares_execution/schedule/' . (int) $order_id);
+        }
+
+        $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        $sf_form = $this->spares_execution->get_sf_form_by_order((int) $order_id);
+        $items = $sf_form ? $this->spares_execution->get_sf_form_items((int) $sf_form->sf_form_id) : array();
+
+        if (!$sf_form) {
+            $sf_form = $this->build_default_sf_form($order_snapshot, $execution_order, $user_id);
+            $items = $this->build_default_sf_items($order_snapshot, $execution_order);
+        }
+
+        $data['page_title'] = 'Spares SF Form';
+        $data['order_snapshot'] = $order_snapshot;
+        $data['execution_order'] = $execution_order;
+        $data['sf_form'] = $sf_form;
+        $data['items'] = $items;
+        $data['workflows'] = $this->spares_execution->get_workflow_types();
+        $data['prepared_by_name'] = $this->get_logged_in_user_name();
+        $data['can_manage_schedule'] = $this->spares_execution->can_user_manage_execution_order((int) $execution_order->execution_order_id, $user_id);
+
+        $this->load->view('spares_execution/sf_form_view', $data);
+    }
+
+    public function save_sf_form()
+    {
+        $order_id = (int) $this->input->post('order_id');
+        $order_snapshot = $this->spares_execution->get_order_snapshot($order_id);
+        if (!$order_snapshot) {
+            show_404();
+        }
+
+        $execution_order = $this->spares_execution->get_execution_order_by_order($order_id);
+        if (!$execution_order) {
+            redirect(page_url . 'Spares_execution/schedule/' . $order_id);
+        }
+
+        $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if (!$this->spares_execution->can_user_manage_execution_order((int) $execution_order->execution_order_id, $user_id)) {
+            $this->session->set_flashdata('error', 'You are not authorized to update this SF form.');
+            redirect(page_url . 'Spares_execution/sf_form/' . $order_id);
+        }
+
+        $release = $this->input->post('sf_action', true) === 'release';
+        $release_date = trim((string) $this->input->post('release_date', true));
+
+        if (!$this->is_valid_iso_date($release_date)) {
+            $this->session->set_flashdata('error', 'Please select a valid SF release date.');
+            redirect(page_url . 'Spares_execution/sf_form/' . $order_id);
+        }
+
+        $po_date = $this->normalize_optional_iso_date($this->input->post('po_date', true));
+        if ($po_date === false) {
+            $this->session->set_flashdata('error', 'Please select a valid PO date.');
+            redirect(page_url . 'Spares_execution/sf_form/' . $order_id);
+        }
+
+        $items = $this->collect_sf_item_rows();
+        if (empty($items)) {
+            $this->session->set_flashdata('error', 'Please add at least one spare item in SF details.');
+            redirect(page_url . 'Spares_execution/sf_form/' . $order_id);
+        }
+
+        $date_error = $this->validate_sf_item_dates($items);
+        if ($date_error !== '') {
+            $this->session->set_flashdata('error', $date_error);
+            redirect(page_url . 'Spares_execution/sf_form/' . $order_id);
+        }
+
+        $sf_no = trim((string) $this->input->post('sf_no', true));
+        if ($sf_no === '') {
+            $sf_no = $this->spares_execution->build_sf_number($order_id);
+        }
+
+        $sf_data = array(
+            'order_id' => $order_id,
+            'execution_order_id' => (int) $execution_order->execution_order_id,
+            'sf_no' => $sf_no,
+            'release_date' => $release_date,
+            'prepared_by' => $user_id,
+            'scope_of_supply' => $this->input->post('scope_of_supply', true),
+            'document_requirement' => $this->input->post('document_requirement', true),
+            'packing_duration_days' => max(0, (int) $this->input->post('packing_duration_days')),
+            'dispatch_duration_days' => max(0, (int) $this->input->post('dispatch_duration_days')),
+            'dispatch_mode' => $this->input->post('dispatch_mode', true),
+            'order_description' => $this->input->post('order_description', true),
+            'po_no' => $this->input->post('po_no', true),
+            'po_date' => $po_date,
+            'po_revision' => $this->input->post('po_revision', true),
+            'quotation_ref' => $this->input->post('quotation_ref', true),
+            'quotation_revision' => $this->input->post('quotation_revision', true),
+            'machine_description' => $this->input->post('machine_description', true),
+            'machine_df' => $this->input->post('machine_df', true),
+            'no_of_tracks' => $this->input->post('no_of_tracks', true),
+            'product_to_be_packed' => $this->input->post('product_to_be_packed', true),
+            'quantity_to_be_packed' => $this->input->post('quantity_to_be_packed', true),
+            'pouch_size_type' => $this->input->post('pouch_size_type', true),
+            'no_of_axis' => $this->input->post('no_of_axis', true),
+            'plc_make' => $this->input->post('plc_make', true),
+            'specification_note' => $this->input->post('specification_note', true),
+        );
+
+        $saved = $this->spares_execution->save_sf_form($sf_data, $items, $user_id, $release);
+        if ($saved) {
+            $this->session->set_flashdata('success', $release ? 'SF form released successfully.' : 'SF form saved as draft.');
+            redirect(page_url . 'Spares_execution/sf_form/' . $order_id);
+        }
+
+        $this->session->set_flashdata('error', 'Unable to save SF form. Please make sure the SF form migration has been run.');
+        redirect(page_url . 'Spares_execution/sf_form/' . $order_id);
+    }
+
+    public function mrp_shortages($order_id = null)
+    {
+        $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+
+        if (empty($order_id)) {
+            $is_admin = !empty($this->session->userdata['logged_in']['adminuser']) && (int) $this->session->userdata['logged_in']['adminuser'] === 1;
+            if (!$is_admin && !$this->spares_execution->can_user_access_spares_submodule($user_id, Spares_execution_model::SPARES_EXECUTION_MRP_SUBMODULE, true)) {
+                $this->session->set_flashdata('error', 'You are not authorized to open the PPC MRP shortage queue.');
+                redirect(page_url . 'Spares_execution/department_tasks');
+            }
+
+            $filters = $this->get_mrp_queue_filters(250);
+            $data['page_title'] = 'PPC MRP Shortage Report';
+            $data['workflows'] = $this->spares_execution->get_workflow_types();
+            $data['filters'] = $filters;
+            $data['orders'] = $this->spares_execution->get_mrp_report_orders($filters['limit'], $filters);
+            $data['can_run_mrp'] = $this->spares_execution->can_user_run_mrp_queue($user_id);
+
+            $this->load->view('spares_execution/mrp_shortages_view', $data);
+            return;
+        }
+
+        $order_snapshot = $this->spares_execution->get_order_snapshot((int) $order_id);
+        if (!$order_snapshot) {
+            show_404();
+        }
+
+        $execution_order = $this->spares_execution->get_execution_order_by_order((int) $order_id);
+        if (!$execution_order) {
+            redirect(page_url . 'Spares_execution/schedule/' . (int) $order_id);
+        }
+
+        $sf_form = $this->spares_execution->get_sf_form_by_order((int) $order_id);
+        $latest_run = $this->spares_execution->get_latest_mrp_run((int) $order_id);
+        $latest_run_items = $latest_run ? $this->spares_execution->get_mrp_run_items((int) $latest_run->mrp_run_id) : array();
+        $preview = ($sf_form && $sf_form->form_status === 'Released')
+            ? $this->spares_execution->build_mrp_shortage_preview((int) $order_id)
+            : array('items' => array(), 'summary' => (object) array(
+                'total_items' => 0,
+                'shortage_items' => 0,
+                'missing_master_items' => 0,
+                'total_required_qty' => 0,
+                'total_available_qty' => 0,
+                'total_shortage_qty' => 0,
+            ));
+
+        $data['page_title'] = 'PPC MRP Shortage Report';
+        $data['order_snapshot'] = $order_snapshot;
+        $data['execution_order'] = $execution_order;
+        $data['sf_form'] = $sf_form;
+        $data['latest_run'] = $latest_run;
+        $data['latest_run_items'] = $latest_run_items;
+        $data['preview'] = $preview;
+        $data['workflows'] = $this->spares_execution->get_workflow_types();
+        $data['can_run_mrp'] = $this->spares_execution->can_user_run_mrp((int) $execution_order->execution_order_id, $user_id);
+
+        $this->load->view('spares_execution/mrp_shortage_detail_view', $data);
+    }
+
+    public function run_mrp($order_id)
+    {
+        $order_snapshot = $this->spares_execution->get_order_snapshot((int) $order_id);
+        if (!$order_snapshot) {
+            show_404();
+        }
+
+        $execution_order = $this->spares_execution->get_execution_order_by_order((int) $order_id);
+        if (!$execution_order) {
+            redirect(page_url . 'Spares_execution/schedule/' . (int) $order_id);
+        }
+
+        $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        if (!$this->spares_execution->can_user_run_mrp((int) $execution_order->execution_order_id, $user_id)) {
+            $this->session->set_flashdata('error', 'You are not authorized to run MRP for this SF.');
+            redirect(page_url . 'Spares_execution/mrp_shortages/' . (int) $order_id);
+        }
+
+        $sf_form = $this->spares_execution->get_sf_form_by_order((int) $order_id);
+        if (!$sf_form || $sf_form->form_status !== 'Released') {
+            $this->session->set_flashdata('error', 'Please release the SF form before running MRP.');
+            redirect(page_url . 'Spares_execution/mrp_shortages/' . (int) $order_id);
+        }
+
+        $mrp_run_id = $this->spares_execution->save_mrp_run((int) $order_id, $user_id);
+        if ($mrp_run_id) {
+            $this->session->set_flashdata('success', 'MRP run completed and shortage report generated.');
+            redirect(page_url . 'Spares_execution/mrp_shortages/' . (int) $order_id);
+        }
+
+        $this->session->set_flashdata('error', 'Unable to run MRP. Please make sure the MRP shortage migration has been run.');
+        redirect(page_url . 'Spares_execution/mrp_shortages/' . (int) $order_id);
+    }
+
+    public function export_mrp_shortages()
+    {
+        $user_id = (int) $this->session->userdata['logged_in']['user_id'];
+        $is_admin = !empty($this->session->userdata['logged_in']['adminuser']) && (int) $this->session->userdata['logged_in']['adminuser'] === 1;
+        if (!$is_admin && !$this->spares_execution->can_user_access_spares_submodule($user_id, Spares_execution_model::SPARES_EXECUTION_MRP_SUBMODULE, true)) {
+            $this->session->set_flashdata('error', 'You are not authorized to export the PPC MRP shortage queue.');
+            redirect(page_url . 'Spares_execution/department_tasks');
+        }
+
+        $filters = $this->get_mrp_queue_filters(5000);
+        $rows = $this->spares_execution->get_mrp_report_orders($filters['limit'], $filters);
+        $headers = array('SO Reference', 'Customer', 'Opportunity No', 'PO No', 'Workflow', 'SF No', 'SF Release Date', 'MRP Status', 'Last MRP Run', 'BOM Items', 'Shortage Items', 'Missing Master Items', 'Total Shortage Qty', 'Commit Date', 'Priority');
+        $data_rows = array();
+
+        foreach ($rows as $row) {
+            $has_shortage = !empty($row->shortage_items) && (int) $row->shortage_items > 0;
+            $has_missing = !empty($row->missing_master_items) && (int) $row->missing_master_items > 0;
+            $mrp_status = empty($row->mrp_run_id) ? 'Pending MRP' : ($has_shortage || $has_missing ? 'Shortage' : 'Available');
+
+            $data_rows[] = array(
+                'SO-' . (int) $row->order_id,
+                $row->company_name,
+                $row->op_no,
+                $row->po_no,
+                $row->workflow_type,
+                $row->sf_no,
+                $this->csv_date($row->release_date),
+                $mrp_status,
+                $this->csv_datetime($row->latest_mrp_run_at),
+                (int) $row->total_items,
+                (int) $row->shortage_items,
+                (int) $row->missing_master_items,
+                number_format((float) $row->total_shortage_qty, 3, '.', ''),
+                $this->csv_date($row->commit_date),
+                $row->priority,
+            );
+        }
+
+        $this->output_csv_download('spares_execution_mrp_shortages_' . date('Ymd_His') . '.csv', $headers, $data_rows);
     }
 
     public function gantt($order_id)
@@ -1314,9 +1611,162 @@ class Spares_execution extends CI_Controller
         $redirect_response();
     }
 
+    private function build_default_sf_form($order_snapshot, $execution_order, $user_id)
+    {
+        $is_international = !empty($order_snapshot->op_type) && (int) $order_snapshot->op_type !== 1;
+        $dispatch_mode = !empty($order_snapshot->dispatch_mode) ? strtoupper(trim((string) $order_snapshot->dispatch_mode)) : 'COURIER';
+        $dispatch_mode = str_replace(' ', '_', $dispatch_mode);
+        if (!in_array($dispatch_mode, array('COURIER', 'SELF_PICKUP'), true)) {
+            $dispatch_mode = 'COURIER';
+        }
+        $po_no = !empty($order_snapshot->po_no) ? $order_snapshot->po_no : '';
+
+        return (object) array(
+            'sf_form_id' => 0,
+            'order_id' => (int) $order_snapshot->order_id,
+            'execution_order_id' => (int) $execution_order->execution_order_id,
+            'sf_no' => $this->spares_execution->build_sf_number((int) $order_snapshot->order_id),
+            'release_date' => date('Y-m-d'),
+            'prepared_by' => (int) $user_id,
+            'form_status' => 'Draft',
+            'scope_of_supply' => 'Spares supply against customer purchase order',
+            'document_requirement' => $is_international ? 'International dispatch documents as per country requirement' : 'Domestic dispatch documents',
+            'packing_duration_days' => $is_international ? 3 : 1,
+            'dispatch_duration_days' => $is_international ? 7 : 2,
+            'dispatch_mode' => $dispatch_mode,
+            'order_description' => trim('Spares order' . ($po_no !== '' ? ' against PO ' . $po_no : '')),
+            'po_no' => $po_no,
+            'po_date' => !empty($order_snapshot->po_date) ? $order_snapshot->po_date : null,
+            'po_revision' => '',
+            'quotation_ref' => !empty($order_snapshot->latest_quotation_no) ? $order_snapshot->latest_quotation_no : '',
+            'quotation_revision' => '',
+            'machine_description' => '',
+            'machine_df' => '',
+            'no_of_tracks' => '',
+            'product_to_be_packed' => '',
+            'quantity_to_be_packed' => '',
+            'pouch_size_type' => '',
+            'no_of_axis' => '',
+            'plc_make' => '',
+            'specification_note' => '',
+        );
+    }
+
+    private function build_default_sf_items($order_snapshot, $execution_order)
+    {
+        $items = array();
+        $po_items = $this->spares_execution->get_po_items_for_sf((int) $order_snapshot->po_id);
+        $target_date = !empty($execution_order->commit_date) ? $execution_order->commit_date : null;
+
+        foreach ($po_items as $po_item) {
+            $items[] = (object) array(
+                'line_no' => count($items) + 1,
+                'item_description' => !empty($po_item->description) ? $po_item->description : $po_item->product_master_description,
+                'part_no_erp' => !empty($po_item->product_code) ? $po_item->product_code : '',
+                'drg_rev_no' => isset($po_item->product_revision) ? (string) $po_item->product_revision : '',
+                'quantity' => !empty($po_item->quantity) ? (float) $po_item->quantity : 0,
+                'target_date' => $target_date,
+                'dispatch_1_date' => $target_date,
+                'dispatch_2_date' => null,
+                'dispatch_3_date' => null,
+            );
+        }
+
+        if (empty($items)) {
+            $items[] = (object) array(
+                'line_no' => 1,
+                'item_description' => '',
+                'part_no_erp' => '',
+                'drg_rev_no' => '',
+                'quantity' => 0,
+                'target_date' => $target_date,
+                'dispatch_1_date' => $target_date,
+                'dispatch_2_date' => null,
+                'dispatch_3_date' => null,
+            );
+        }
+
+        return $items;
+    }
+
+    private function collect_sf_item_rows()
+    {
+        $descriptions = $this->input->post('item_description');
+        $part_numbers = $this->input->post('part_no_erp');
+        $drawing_revisions = $this->input->post('drg_rev_no');
+        $quantities = $this->input->post('quantity');
+        $target_dates = $this->input->post('target_date');
+        $dispatch_1_dates = $this->input->post('dispatch_1_date');
+        $dispatch_2_dates = $this->input->post('dispatch_2_date');
+        $dispatch_3_dates = $this->input->post('dispatch_3_date');
+        $rows = array();
+
+        if (empty($descriptions) || !is_array($descriptions)) {
+            return $rows;
+        }
+
+        foreach ($descriptions as $index => $description) {
+            $description = trim((string) $description);
+            if ($description === '') {
+                continue;
+            }
+
+            $rows[] = array(
+                'item_description' => $description,
+                'part_no_erp' => trim((string) ($part_numbers[$index] ?? '')),
+                'drg_rev_no' => trim((string) ($drawing_revisions[$index] ?? '')),
+                'quantity' => max(0, (float) ($quantities[$index] ?? 0)),
+                'target_date' => $this->normalize_optional_iso_date($target_dates[$index] ?? ''),
+                'dispatch_1_date' => $this->normalize_optional_iso_date($dispatch_1_dates[$index] ?? ''),
+                'dispatch_2_date' => $this->normalize_optional_iso_date($dispatch_2_dates[$index] ?? ''),
+                'dispatch_3_date' => $this->normalize_optional_iso_date($dispatch_3_dates[$index] ?? ''),
+            );
+        }
+
+        return $rows;
+    }
+
+    private function validate_sf_item_dates($items)
+    {
+        foreach ($items as $index => $item) {
+            foreach (array('target_date', 'dispatch_1_date', 'dispatch_2_date', 'dispatch_3_date') as $field) {
+                if ($item[$field] === false) {
+                    return 'Please check the date format in SF item row ' . ($index + 1) . '.';
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function normalize_optional_iso_date($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        return $this->is_valid_iso_date($value) ? $value : false;
+    }
+
+    private function get_logged_in_user_name()
+    {
+        $session_user = $this->session->userdata('logged_in');
+        if (!is_array($session_user)) {
+            return '';
+        }
+
+        return trim(
+            (isset($session_user['title']) ? $session_user['title'] . ' ' : '') .
+            (isset($session_user['first_name']) ? $session_user['first_name'] . ' ' : '') .
+            (isset($session_user['last_name']) ? $session_user['last_name'] : '')
+        );
+    }
+
     private function collect_schedule_task_rows($include_execution_task_id = false)
     {
         $execution_task_ids = $this->input->post('execution_task_id');
+        $task_master_ids = $this->input->post('task_master_id');
         $task_codes = $this->input->post('task_code');
         $depends_on_code = $this->input->post('depends_on_code');
         $can_start_parallel = $this->input->post('can_start_parallel');
@@ -1338,6 +1788,7 @@ class Spares_execution extends CI_Controller
             }
 
             $row = array(
+                'task_master_id' => !empty($task_master_ids[$index]) ? (int) $task_master_ids[$index] : null,
                 'task_name' => trim($task_name),
                 'task_code' => !empty($task_codes[$index]) ? trim($task_codes[$index]) : null,
                 'depends_on_code' => !empty($depends_on_code[$index]) ? trim($depends_on_code[$index]) : null,
@@ -1350,6 +1801,18 @@ class Spares_execution extends CI_Controller
 
             if ($include_execution_task_id) {
                 $row['execution_task_id'] = !empty($execution_task_ids[$index]) ? (int) $execution_task_ids[$index] : null;
+            }
+
+            if (!empty($row['task_master_id'])) {
+                $task_master = $this->spares_execution->get_task_master_by_id((int) $row['task_master_id']);
+                if ($task_master) {
+                    $row['task_name'] = $task_master->task_name;
+                    $row['task_code'] = $task_master->task_code;
+                    $row['depends_on_code'] = !empty($task_master->depends_on_code) ? trim($task_master->depends_on_code) : null;
+                    $row['can_start_parallel'] = !empty($task_master->can_start_parallel) ? 1 : 0;
+                    $row['department_id'] = !empty($task_master->department_id) ? (int) $task_master->department_id : null;
+                    $row['assigned_to'] = !empty($task_master->default_owner_id) ? (int) $task_master->default_owner_id : null;
+                }
             }
 
             $task_rows[] = $row;
@@ -1390,6 +1853,22 @@ class Spares_execution extends CI_Controller
         }
 
         return $filters;
+    }
+
+    private function get_mrp_queue_filters($limit = 200)
+    {
+        $mrp_status = trim((string) $this->input->get('mrp_status', true));
+        $allowed_statuses = array('all', 'pending', 'shortage', 'available', 'missing_master');
+        if (!in_array($mrp_status, $allowed_statuses, true)) {
+            $mrp_status = 'all';
+        }
+
+        return array(
+            'mrp_status' => $mrp_status,
+            'workflow_type' => trim((string) $this->input->get('workflow_type', true)),
+            'search' => trim((string) $this->input->get('search', true)),
+            'limit' => (int) $limit,
+        );
     }
 
     private function get_dashboard_filters()
@@ -1455,6 +1934,11 @@ class Spares_execution extends CI_Controller
 
         foreach ($task_rows as $index => $task_row) {
             $task_label = !empty($task_row['task_name']) ? 'Task "' . $task_row['task_name'] . '"' : 'Task row ' . ($index + 1);
+
+            if (empty($task_row['department_id'])) {
+                return $task_label . ' requires department mapping in Task Master.';
+            }
+
             $assignment_error = $this->validate_department_owner_selection(
                 !empty($task_row['department_id']) ? (int) $task_row['department_id'] : null,
                 !empty($task_row['assigned_to']) ? (int) $task_row['assigned_to'] : null,
@@ -1471,6 +1955,14 @@ class Spares_execution extends CI_Controller
 
             if (!$this->is_valid_iso_date($task_row['planned_start_date']) || !$this->is_valid_iso_date($task_row['planned_end_date'])) {
                 return $task_label . ' has an invalid planned start or end date.';
+            }
+
+            if (!$this->spares_execution->is_execution_working_date($task_row['planned_start_date'])) {
+                return $task_label . ' planned start date is Sunday or holiday. Please reload TAT template or select a working date.';
+            }
+
+            if (!$this->spares_execution->is_execution_working_date($task_row['planned_end_date'])) {
+                return $task_label . ' planned end date is Sunday or holiday. Please reload TAT template or select a working date.';
             }
 
             if ($task_row['planned_start_date'] > $task_row['planned_end_date']) {

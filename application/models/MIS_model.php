@@ -5,14 +5,63 @@ class Mis_model extends CI_Model {
 	public function __construct() {
 		parent::__construct();
 
+		$this->config->load('mis_appraisal', TRUE);
 		$this->load->model('Dashboard_model','dashboardmodel');
 		$this->load->model('Salescrm_model','salescrm');
+		$this->load->helper('df_delay');
 		
 
 	}
 
-public function allassignedtask($userid, $enddate, $dfid){
-	$this->db->select('a.id')->from('task_department_wise_scheduling a')->join('task_management c','c.task_id=a.taskid')->join('df_release b','a.df_id=b.id','left')->where('a.assigned_user',$userid)->where('a.end_date<',$enddate)->where('a.on_hold',0);
+	private function mis_task_delay_select($schedule_alias = 'a', $task_alias = 'c')
+	{
+		return ",
+			" . $task_alias . ".task_type,
+			" . df_delay_department_max_date_sql($schedule_alias) . " AS department_max_date";
+	}
+
+	private function mis_task_delay_days($row, $actual_date = null)
+	{
+		$end_date = !empty($row->end_date) ? date('Y-m-d', strtotime($row->end_date)) : '';
+		if ($end_date === '' || $end_date === '1970-01-01' || $end_date === '0000-00-00') {
+			return 0;
+		}
+
+		$task_type = isset($row->task_type) ? (int) $row->task_type : 2;
+		$department_max_date = !empty($row->department_max_date) ? date('Y-m-d', strtotime($row->department_max_date)) : '';
+		$planned_boundary = ($task_type === 1 || $department_max_date === '' || $department_max_date === '1970-01-01' || $department_max_date === '0000-00-00')
+			? $end_date
+			: $department_max_date;
+		$actual = $actual_date !== null ? $actual_date : date('Y-m-d');
+		if (empty($actual) || $actual === '0000-00-00' || $actual === '0000-00-00 00:00:00') {
+			return 0;
+		}
+
+		$actual = date('Y-m-d', strtotime($actual));
+		if ($actual <= $planned_boundary) {
+			return 0;
+		}
+
+		return (int) floor((strtotime($actual) - strtotime($planned_boundary)) / 86400);
+	}
+
+	public function get_appraisal_issue_rate($user_id, $calculated_rate, &$is_overridden = FALSE) {
+		$overrides = $this->config->item('mis_issue_rate_overrides', 'mis_appraisal');
+		$overrides = is_array($overrides) ? $overrides : array();
+		$user_id = (int) $user_id;
+		$is_overridden = array_key_exists($user_id, $overrides);
+
+		if ($is_overridden) {
+			return max(0, min(100, (int) $overrides[$user_id]));
+		}
+
+		return max(0, min(100, (int) round($calculated_rate)));
+	}
+
+public function allassignedtask($userid, $startdate, $enddate=null, $dfid=null){
+	// Backward compatible with legacy navigation calls: ($user, $end, $df).
+	if ($dfid === null) { $dfid = $enddate; $enddate = $startdate; $startdate = '0000-00-00'; }
+	$this->db->select('a.id')->from('task_department_wise_scheduling a')->join('task_management c','c.task_id=a.taskid')->join('df_release b','a.df_id=b.id','left')->where('a.assigned_user',$userid)->where('a.end_date>=',$startdate)->where('a.end_date<=',$enddate)->where('a.on_hold',0);
 	if($dfid<>'ALL'){
 	$this->db->where('a.df_id',$dfid);
 	}
@@ -21,8 +70,10 @@ public function allassignedtask($userid, $enddate, $dfid){
 	return count($res);
 }
 
-public function totalassignedworkdone($userid,$enddate,$dfid)
+public function totalassignedworkdone($userid,$startdate,$enddate=null,$dfid=null)
 {
+    // Backward compatible with legacy navigation calls: ($user, $end, $df).
+    if ($dfid === null) { $dfid = $enddate; $enddate = $startdate; $startdate = '0000-00-00'; }
     $this->db->select('COUNT(DISTINCT a.id) as total');
     $this->db->from('task_department_wise_scheduling a');
 
@@ -49,7 +100,8 @@ public function totalassignedworkdone($userid,$enddate,$dfid)
     }
 
     $this->db->where('a.assigned_user',$userid);
-    $this->db->where('a.end_date <',date('Y-m-d'));
+    $this->db->where('a.end_date >=',$startdate);
+    $this->db->where('a.end_date <=',$enddate);
     $this->db->where('a.on_hold',0);
 
     /*
@@ -111,13 +163,13 @@ public function totalassignedworknotdone($userid,$enddate,$dfid){
 		$enddate = $et;
 		$userid = $user;
 		$i=1;
-		$this->db->select('
+$this->db->select('
 a.id,
 b.task_name,
 a.end_date,
 c.df_no,
 a.remarks
-');
+' . $this->mis_task_delay_select('a', 'b'), false);
 
 $this->db->from('task_department_wise_scheduling a');
 
@@ -152,10 +204,8 @@ $this->db->where('a.assigned_user',$userid);
 
 $this->db->where('a.task_status',0);
 
-$this->db->where(
-'a.end_date <',
-$enddate
-);
+$this->db->where('a.end_date >=', $startdate);
+$this->db->where('a.end_date <=', $enddate);
 
 $this->db->where(
 'a.on_hold',
@@ -165,7 +215,7 @@ $this->db->where(
 if($dfid<>'' && $dfid<>'ALL')
 {
     $this->db->where(
-        'a.id',
+        'a.df_id',
         $dfid
     );
 }
@@ -209,12 +259,8 @@ $q=$this->db
 				if($q->num_rows()>0)
 				{
 		foreach ($q->result() as $row) {
-			$today = date('Y-m-d');
-			$date1 = new DateTime($today);
-			$date2 = new DateTime($row->end_date);
-
-			$interval = $date1->diff($date2);
-			$totaldays =  $interval->format('%R%a days');
+			$delay_days = $this->mis_task_delay_days($row);
+			$totaldays =  $delay_days > 0 ? $delay_days . ' days' : '0 days';
 
 
 			$html.='<tr>
@@ -287,10 +333,10 @@ $html.='<br/<br/><h4 class="text-center">Preclosed but not approved<br/>(Please 
 		$enddate = $et;
 		$userid = $user;
 		$i=1;
-		$this->db->select('b.task_name, a.end_date, c.df_no, a.remarks')->from('task_department_wise_scheduling a')->join('task_management b','a.taskid=b.task_id','left')->join('df_release c','a.df_id=c.id','left')->where('a.assigned_user',$userid)->where('a.task_status',2)->where('a.end_date<',$enddate)->where('a.on_hold',0);
+		$this->db->select('a.id, b.task_name, a.end_date, c.df_no, a.remarks' . $this->mis_task_delay_select('a', 'b'), false)->from('task_department_wise_scheduling a')->join('task_management b','a.taskid=b.task_id','left')->join('df_release c','a.df_id=c.id','left')->where('a.assigned_user',$userid)->where('a.task_status',2)->where('a.end_date>=',$startdate)->where('a.end_date<=',$enddate)->where('a.on_hold',0);
 			if($dfid<>'' && $dfid<>'ALL')
 				{
-					$this->db->where('a.id',$dfid);
+					$this->db->where('a.df_id',$dfid);
 				}
 
 				$q = $this->db->order_by('a.end_date','asc')->get();
@@ -298,12 +344,8 @@ $html.='<br/<br/><h4 class="text-center">Preclosed but not approved<br/>(Please 
 				{
 				//echo "<pre>"; print_r($q->result()); exit;
 				foreach ($q->result() as $row) {
-				$today = date('Y-m-d');
-				$date1 = new DateTime($today);
-				$date2 = new DateTime($row->end_date);
-
-				$interval = $date1->diff($date2);
-				$totaldays =  $interval->format('%R%a days');
+				$delay_days = $this->mis_task_delay_days($row);
+				$totaldays =  $delay_days > 0 ? $delay_days . ' days' : '0 days';
 
 
 			$html.='<tr>
@@ -347,14 +389,14 @@ public function totaldonetaskwithdateontime($user_id, $startdate, $enddate, $dfi
 	$count[] = 0;
 	$stdate = $startdate." 00:00:00";
 	$enddt = $enddate." 23:59:59";
-	$this->db->select('a.id, DATE(a.task_completed_on) as completeddatetime, a.end_date')->from('task_department_wise_scheduling a')->join('df_release b','a.df_id=b.id','left')->where('a.assigned_user',$user_id)->where('a.task_status',1)->where('a.on_hold',0);
+	$this->db->select('a.id, DATE(a.task_completed_on) as completeddatetime, a.end_date' . $this->mis_task_delay_select('a', 'c'), false)->from('task_department_wise_scheduling a')->join('df_release b','a.df_id=b.id','left')->join('task_management c','c.task_id=a.taskid','left')->where('a.assigned_user',$user_id)->where('a.task_status',1)->where('a.on_hold',0);
 	if($dfid<>'ALL' && $dfid<>''){
 		$this->db->where('a.df_id',$dfid);
 	}
 	$q = $this->db->where('a.task_completed_on BETWEEN "'.$stdate. '" and "'.$enddt.'"')->get();
 	if($q->num_rows()>0){
 		foreach($q->result() as $row){
-			if(strtotime($row->completeddatetime)<=strtotime($row->end_date)){
+			if($this->mis_task_delay_days($row, $row->completeddatetime) <= 0){
 				$count[] = 1;
 			}else{
 				$count[] = 0;
@@ -389,7 +431,7 @@ public function alldelayednotdonetaskdetail($user_id, $startdate, $enddate, $dfi
 	
 	$stdate = $startdate." 00:00:00";
 	$enddt = $enddate." 23:59:59";
-	$this->db->select('a.id,b.task_name, a.end_date, c.df_no, a.remarks, DATE(a.task_completed_on) as completeddatetime')->from('task_department_wise_scheduling a')->join('task_management b','a.taskid=b.task_id','left')->join('df_release c','a.df_id=c.id','left')->where('a.assigned_user',$user_id)->where('a.task_status',1)->where('a.on_hold',0);
+	$this->db->select('a.id,b.task_name, a.end_date, c.df_no, a.remarks, DATE(a.task_completed_on) as completeddatetime' . $this->mis_task_delay_select('a', 'b'), false)->from('task_department_wise_scheduling a')->join('task_management b','a.taskid=b.task_id','left')->join('df_release c','a.df_id=c.id','left')->where('a.assigned_user',$user_id)->where('a.task_status',1)->where('a.on_hold',0);
 	if($dfid<>'ALL'){
 		$this->db->where('a.df_id',$dfid);
 	}
@@ -397,14 +439,9 @@ public function alldelayednotdonetaskdetail($user_id, $startdate, $enddate, $dfi
 	if($q->num_rows()>0){
 		$i=1;
 		foreach($q->result() as $row){
-			if(strtotime($row->completeddatetime)>strtotime($row->end_date)){
-				
-				$today = date('Y-m-d');
-				$date1 = new DateTime($row->completeddatetime);
-				$date2 = new DateTime($row->end_date);
-
-				$interval = $date1->diff($date2);
-				$totaldays =  $interval->format('%R%a days');
+			$delay_days = $this->mis_task_delay_days($row, $row->completeddatetime);
+			if($delay_days > 0){
+				$totaldays =  $delay_days . ' days';
 
 					$html.='<tr>
 					<td style="text-align:center;">'.$i.'</td>
@@ -468,21 +505,16 @@ public function avgdelay($user_id, $startdate, $enddate,$dfid){
 	$countrecord = 0;
 	$stdate = $startdate." 00:00:00";
 	$enddt = $enddate." 23:59:59";
-	$this->db->select('b.task_name, a.end_date, c.df_no, a.remarks, DATE(a.task_completed_on) as completeddatetime')->from('task_department_wise_scheduling a')->join('task_management b','a.taskid=b.task_id','left')->join('df_release c','a.df_id=c.id','left')->where('a.assigned_user',$user_id)->where('a.task_status',1)->where('a.on_hold',0);
+	$this->db->select('b.task_name, a.end_date, c.df_no, a.remarks, DATE(a.task_completed_on) as completeddatetime' . $this->mis_task_delay_select('a', 'b'), false)->from('task_department_wise_scheduling a')->join('task_management b','a.taskid=b.task_id','left')->join('df_release c','a.df_id=c.id','left')->where('a.assigned_user',$user_id)->where('a.task_status',1)->where('a.on_hold',0);
 	if($dfid<>'ALL'){
-		$this->db->where('df_id',$dfid);
+		$this->db->where('a.df_id',$dfid);
 	}
 	$q = $this->db->where('a.task_completed_on BETWEEN "'.$stdate. '" and "'.$enddt.'"')->get();
 	if($q->num_rows()>0){
 		$countrecord = count($q->result());
 		foreach($q->result() as $row){
-			if(strtotime($row->completeddatetime)>strtotime($row->end_date)){
-				
-				$today = date('Y-m-d');
-				$date1 = new DateTime($row->completeddatetime);
-				$date2 = new DateTime($row->end_date);
-				$interval = $date1->diff($date2);
-				$totaldays =  $interval->format('%R%a');
+			$totaldays = $this->mis_task_delay_days($row, $row->completeddatetime);
+			if($totaldays > 0){
 
 					$tdays[] = $totaldays;
 
@@ -515,7 +547,7 @@ return floor($per);
 }
 
 
-function allassigneTickets($user_id,$dfid)
+function allassigneTickets($user_id,$dfid,$startdate=null,$enddate=null)
 {
 
 	$rest=$this->db->select('id')->from('communication_ticket_system')->where('user_id',$user_id);
@@ -523,6 +555,7 @@ function allassigneTickets($user_id,$dfid)
 	{
 		$this->db->where('df_id',$dfid);
 	}
+	if($startdate && $enddate) $this->db->where('DATE(added_on) >=',$startdate)->where('DATE(added_on) <=',$enddate);
 	$rest=$this->db->get();
 
 	return $rest->num_rows();
@@ -530,7 +563,7 @@ function allassigneTickets($user_id,$dfid)
 }
 
 
-function allassigneTicketsDone($user_id,$dfid)
+function allassigneTicketsDone($user_id,$dfid,$startdate=null,$enddate=null)
 {
 
 	$rest=$this->db->select('id')->from('communication_ticket_system')->where('user_id',$user_id);
@@ -538,6 +571,7 @@ function allassigneTicketsDone($user_id,$dfid)
 	{
 		$this->db->where('df_id',$dfid);
 	}
+	if($startdate && $enddate) $this->db->where('DATE(added_on) >=',$startdate)->where('DATE(added_on) <=',$enddate);
 	//$this->db->where('updated_remarks!=','');
 	$this->db->where('ticket_status',1);
 	$rest=$this->db->get();
@@ -621,7 +655,7 @@ return $interval->days;
 }
 
 
-function allCreatedTickets($user_id,$dfid)
+function allCreatedTickets($user_id,$dfid,$startdate=null,$enddate=null)
 {
 
 	$rest=$this->db->select('id')->from('communication_ticket_system')->where('added_by',$user_id);
@@ -629,6 +663,7 @@ function allCreatedTickets($user_id,$dfid)
 	{
 		$this->db->where('df_id',$dfid);
 	}
+	if($startdate && $enddate) $this->db->where('DATE(added_on) >=',$startdate)->where('DATE(added_on) <=',$enddate);
 	$this->db->where('updated_remarks!=','');
 	$rest=$this->db->get();
 
@@ -638,7 +673,7 @@ function allCreatedTickets($user_id,$dfid)
 
 
 
-function allcreatedTicketsDone($user_id,$dfid)
+function allcreatedTicketsDone($user_id,$dfid,$startdate=null,$enddate=null)
 {
 
 	$rest=$this->db->select('id')->from('communication_ticket_system')->where('added_by',$user_id);
@@ -646,6 +681,7 @@ function allcreatedTicketsDone($user_id,$dfid)
 	{
 		$this->db->where('df_id',$dfid);
 	}
+	if($startdate && $enddate) $this->db->where('DATE(added_on) >=',$startdate)->where('DATE(added_on) <=',$enddate);
 	$this->db->where('updated_remarks!=','');
 	$this->db->where('ticket_status',1);
 
@@ -1262,12 +1298,14 @@ $days = $later->diff($earlier)->format("%a"); //3
 
 
 function getTotalMomAssigned($st,$et,$user_id) {
-		 $current_date = date('Y-m-d',strtotime($et));
+		 $start_date = date('Y-m-d',strtotime($st));
+		 $end_date = date('Y-m-d',strtotime($et));
 
 		 $sql = $this->db->select('id')
 						 ->from('dfwise_iom_points')
 						 ->where('responsible_person', $user_id)
-						 ->where('CONCAT_WS(" ", due_date)< ',$current_date)
+						 ->where('due_date >=',$start_date)
+						 ->where('due_date <=',$end_date)
 						 ->get();
 
 			return $sql->num_rows();
@@ -1275,12 +1313,14 @@ function getTotalMomAssigned($st,$et,$user_id) {
 	}
 
 	function getTotalMomAssigned_completed($st,$et,$user_id) {
-		 $current_date = date('Y-m-d',strtotime($et));
+		 $start_date = date('Y-m-d',strtotime($st));
+		 $end_date = date('Y-m-d',strtotime($et));
 
 		 $sql = $this->db->select('id')
 						 ->from('dfwise_iom_points')
 						 ->where('responsible_person', $user_id)
-						 ->where('CONCAT_WS(" ", due_date)< ',$current_date)
+						 ->where('due_date >=',$start_date)
+						 ->where('due_date <=',$end_date)
 						 ->where('workstatus',1)
 						 ->get();
 
@@ -1335,7 +1375,7 @@ function getTotalMomAssigned_Done_n_Not_Delayed_This_Week($st,$et,$user_id){
 						 			$donetime=$row->due_date;
 						 		}
 
-								if(strtotime($duetime)>strtotime($donetime))
+								if(strtotime($duetime)>=strtotime($donetime))
 								{
 								$d[]=1;
 								}	
