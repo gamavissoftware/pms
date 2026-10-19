@@ -1,18 +1,13 @@
 <?php
 // Finished goods code for the first Annexure-IV line item. Shown right after the Item description (Model) box
 // on the new, edit and clone quotation forms. Expects $fg_code (existing value, '' for a new quotation).
-// Rules live in libraries/Fg_code.php; the script below mirrors them so the code fills in as the form is completed.
+// The code is generated automatically and cannot be edited. Rules live in libraries/Fg_code.php; the script below
+// mirrors them so the code follows the form, and the server rebuilds it on every save.
 $fg_code = isset($fg_code) ? $fg_code : '';
 ?>
 <div class="form-group" style="margin-top:8px;">
     <label for="fg_code" style="margin-bottom:2px;">Finished Goods Code</label>
-    <input type="hidden" name="fg_code_original" value="<?php echo htmlspecialchars($fg_code, ENT_QUOTES, 'UTF-8'); ?>">
-    <div class="input-group">
-        <input type="text" class="form-control" name="fg_code" id="fg_code" maxlength="40" placeholder="SP + Model + L/P + Track + Axis + Speed" value="<?php echo htmlspecialchars($fg_code, ENT_QUOTES, 'UTF-8'); ?>" style="font-weight:bold;text-transform:uppercase;">
-        <span class="input-group-btn">
-            <button type="button" class="btn btn-default" id="fg_code_regen" title="Rebuild from the model, product, tracks, axis and speed on this form">Regenerate</button>
-        </span>
-    </div>
+    <input type="text" class="form-control" name="fg_code" id="fg_code" maxlength="40" readonly placeholder="Generated automatically" value="<?php echo htmlspecialchars($fg_code, ENT_QUOTES, 'UTF-8'); ?>" style="font-weight:bold;">
     <small id="fg_code_note" style="color:#b94a48;"></small>
 </div>
 <script>
@@ -32,11 +27,11 @@ $fg_code = isset($fg_code) ? $fg_code : '';
         }
         return '';
     }
-    // first whole number in the text; a leading range such as 50-60 gives its upper end when rangeUpper is set
+    // first whole number in the text; a leading range such as 50-60 gives its highest end when rangeUpper is set
     function firstNumber(text, rangeUpper) {
         var m = plain(text).match(/(\d+)(?:\s*(?:-|\u2013|to)\s*(\d+))?/);
         if (!m) { return ''; }
-        var n = parseInt(rangeUpper && m[2] ? m[2] : m[1], 10);
+        var n = rangeUpper && m[2] ? Math.max(parseInt(m[1], 10), parseInt(m[2], 10)) : parseInt(m[1], 10);
         return n > 0 ? String(n) : '';
     }
     function editorValue(id) {
@@ -63,43 +58,38 @@ $fg_code = isset($fg_code) ? $fg_code : '';
             type: liquidOrPowder(),
             track: firstNumber(val('nooftracks'), false),
             axis: axisRows(),
-            speed: firstNumber(editorValue('designspeed'), true)
+            speed: firstNumber(editorValue('actualspeed'), true)
         };
         var code = 'SP', missing = [];
         Object.keys(parts).forEach(function (k) { if (parts[k]) { code += '_' + parts[k]; } else { missing.push(k); } });
         return { code: code, missing: missing };
     }
-    function fill(force) {
+    function fill() {
         var input = document.getElementById('fg_code');
-        if (!input || (!force && input.value !== '')) { return; }
+        if (!input) { return; }
         var r = build();
         input.value = r.code;
-        document.getElementById('fg_code_note').textContent = r.missing.length ? 'Could not read from the form: ' + r.missing.join(', ') + ' - complete the code manually if needed.' : '';
+        document.getElementById('fg_code_note').textContent = r.missing.length ? 'Not yet readable from the form: ' + r.missing.join(', ') : '';
     }
-    var typedByHand = false;
-    document.getElementById('fg_code').addEventListener('input', function () { typedByHand = true; });
-    document.getElementById('fg_code_regen').addEventListener('click', function () { typedByHand = false; fill(true); });
 
-    // The code follows the quotation as it is filled in or edited, until it is typed by hand.
-    function refresh() { if (!typedByHand) { fill(true); } }
     document.addEventListener('DOMContentLoaded', function () {
-        ['mach_model_no', 'nooftracks', 'producttobepacked'].forEach(function (id) {
+        ['mach_model_no', 'nooftracks', 'producttobepacked', 'actualspeed'].forEach(function (id) {
             var el = document.getElementById(id);
-            if (el) { el.addEventListener('change', refresh); el.addEventListener('keyup', refresh); }
+            if (el) { el.addEventListener('change', fill); el.addEventListener('keyup', fill); }
         });
         // axis rows are added and removed dynamically, so listen on the document
         document.addEventListener('change', function (e) {
-            if (e.target && /axis/i.test(e.target.name || '')) { refresh(); }
+            if (e.target && /axis/i.test(e.target.name || '')) { fill(); }
         });
         document.addEventListener('click', function (e) {
-            if (e.target && /axis|remove|delete/i.test((e.target.id || '') + ' ' + (e.target.className || ''))) { setTimeout(refresh, 300); }
+            if (e.target && /axis|remove|delete/i.test((e.target.id || '') + ' ' + (e.target.className || ''))) { setTimeout(fill, 300); }
         });
-        if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.designspeed) {
-            CKEDITOR.instances.designspeed.on('change', refresh);
+        if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.actualspeed) {
+            CKEDITOR.instances.actualspeed.on('change', fill);
         }
-        // final guarantee: rebuild on submit so the saved code always matches the saved quotation
+        // the saved code is rebuilt on the server as well; rebuild here on submit so the form shows the same value
         var form = document.getElementById('fg_code').form;
-        if (form) { form.addEventListener('submit', refresh, true); }
+        if (form) { form.addEventListener('submit', fill, true); }
     });
 })();
 </script>

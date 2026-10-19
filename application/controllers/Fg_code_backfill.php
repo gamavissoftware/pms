@@ -5,6 +5,7 @@
  *   php index.php Fg_code_backfill run        dry run: prints what would be written, changes nothing
  *   php index.php Fg_code_backfill run 1      writes the codes
  *   php index.php Fg_code_backfill run 1 1    also rewrites codes saved in the old format without underscores
+ *   php index.php Fg_code_backfill run 1 2    recomputes every saved code from the quotation (after a rule change)
  * Only complete codes (model, L/P, track, axis and speed all readable) are written. Quotations whose values
  * cannot be read are listed so the code can be entered by hand on their edit page; nothing is guessed.
  */
@@ -25,6 +26,8 @@ class Fg_code_backfill extends CI_Controller
             ->group_start()->where('fg_code IS NULL', null, false)->or_where('fg_code', '');
         if ((int) $rewrite === 1) {
             $this->db->or_where("fg_code NOT LIKE '%\\_%'", null, false);
+        } elseif ((int) $rewrite === 2) {
+            $this->db->or_where("fg_code <> ''", null, false);
         }
         $lines = $this->db->group_end()
             ->order_by('id', 'asc')->get()->result_array();
@@ -42,7 +45,7 @@ class Fg_code_backfill extends CI_Controller
             $built = $this->fg_code->for_record($line['record_id']);
             // an existing code in the old format is rewritten even when incomplete; empty ones only when complete
             $had_code = trim((string) $line['fg_code']) !== '';
-            if (!empty($built['missing']) && !((int) $rewrite === 1 && $had_code)) {
+            if (!empty($built['missing']) && !((int) $rewrite > 0 && $had_code)) {
                 $incomplete[] = 'record ' . $line['record_id'] . ' ' . $built['code'] . ' (missing: ' . implode(',', $built['missing']) . ')';
                 continue;
             }

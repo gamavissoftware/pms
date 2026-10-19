@@ -4020,26 +4020,21 @@ private function with_fg_code($line)
 		return $line;
 	}
 
-	// The code is rebuilt from the posted quotation when the box is empty or still holds the code it was opened with
-	// (so edits to model, product, tracks, axis or speed reach the saved code); a code typed by hand is kept.
-	$code=strtoupper(trim((string)$this->input->post('fg_code')));
-	$original=strtoupper(trim((string)$this->input->post('fg_code_original')));
-	if($code==='' || $code===$original)
+	// The code is always generated from the posted quotation (it is not editable), so create, edit and clone
+	// each save the code that matches the saved values.
+	// number of axis rows posted (new rows noofaxisincount[], existing rows editnoofaxisincount<id>)
+	$axis_rows=0;
+	foreach($this->input->post() as $name=>$value)
 	{
-		// number of axis rows posted (new rows noofaxisincount[], existing rows editnoofaxisincount<id>)
-		$axis_rows=0;
-		foreach($this->input->post() as $name=>$value)
+		if(strpos($name,'noofaxisincount')===0 || strpos($name,'editnoofaxisincount')===0)
 		{
-			if(strpos($name,'noofaxisincount')===0 || strpos($name,'editnoofaxisincount')===0)
-			{
-				$axis_rows+=count((array)$value);
-			}
+			$axis_rows+=count((array)$value);
 		}
-
-		$this->load->library('Fg_code');
-		$built=$this->fg_code->build($this->input->post('mach_model_no'),$this->input->post('producttobepacked'),$this->input->post('nooftracks'),$axis_rows,$this->input->post('designspeed'));
-		$code=$built['code'];
 	}
+
+	$this->load->library('Fg_code');
+	$built=$this->fg_code->build($this->input->post('mach_model_no'),$this->input->post('producttobepacked'),$this->input->post('nooftracks'),$axis_rows,$this->input->post('actualspeed'));
+	$code=$built['code'];
 
 	$line['fg_code']=substr($code,0,40);
 	return $line;
