@@ -4023,23 +4023,18 @@ private function with_fg_code($line)
 	$code=strtoupper(trim((string)$this->input->post('fg_code')));
 	if($code==='')
 	{
-		$axis_total='';
+		// number of axis rows posted (new rows noofaxisincount[], existing rows editnoofaxisincount<id>)
+		$axis_rows=0;
 		foreach($this->input->post() as $name=>$value)
 		{
 			if(strpos($name,'noofaxisincount')===0 || strpos($name,'editnoofaxisincount')===0)
 			{
-				foreach((array)$value as $count)
-				{
-					if(is_numeric($count))
-					{
-						$axis_total=(float)$axis_total+(float)$count;
-					}
-				}
+				$axis_rows+=count((array)$value);
 			}
 		}
 
 		$this->load->library('Fg_code');
-		$built=$this->fg_code->build($this->input->post('modelno'),$this->input->post('producttobepacked'),$this->input->post('nooftracks'),$axis_total,$this->input->post('designspeed'));
+		$built=$this->fg_code->build($this->input->post('mach_model_no'),$this->input->post('producttobepacked'),$this->input->post('nooftracks'),$axis_rows,$this->input->post('designspeed'));
 		$code=$built['code'];
 	}
 

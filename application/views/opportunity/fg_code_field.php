@@ -16,20 +16,27 @@ $fg_code = isset($fg_code) ? $fg_code : '';
 </div>
 <script>
 (function () {
-    var MODEL = [1250, 1200, 1000, 800, 600, 300], TRACK = [12, 10, 8, 6], AXIS = [7, 5, 3], SPEED = [100, 80, 60];
+    var MODEL = [1250, 1200, 1000, 800, 600, 300];
 
     function plain(html) {
         var d = document.createElement('div');
         d.innerHTML = html || '';
         return (d.textContent || '').replace(/ /g, ' ').trim();
     }
-    // the one allowed number found in the text; '' when none or several (e.g. a speed range)
-    function pick(text, allowed, exact) {
+    // the supported model type (300, 600 ...) found in the text
+    function modelType(text) {
         text = plain(text);
-        if (!text) { return ''; }
-        if (exact) { return /^\d+$/.test(text) && allowed.indexOf(parseInt(text, 10)) > -1 ? String(parseInt(text, 10)) : ''; }
-        var found = allowed.filter(function (n) { return new RegExp('(^|[^0-9.])' + n + '([^0-9]|$)').test(text); });
-        return found.length === 1 ? String(found[0]) : '';
+        for (var i = 0; i < MODEL.length; i++) {
+            if (new RegExp('(^|[^0-9.])' + MODEL[i] + '([^0-9]|$)').test(text)) { return String(MODEL[i]); }
+        }
+        return '';
+    }
+    // first whole number in the text; a leading range such as 50-60 gives its upper end when rangeUpper is set
+    function firstNumber(text, rangeUpper) {
+        var m = plain(text).match(/(\d+)(?:\s*(?:-|\u2013|to)\s*(\d+))?/);
+        if (!m) { return ''; }
+        var n = parseInt(rangeUpper && m[2] ? m[2] : m[1], 10);
+        return n > 0 ? String(n) : '';
     }
     function editorValue(id) {
         if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances[id]) { return CKEDITOR.instances[id].getData(); }
@@ -43,22 +50,19 @@ $fg_code = isset($fg_code) ? $fg_code : '';
         if (v === '2' || /powder|granul/.test(v)) { return 'P'; }
         return '';
     }
-    function axisTotal() {
-        var total = 0, any = false;
-        document.querySelectorAll('input[name^="noofaxisincount"], input[name^="editnoofaxisincount"]').forEach(function (el) {
-            var n = parseFloat(el.value);
-            if (!isNaN(n)) { total += n; any = true; }
-        });
-        return any ? String(total) : '';
+    // number of axis rows on the quotation
+    function axisRows() {
+        var rows = document.querySelectorAll('input[name^="noofaxisincount"], input[name^="editnoofaxisincount"]').length;
+        return rows ? String(rows) : '';
     }
     function build() {
         var val = function (id) { var el = document.getElementById(id); return el ? el.value : ''; };
         var parts = {
-            model: pick(val('modelno'), MODEL, false),
+            model: modelType(val('mach_model_no')),
             type: liquidOrPowder(),
-            track: pick(val('nooftracks'), TRACK, true),
-            axis: pick(axisTotal(), AXIS, true),
-            speed: pick(editorValue('designspeed'), SPEED, false)
+            track: firstNumber(val('nooftracks'), false),
+            axis: axisRows(),
+            speed: firstNumber(editorValue('designspeed'), true)
         };
         var code = 'SP', missing = [];
         Object.keys(parts).forEach(function (k) { code += parts[k]; if (!parts[k]) { missing.push(k); } });
@@ -79,7 +83,7 @@ $fg_code = isset($fg_code) ? $fg_code : '';
         // a saved code is never overwritten except through the Regenerate button
         if (document.getElementById('fg_code').value === '') {
             var refresh = function () { if (!typedByHand) { fill(true); } };
-            ['modelno', 'nooftracks', 'producttobepacked'].forEach(function (id) {
+            ['mach_model_no', 'nooftracks', 'producttobepacked'].forEach(function (id) {
                 var el = document.getElementById(id);
                 if (el) { el.addEventListener('change', refresh); el.addEventListener('keyup', refresh); }
             });
