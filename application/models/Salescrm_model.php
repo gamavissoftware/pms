@@ -14077,12 +14077,13 @@ function get_axis_detailswithid($record_id)
 function getPriceDataByCategory($record_id,$flag){
 
 		$data=array();
-		$d=$this->db->select('id,description,qty,price,hsn,unit,additionalinformationwiththemachine')->from('quotation_annexture_4')->where('record_id',$record_id)->where('category_type',$flag)->get();
+		$has_fg_code=$this->db->field_exists('fg_code','quotation_annexture_4');
+		$d=$this->db->select('id,description,qty,price,hsn,unit,additionalinformationwiththemachine'.($has_fg_code ? ',fg_code' : ''))->from('quotation_annexture_4')->where('record_id',$record_id)->where('category_type',$flag)->get();
 		if($d->num_rows()>0)
 		{
 			foreach($d->result() as $row)
 			{
-				$data[]=array('description'=>$row->description,'qty'=>$row->qty,'price'=>$row->price,'id'=>$row->id,'additionalinformationwiththemachine'=>$row->additionalinformationwiththemachine,'hsn'=>$row->hsn,'unit'=>$row->unit);
+				$data[]=array('description'=>$row->description,'qty'=>$row->qty,'price'=>$row->price,'id'=>$row->id,'additionalinformationwiththemachine'=>$row->additionalinformationwiththemachine,'hsn'=>$row->hsn,'unit'=>$row->unit,'fg_code'=>($has_fg_code ? $row->fg_code : ''));
 			}
 		}
 

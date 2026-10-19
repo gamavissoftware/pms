@@ -2371,6 +2371,7 @@ $formatted_total_price =$total_price;
 ?>
     <tr>
     <td><input type="text" class="form-control mmodel" name="modelno" id="modelno" onkeyup="getmachinemodelno2();" placeholder="Model" required value="<?php echo $desc;?>">
+<?php $this->load->view('opportunity/fg_code_field', array('fg_code' => isset($dprice1['fg_code']) ? $dprice1['fg_code'] : '')); ?>
         <input type="checkbox" name="additionalinformation" id="additionalinformation" <?php if($additionalinformationwiththemachine){echo "checked";}?>>
 <div id="additionalinformationofmachine" <?php if($additionalinformationwiththemachine){}else{?> style="display: none;"<?php }?>>
     <textarea class="form-control" name="additionalinformationwiththemachine" id="additionalinformationwiththemachine"><?php echo $additionalinformationwiththemachine;?></textarea>

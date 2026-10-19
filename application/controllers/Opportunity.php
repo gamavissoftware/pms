@@ -1412,6 +1412,7 @@ function feednewopportunity()
 			'addedOn'=>date('Y-m-d H:i:s'),
 			'flag'=>0,
 			'addedBy'=>$user_id);
+			$data4=$this->with_fg_code($data4);
 			$this->db->insert('quotation_annexture_4',$data4);
 
 
@@ -3358,6 +3359,7 @@ else // Powder
 			'additionalinformationwiththemachine'=>$this->input->post('additionalinformationwiththemachine'),
 			'qty'=>$this->input->post('modelqty'),
 			'price'=>$this->input->post('modelprice'));
+			$data4=$this->with_fg_code($data4);
 			$this->db->where('record_id',$recordid);
 			$this->db->where('flag',0);
 			$this->db->update('quotation_annexture_4',$data4);
@@ -4007,6 +4009,43 @@ else // Powder
 		
 }
 
+
+// Adds the finished goods code (first Annexure-IV line) to a quotation_annexture_4 row.
+// Uses the code typed/shown on the form; when it was left empty it is built from the posted quotation values.
+// Skipped until Database/quotation_fg_code_001.sql has added the column.
+private function with_fg_code($line)
+{
+	if(!$this->db->field_exists('fg_code','quotation_annexture_4'))
+	{
+		return $line;
+	}
+
+	$code=strtoupper(trim((string)$this->input->post('fg_code')));
+	if($code==='')
+	{
+		$axis_total='';
+		foreach($this->input->post() as $name=>$value)
+		{
+			if(strpos($name,'noofaxisincount')===0 || strpos($name,'editnoofaxisincount')===0)
+			{
+				foreach((array)$value as $count)
+				{
+					if(is_numeric($count))
+					{
+						$axis_total=(float)$axis_total+(float)$count;
+					}
+				}
+			}
+		}
+
+		$this->load->library('Fg_code');
+		$built=$this->fg_code->build($this->input->post('modelno'),$this->input->post('producttobepacked'),$this->input->post('nooftracks'),$axis_total,$this->input->post('designspeed'));
+		$code=$built['code'];
+	}
+
+	$line['fg_code']=substr($code,0,40);
+	return $line;
+}
 
 function getCurrentVersion($lead_id)
 		{
@@ -6485,6 +6524,7 @@ else // Powder
             'addedOn'=>date('Y-m-d H:i:s'),
             'flag'=>0,
             'addedBy'=>$user_id);
+            $data4=$this->with_fg_code($data4);
             $this->db->insert('quotation_annexture_4',$data4);
 
 
