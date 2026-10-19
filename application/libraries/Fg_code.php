@@ -3,7 +3,7 @@
 /**
  * Finished goods code for the first (fixed) line of Annexure-IV (Price Schedule).
  *
- * SP + Model Type + L/P + Track + Axis + Speed, concatenated without separators, all read from the quotation:
+ * SP + Model Type + L/P + Track + Axis + Speed, joined with underscores, all read (e.g. SP_600_L_4_5_60) from the quotation:
  *   SP | "Specify Machine Model (For Internal Purpose)" | L (liquid/paste) or P (powder/granules)
  *      | No. of Tracks | number of axis rows | design speed (upper end when a range such as 50-60 is entered)
  * A part that cannot be read from the quotation is left out of the code and reported in 'missing'.
@@ -11,6 +11,7 @@
 class Fg_code
 {
     const PREFIX = 'SP';
+    const SEPARATOR = '_';
 
     private $model_types = array(1250, 1200, 1000, 800, 600, 300);
 
@@ -37,8 +38,9 @@ class Fg_code
         foreach ($parts as $name => $value) {
             if ($value === '') {
                 $missing[] = $name;
+                continue;
             }
-            $code .= $value;
+            $code .= self::SEPARATOR . $value;
         }
 
         return array('code' => $code, 'parts' => $parts, 'missing' => $missing);

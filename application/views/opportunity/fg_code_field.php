@@ -65,7 +65,7 @@ $fg_code = isset($fg_code) ? $fg_code : '';
             speed: firstNumber(editorValue('designspeed'), true)
         };
         var code = 'SP', missing = [];
-        Object.keys(parts).forEach(function (k) { code += parts[k]; if (!parts[k]) { missing.push(k); } });
+        Object.keys(parts).forEach(function (k) { if (parts[k]) { code += '_' + parts[k]; } else { missing.push(k); } });
         return { code: code, missing: missing };
     }
     function fill(force) {
