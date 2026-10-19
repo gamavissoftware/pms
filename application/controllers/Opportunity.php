@@ -1414,6 +1414,7 @@ function feednewopportunity()
 			'addedBy'=>$user_id);
 			$data4=$this->with_fg_code($data4);
 			$this->db->insert('quotation_annexture_4',$data4);
+			$this->store_fg_code($recordid);
 
 
 			// Check if the checkbox is set (checked)
@@ -3359,10 +3360,10 @@ else // Powder
 			'additionalinformationwiththemachine'=>$this->input->post('additionalinformationwiththemachine'),
 			'qty'=>$this->input->post('modelqty'),
 			'price'=>$this->input->post('modelprice'));
-			$data4=$this->with_fg_code($data4);
 			$this->db->where('record_id',$recordid);
 			$this->db->where('flag',0);
 			$this->db->update('quotation_annexture_4',$data4);
+			$this->store_fg_code($recordid);
 
 
 			// Check if the checkbox is set (checked)
@@ -4013,6 +4014,25 @@ else // Powder
 // Adds the finished goods code (first Annexure-IV line) to a quotation_annexture_4 row.
 // Uses the code typed/shown on the form; when it was left empty it is built from the posted quotation values.
 // Skipped until Database/quotation_fg_code_001.sql has added the column.
+// Final step after the first Annexure-IV line is written: rebuilds the finished goods code from the quotation as it is now
+// stored (model, product, tracks, axis rows, actual speed) and saves it on that line, so the code SAP receives always
+// matches the saved quotation. Skipped until Database/quotation_fg_code_001.sql has added the column.
+private function store_fg_code($record_id)
+{
+	if(!$this->db->field_exists('fg_code','quotation_annexture_4'))
+	{
+		return;
+	}
+
+	$this->load->library('Fg_code');
+	$built=$this->fg_code->for_record($record_id);
+	// the model line only (category_type 0); the other Annexure-IV items of the quotation keep no code
+	$this->db->where('record_id',$record_id);
+	$this->db->where('flag',0);
+	$this->db->where('category_type',0);
+	$this->db->update('quotation_annexture_4',array('fg_code'=>substr($built['code'],0,40)));
+}
+
 private function with_fg_code($line)
 {
 	if(!$this->db->field_exists('fg_code','quotation_annexture_4'))
@@ -4626,6 +4646,7 @@ function updatenew()
 			$this->db->where('record_id',$recordid);
 			$this->db->where('flag',0);
 			$this->db->update('quotation_annexture_4',$data4);
+			$this->store_fg_code($recordid);
 
 
 			// Check if the checkbox is set (checked)
@@ -6519,6 +6540,7 @@ else // Powder
             'addedBy'=>$user_id);
             $data4=$this->with_fg_code($data4);
             $this->db->insert('quotation_annexture_4',$data4);
+            $this->store_fg_code($recordid);
 
 
             
