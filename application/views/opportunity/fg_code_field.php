@@ -54,7 +54,7 @@ $fg_code = isset($fg_code) ? $fg_code : '';
     function build() {
         var val = function (id) { var el = document.getElementById(id); return el ? el.value : ''; };
         var parts = {
-            model: modelType(val('mach_model_no')),
+            model: modelType(val('mach_model_no')) || modelType(val('machinemodelno')),
             type: liquidOrPowder(),
             track: firstNumber(val('nooftracks'), false),
             axis: axisRows(),
@@ -73,7 +73,7 @@ $fg_code = isset($fg_code) ? $fg_code : '';
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        ['mach_model_no', 'nooftracks', 'producttobepacked', 'actualspeed'].forEach(function (id) {
+        ['mach_model_no', 'machinemodelno', 'nooftracks', 'producttobepacked', 'actualspeed'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) { el.addEventListener('change', fill); el.addEventListener('keyup', fill); }
         });

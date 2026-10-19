@@ -4,7 +4,8 @@
  * Finished goods code for the first (fixed) line of Annexure-IV (Price Schedule).
  *
  * SP + Model Type + L/P + Track + Axis + Speed, joined with underscores, all read (e.g. SP_600_L_4_5_60) from the quotation:
- *   SP | "Specify Machine Model (For Internal Purpose)" | L (liquid/paste) or P (powder/granules)
+ *   SP | "Specify Machine Model (For Internal Purpose)"; when that is not selected, the Model in
+ *      "Quotation Cum Technical Specification Of The Machine" | L (liquid/paste) or P (powder/granules)
  *      | No. of Tracks | number of axis rows | actual speed (the highest value when a range such as 50-60 is entered)
  * A part that cannot be read from the quotation is left out of the code and reported in 'missing'.
  */
@@ -17,16 +18,17 @@ class Fg_code
 
     /**
      * @param string     $model        Specify Machine Model (For Internal Purpose), e.g. 600
+     * @param string     $fallback_model Model from the Quotation Cum Technical Specification, used when $model has no supported type
      * @param string|int $product_type 1 = Liquid / Paste, 2 = Powder / Granules (or the text itself)
      * @param string     $tracks       No. of Tracks text
      * @param int|string $axis_count   number of axis rows on the quotation
      * @param string     $speed        actual speed text (may contain HTML from the editor)
      * @return array code (string), parts (array), missing (array of part names)
      */
-    public function build($model, $product_type, $tracks, $axis_count, $speed)
+    public function build($model, $product_type, $tracks, $axis_count, $speed, $fallback_model = '')
     {
         $parts = array(
-            'model' => $this->model_type($model),
+            'model' => $this->model_type($model) !== '' ? $this->model_type($model) : $this->model_type($fallback_model),
             'type' => $this->liquid_or_powder($product_type),
             'track' => $this->first_number($tracks, false),
             'axis' => $this->first_number($axis_count, false),
@@ -58,6 +60,8 @@ class Fg_code
             ->where('id', $record_id)->limit(1)->get()->row_array();
         $one = $ci->db->select('product_to_be_packed')->from('quotation_annexture_1')
             ->where('record_id', $record_id)->limit(1)->get()->row_array();
+        $tech = $ci->db->select('model')->from('quotation_cum_tech_spec')
+            ->where('record_id', $record_id)->where("model <> ''", null, false)->order_by('id', 'asc')->limit(1)->get()->row_array();
         $two = $ci->db->select('actual_speed, no_of_track')->from('quotation_annexure_2')
             ->where('record_id', $record_id)->limit(1)->get()->row_array();
         $axis_rows = $ci->db->from('quotation_no_of_axis_in_machine')->where('record_id', $record_id)->count_all_results();
@@ -67,7 +71,8 @@ class Fg_code
             isset($one['product_to_be_packed']) ? $one['product_to_be_packed'] : '',
             isset($two['no_of_track']) ? $two['no_of_track'] : '',
             $axis_rows,
-            isset($two['actual_speed']) ? $two['actual_speed'] : ''
+            isset($two['actual_speed']) ? $two['actual_speed'] : '',
+            isset($tech['model']) ? $tech['model'] : ''
         );
     }
 

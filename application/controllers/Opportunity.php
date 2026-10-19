@@ -4053,7 +4053,7 @@ private function with_fg_code($line)
 	}
 
 	$this->load->library('Fg_code');
-	$built=$this->fg_code->build($this->input->post('mach_model_no'),$this->input->post('producttobepacked'),$this->input->post('nooftracks'),$axis_rows,$this->input->post('actualspeed'));
+	$built=$this->fg_code->build($this->input->post('mach_model_no'),$this->input->post('producttobepacked'),$this->input->post('nooftracks'),$axis_rows,$this->input->post('actualspeed'),$this->input->post('machinemodelno'));
 	$code=$built['code'];
 
 	$line['fg_code']=substr($code,0,40);
