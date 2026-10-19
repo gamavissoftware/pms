@@ -4020,8 +4020,11 @@ private function with_fg_code($line)
 		return $line;
 	}
 
+	// The code is rebuilt from the posted quotation when the box is empty or still holds the code it was opened with
+	// (so edits to model, product, tracks, axis or speed reach the saved code); a code typed by hand is kept.
 	$code=strtoupper(trim((string)$this->input->post('fg_code')));
-	if($code==='')
+	$original=strtoupper(trim((string)$this->input->post('fg_code_original')));
+	if($code==='' || $code===$original)
 	{
 		// number of axis rows posted (new rows noofaxisincount[], existing rows editnoofaxisincount<id>)
 		$axis_rows=0;

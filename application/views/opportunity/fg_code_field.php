@@ -6,6 +6,7 @@ $fg_code = isset($fg_code) ? $fg_code : '';
 ?>
 <div class="form-group" style="margin-top:8px;">
     <label for="fg_code" style="margin-bottom:2px;">Finished Goods Code</label>
+    <input type="hidden" name="fg_code_original" value="<?php echo htmlspecialchars($fg_code, ENT_QUOTES, 'UTF-8'); ?>">
     <div class="input-group">
         <input type="text" class="form-control" name="fg_code" id="fg_code" maxlength="40" placeholder="SP + Model + L/P + Track + Axis + Speed" value="<?php echo htmlspecialchars($fg_code, ENT_QUOTES, 'UTF-8'); ?>" style="font-weight:bold;text-transform:uppercase;">
         <span class="input-group-btn">
@@ -78,16 +79,27 @@ $fg_code = isset($fg_code) ? $fg_code : '';
     var typedByHand = false;
     document.getElementById('fg_code').addEventListener('input', function () { typedByHand = true; });
     document.getElementById('fg_code_regen').addEventListener('click', function () { typedByHand = false; fill(true); });
+
+    // The code follows the quotation as it is filled in or edited, until it is typed by hand.
+    function refresh() { if (!typedByHand) { fill(true); } }
     document.addEventListener('DOMContentLoaded', function () {
-        // only a new quotation (or one with no code yet) is filled automatically, and only until the code is edited by hand;
-        // a saved code is never overwritten except through the Regenerate button
-        if (document.getElementById('fg_code').value === '') {
-            var refresh = function () { if (!typedByHand) { fill(true); } };
-            ['mach_model_no', 'nooftracks', 'producttobepacked'].forEach(function (id) {
-                var el = document.getElementById(id);
-                if (el) { el.addEventListener('change', refresh); el.addEventListener('keyup', refresh); }
-            });
+        ['mach_model_no', 'nooftracks', 'producttobepacked'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) { el.addEventListener('change', refresh); el.addEventListener('keyup', refresh); }
+        });
+        // axis rows are added and removed dynamically, so listen on the document
+        document.addEventListener('change', function (e) {
+            if (e.target && /axis/i.test(e.target.name || '')) { refresh(); }
+        });
+        document.addEventListener('click', function (e) {
+            if (e.target && /axis|remove|delete/i.test((e.target.id || '') + ' ' + (e.target.className || ''))) { setTimeout(refresh, 300); }
+        });
+        if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.designspeed) {
+            CKEDITOR.instances.designspeed.on('change', refresh);
         }
+        // final guarantee: rebuild on submit so the saved code always matches the saved quotation
+        var form = document.getElementById('fg_code').form;
+        if (form) { form.addEventListener('submit', refresh, true); }
     });
 })();
 </script>
