@@ -1,109 +1,118 @@
 <?php
-// Finished goods code for the first Annexure-IV line item. Shown right after the Item description (Model) box
-// on the new, edit and clone quotation forms. Expects $fg_code (existing value, '' for a new quotation).
-// The code (SPFGMC + 5-digit number) is assigned automatically and cannot be edited. Rules live in libraries/Fg_code.php;
-// the script below reads the machine specification from the form and shows its code, and the server assigns it on every save.
+// Finished goods fields for the first Annexure-IV line item, shown right after the Item description (Model) box on the
+// new, edit and clone quotation screens.
+//   Finished Goods Code : SPFGMC + number, assigned by the system (read-only). A new or cloned quotation shows the number it
+//                         will receive when saved; an edited quotation keeps its own.
+//   Title 1             : machine type | tracks | speed | axis details, built automatically from the form (read-only).
+//   Title 2             : starts as a copy of Title 1; the sales person can edit it. It follows Title 1 until changed by hand.
+// Expects $fg_code, $fg_title1, $fg_title2 (saved values, '' for a new quotation) and $fg_mode ('new' | 'edit' | 'clone').
 $fg_code = isset($fg_code) ? $fg_code : '';
+$fg_title1 = isset($fg_title1) ? $fg_title1 : '';
+$fg_title2 = isset($fg_title2) ? $fg_title2 : '';
+$fg_mode = isset($fg_mode) ? $fg_mode : 'new';
+$fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
 ?>
 <div class="form-group" style="margin-top:8px;">
     <label for="fg_code" style="margin-bottom:2px;">Finished Goods Code</label>
-    <input type="text" class="form-control" name="fg_code" id="fg_code" maxlength="40" readonly placeholder="SPFGMC00000 - assigned automatically" value="<?php echo htmlspecialchars($fg_code, ENT_QUOTES, 'UTF-8'); ?>" style="font-weight:bold;">
-    <small id="fg_code_note" style="color:#b94a48;"></small>
+    <input type="text" class="form-control" id="fg_code" readonly value="<?php echo $fg_e($fg_mode === 'clone' ? '' : $fg_code); ?>" style="font-weight:bold;">
+    <small id="fg_code_note" style="color:#777;"></small>
+
+    <label for="fg_title1" style="margin:8px 0 2px;">Title 1</label>
+    <input type="hidden" name="fg_title1_original" value="<?php echo $fg_e($fg_title1); ?>">
+    <textarea class="form-control" id="fg_title1" rows="2" readonly><?php echo $fg_e($fg_title1); ?></textarea>
+
+    <label for="fg_title2" style="margin:8px 0 2px;">Title 2 <small>(you can edit this)</small></label>
+    <textarea class="form-control" name="fg_title2" id="fg_title2" rows="2" maxlength="255"><?php echo $fg_e($fg_title2); ?></textarea>
 </div>
 <script>
 (function () {
-    var MODEL = [1250, 1200, 1000, 800, 600, 300];
+    var mode = <?php echo json_encode($fg_mode); ?>, savedCode = <?php echo json_encode($fg_mode === 'clone' ? '' : $fg_code); ?>;
 
     function plain(html) {
         var d = document.createElement('div');
         d.innerHTML = html || '';
-        return (d.textContent || '').replace(/ /g, ' ').trim();
+        return (d.textContent || '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
     }
-    // the supported model type (300, 600 ...) found in the text
-    function modelType(text) {
-        text = plain(text);
-        for (var i = 0; i < MODEL.length; i++) {
-            if (new RegExp('(^|[^0-9.])' + MODEL[i] + '([^0-9]|$)').test(text)) { return String(MODEL[i]); }
-        }
-        return '';
-    }
-    // first whole number in the text; a leading range such as 50-60 gives its highest end when rangeUpper is set
-    function firstNumber(text, rangeUpper) {
-        var m = plain(text).match(/(\d+)(?:\s*(?:-|\u2013|to)\s*(\d+))?/);
+    // first whole number; a leading range such as 50-60 gives its highest end when highest is set
+    function firstNumber(text, highest) {
+        var m = plain(text).match(/(\d+)(?:\s*(?:-|–|to)\s*(\d+))?/);
         if (!m) { return ''; }
-        var n = rangeUpper && m[2] ? Math.max(parseInt(m[1], 10), parseInt(m[2], 10)) : parseInt(m[1], 10);
+        var n = highest && m[2] ? Math.max(parseInt(m[1], 10), parseInt(m[2], 10)) : parseInt(m[1], 10);
         return n > 0 ? String(n) : '';
     }
+    function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
     function editorValue(id) {
         if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances[id]) { return CKEDITOR.instances[id].getData(); }
-        var el = document.getElementById(id);
-        return el ? el.value : '';
+        return val(id);
     }
-    function liquidOrPowder() {
-        var el = document.getElementById('producttobepacked');
-        var v = el ? String(el.value).toLowerCase() : '';
-        if (v === '1' || /liquid|paste/.test(v)) { return 'L'; }
-        if (v === '2' || /powder|granul/.test(v)) { return 'P'; }
-        return '';
-    }
-    // number of axis rows on the quotation
+    // axis rows: new rows (noofaxisinmachine[] / noofaxisincount[]) and saved rows (editnoofaxisinmachine<id> / editnoofaxisincount<id>)
     function axisRows() {
-        var rows = document.querySelectorAll('input[name^="noofaxisincount"], input[name^="editnoofaxisincount"]').length;
-        return rows ? String(rows) : '';
+        var rows = [];
+        document.querySelectorAll('[name^="noofaxisinmachine["], [name^="editnoofaxisinmachine"]').forEach(function (nameEl) {
+            var row = nameEl.closest('.row') || nameEl.parentNode.parentNode;
+            var countEl = row ? row.querySelector('[name^="noofaxisincount"], [name^="editnoofaxisincount"]') : null;
+            var name = plain(nameEl.value);
+            if (!name) { return; }
+            var count = countEl ? parseFloat(countEl.value) : NaN;
+            rows.push(name + (count > 0 ? ' x' + parseInt(count, 10) : ''));
+        });
+        return rows;
     }
-    // machine specification read from the form, e.g. SP_600_L_4_5_60; the server maps it to its SPFGMC code
-    function build() {
-        var val = function (id) { var el = document.getElementById(id); return el ? el.value : ''; };
-        var parts = {
-            model: modelType(val('mach_model_no')) || modelType(val('machinemodelno')),
-            type: liquidOrPowder(),
-            track: firstNumber(val('nooftracks'), false),
-            axis: axisRows(),
-            speed: firstNumber(editorValue('actualspeed'), true)
-        };
-        var spec = 'SP', missing = [];
-        Object.keys(parts).forEach(function (k) { if (parts[k]) { spec += '_' + parts[k]; } else { missing.push(k); } });
-        return { spec: spec, missing: missing };
+    // same layout as libraries/Fg_code.php title1(): machine type | N Track | Speed N | Axis: name xN, ...
+    function title1() {
+        var parts = [], machine = plain(val('machineName') || val('machineNameDFSF'));
+        if (machine) { parts.push(machine); }
+        var track = firstNumber(val('nooftracks'), false);
+        if (track) { parts.push(track + ' Track'); }
+        var speed = firstNumber(editorValue('actualspeed'), true);
+        if (speed) { parts.push('Speed ' + speed); }
+        var axis = axisRows();
+        if (axis.length) { parts.push('Axis: ' + axis.join(', ')); }
+        return parts.join(' | ').substring(0, 255);
     }
-    var lookupTimer = null, lookupSeq = 0;
-    function fill() {
-        var input = document.getElementById('fg_code'), note = document.getElementById('fg_code_note');
-        if (!input) { return; }
-        var r = build();
-        if (r.missing.length) {
-            input.value = '';
-            note.textContent = 'No code yet - not readable from the form: ' + r.missing.join(', ');
-            return;
-        }
-        clearTimeout(lookupTimer);
-        var mine = ++lookupSeq;
-        lookupTimer = setTimeout(function () {
-            $.getJSON("<?php echo page_url; ?>Opportunity/fg_code_lookup", { spec: r.spec }, function (res) {
-                if (mine !== lookupSeq) { return; }
-                if (res.code) { input.value = res.code; note.textContent = ''; }
-                else { input.value = ''; note.textContent = 'New specification - code ' + (res.next || 'SPFGMC') + ' will be assigned when the quotation is saved.'; }
-            });
-        }, 250);
+
+    var t1 = document.getElementById('fg_title1'), t2 = document.getElementById('fg_title2'), codeBox = document.getElementById('fg_code'), note = document.getElementById('fg_code_note');
+    // Title 2 follows Title 1 until the sales person changes it
+    var following = (t2.value.trim() === '' || t2.value.trim() === t1.value.trim());
+    t2.addEventListener('input', function () { following = (t2.value.trim() === t1.value.trim()); });
+
+    function refresh() {
+        var next = title1();
+        t1.value = next;
+        if (following) { t2.value = next; }
+    }
+
+    // the code: the saved one for an edit; otherwise the number this quotation will receive when saved
+    if (savedCode) {
+        codeBox.value = savedCode;
+    } else {
+        $.getJSON("<?php echo page_url; ?>Opportunity/fg_code_next", function (res) {
+            codeBox.value = res.next || '';
+            note.textContent = res.next ? 'This number is assigned when the quotation is saved.' : '';
+        });
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        ['mach_model_no', 'machinemodelno', 'nooftracks', 'producttobepacked', 'actualspeed'].forEach(function (id) {
+        ['machineName', 'nooftracks', 'actualspeed'].forEach(function (id) {
             var el = document.getElementById(id);
-            if (el) { el.addEventListener('change', fill); el.addEventListener('keyup', fill); }
+            if (el) { el.addEventListener('change', refresh); el.addEventListener('keyup', refresh); }
         });
-        // axis rows are added and removed dynamically, so listen on the document
         document.addEventListener('change', function (e) {
-            if (e.target && /axis/i.test(e.target.name || '')) { fill(); }
+            if (e.target && /axis/i.test(e.target.name || '')) { refresh(); }
+        });
+        document.addEventListener('keyup', function (e) {
+            if (e.target && /axis/i.test(e.target.name || '')) { refresh(); }
         });
         document.addEventListener('click', function (e) {
-            if (e.target && /axis|remove|delete/i.test((e.target.id || '') + ' ' + (e.target.className || ''))) { setTimeout(fill, 300); }
+            if (e.target && /axis|remove|delete/i.test((e.target.id || '') + ' ' + (e.target.className || ''))) { setTimeout(refresh, 300); }
         });
         if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.actualspeed) {
-            CKEDITOR.instances.actualspeed.on('change', fill);
+            CKEDITOR.instances.actualspeed.on('change', refresh);
         }
-        // the saved code is rebuilt on the server as well; rebuild here on submit so the form shows the same value
-        var form = document.getElementById('fg_code').form;
-        if (form) { form.addEventListener('submit', fill, true); }
+        // the server rebuilds Title 1 and assigns the code on every save; keep the screen in step at submit time
+        var form = t1.form;
+        if (form) { form.addEventListener('submit', refresh, true); }
+        if (mode === 'new' || mode === 'clone') { refresh(); }
     });
 })();
 </script>

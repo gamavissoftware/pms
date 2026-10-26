@@ -1412,7 +1412,6 @@ function feednewopportunity()
 			'addedOn'=>date('Y-m-d H:i:s'),
 			'flag'=>0,
 			'addedBy'=>$user_id);
-			$data4=$this->with_fg_code($data4);
 			$this->db->insert('quotation_annexture_4',$data4);
 			$this->store_fg_code($recordid);
 
@@ -4011,67 +4010,51 @@ else // Powder
 }
 
 
-// Adds the finished goods code (first Annexure-IV line) to a quotation_annexture_4 row.
-// Uses the code typed/shown on the form; when it was left empty it is built from the posted quotation values.
-// Skipped until Database/quotation_fg_code_001.sql has added the column.
-// JSON for the quotation form: the finished goods code of a machine specification (e.g. SP_600_L_4_5_60),
-// or the next number a new specification would receive. Nothing is registered here.
-public function fg_code_lookup()
+// JSON for the quotation form: the code the next new quotation will receive (nothing is registered here).
+public function fg_code_next()
 {
-	$spec=(string)$this->input->get('spec');
-	$result=array('code'=>'','next'=>'');
-	if(preg_match('/^SP_[0-9]+_[LP]_[0-9]+_[0-9]+_[0-9]+$/',$spec))
-	{
-		$this->load->library('Fg_code');
-		$result=$this->fg_code->lookup($spec);
-	}
-	$this->output->set_content_type('application/json')->set_output(json_encode($result));
+	$this->load->library('Fg_code');
+	$this->output->set_content_type('application/json')->set_output(json_encode(array('next'=>$this->fg_code->next_code())));
 }
 
-// Final step after the first Annexure-IV line is written: rebuilds the finished goods code from the quotation as it is now
-// stored (model, product, tracks, axis rows, actual speed) and saves it on that line, so the code SAP receives always
-// matches the saved quotation. Skipped until Database/quotation_fg_code_001.sql has added the column.
+// Final step after the first Annexure-IV line is written. Saves the three finished goods fields on the model line:
+//  - code: SPFGMC + number, taken once per quotation (a new or cloned quotation gets the next number, an edit keeps its own);
+//  - title 1: rebuilt from the quotation as stored (machine type, tracks, speed, axis details);
+//  - title 2: the sales person's edit; it follows title 1 as long as it has not been changed by hand.
+// Skipped until Database/quotation_fg_code_001.sql, quotation_fg_titles_002.sql and fg_code_master_001.sql have been run.
 private function store_fg_code($record_id)
 {
-	if(!$this->db->field_exists('fg_code','quotation_annexture_4'))
+	if(!$this->db->field_exists('fg_code','quotation_annexture_4') || !$this->db->field_exists('fg_title1','quotation_annexture_4'))
 	{
 		return;
 	}
 
 	$this->load->library('Fg_code');
-	$built=$this->fg_code->for_record($record_id);
+	$code=$this->fg_code->assign($record_id);
+	$title1=$this->fg_code->title1_for_record($record_id);
+
 	// the model line only (category_type 0); the other Annexure-IV items of the quotation keep no code
+	$line=$this->db->select('fg_title1,fg_title2')->from('quotation_annexture_4')
+		->where('record_id',$record_id)->where('flag',0)->where('category_type',0)->order_by('id','asc')->limit(1)->get()->row_array();
+	$old_title1=isset($line['fg_title1']) ? trim((string)$line['fg_title1']) : '';
+	$title2=isset($line['fg_title2']) ? trim((string)$line['fg_title2']) : '';
+
+	$posted=$this->input->post('fg_title2');
+	if($posted!==null)
+	{
+		$opened_with=trim((string)$this->input->post('fg_title1_original'));
+		$posted=trim((string)$posted);
+		$title2=($posted==='' || $posted===$opened_with) ? $title1 : $posted;
+	}
+	elseif($title2==='' || $title2===$old_title1)
+	{
+		$title2=$title1;
+	}
+
 	$this->db->where('record_id',$record_id);
 	$this->db->where('flag',0);
 	$this->db->where('category_type',0);
-	$this->db->update('quotation_annexture_4',array('fg_code'=>substr($built['code'],0,40)));
-}
-
-private function with_fg_code($line)
-{
-	if(!$this->db->field_exists('fg_code','quotation_annexture_4'))
-	{
-		return $line;
-	}
-
-	// The code is always generated from the posted quotation (it is not editable), so create, edit and clone
-	// each save the code that matches the saved values.
-	// number of axis rows posted (new rows noofaxisincount[], existing rows editnoofaxisincount<id>)
-	$axis_rows=0;
-	foreach($this->input->post() as $name=>$value)
-	{
-		if(strpos($name,'noofaxisincount')===0 || strpos($name,'editnoofaxisincount')===0)
-		{
-			$axis_rows+=count((array)$value);
-		}
-	}
-
-	$this->load->library('Fg_code');
-	$built=$this->fg_code->build($this->input->post('mach_model_no'),$this->input->post('producttobepacked'),$this->input->post('nooftracks'),$axis_rows,$this->input->post('actualspeed'),$this->input->post('machinemodelno'));
-	$code=$built['code'];
-
-	$line['fg_code']=substr($code,0,40);
-	return $line;
+	$this->db->update('quotation_annexture_4',array('fg_code'=>$code,'fg_title1'=>substr($title1,0,255),'fg_title2'=>substr($title2,0,255)));
 }
 
 function getCurrentVersion($lead_id)
@@ -6552,7 +6535,6 @@ else // Powder
             'addedOn'=>date('Y-m-d H:i:s'),
             'flag'=>0,
             'addedBy'=>$user_id);
-            $data4=$this->with_fg_code($data4);
             $this->db->insert('quotation_annexture_4',$data4);
             $this->store_fg_code($recordid);
 
