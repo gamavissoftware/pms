@@ -220,6 +220,8 @@ defined('sap_customer_sales_person_code') OR define('sap_customer_sales_person_c
 defined('sap_customer_pay_terms_group_code') OR define('sap_customer_pay_terms_group_code', getenv('SAP_CUSTOMER_PAY_TERMS_GROUP_CODE') ?: '');
 defined('sap_customer_debitor_account') OR define('sap_customer_debitor_account', getenv('SAP_CUSTOMER_DEBITOR_ACCOUNT') ?: '');
 defined('sap_ssl_verify') OR define('sap_ssl_verify', getenv('SAP_SSL_VERIFY') === '1');
+// Last finished goods number already created in SAP (the counter continues after it); 0 starts at SPFGMC00001
+defined('fg_code_last_number') OR define('fg_code_last_number', (int) getenv('FG_CODE_LAST_NUMBER'));
 /* Overtime module outgoing mail. Point these at whichever automated PMS mailbox should
    send overtime notifications. Set overtime_mail_pass to the app password for that
    account - the same one application/controllers/Auto_reports.php already uses for the

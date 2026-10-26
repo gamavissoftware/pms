@@ -1,13 +1,13 @@
 <?php
 // Finished goods code for the first Annexure-IV line item. Shown right after the Item description (Model) box
 // on the new, edit and clone quotation forms. Expects $fg_code (existing value, '' for a new quotation).
-// The code is generated automatically and cannot be edited. Rules live in libraries/Fg_code.php; the script below
-// mirrors them so the code follows the form, and the server rebuilds it on every save.
+// The code (SPFGMC + 5-digit number) is assigned automatically and cannot be edited. Rules live in libraries/Fg_code.php;
+// the script below reads the machine specification from the form and shows its code, and the server assigns it on every save.
 $fg_code = isset($fg_code) ? $fg_code : '';
 ?>
 <div class="form-group" style="margin-top:8px;">
     <label for="fg_code" style="margin-bottom:2px;">Finished Goods Code</label>
-    <input type="text" class="form-control" name="fg_code" id="fg_code" maxlength="40" readonly placeholder="Generated automatically" value="<?php echo htmlspecialchars($fg_code, ENT_QUOTES, 'UTF-8'); ?>" style="font-weight:bold;">
+    <input type="text" class="form-control" name="fg_code" id="fg_code" maxlength="40" readonly placeholder="SPFGMC00000 - assigned automatically" value="<?php echo htmlspecialchars($fg_code, ENT_QUOTES, 'UTF-8'); ?>" style="font-weight:bold;">
     <small id="fg_code_note" style="color:#b94a48;"></small>
 </div>
 <script>
@@ -51,6 +51,7 @@ $fg_code = isset($fg_code) ? $fg_code : '';
         var rows = document.querySelectorAll('input[name^="noofaxisincount"], input[name^="editnoofaxisincount"]').length;
         return rows ? String(rows) : '';
     }
+    // machine specification read from the form, e.g. SP_600_L_4_5_60; the server maps it to its SPFGMC code
     function build() {
         var val = function (id) { var el = document.getElementById(id); return el ? el.value : ''; };
         var parts = {
@@ -60,16 +61,29 @@ $fg_code = isset($fg_code) ? $fg_code : '';
             axis: axisRows(),
             speed: firstNumber(editorValue('actualspeed'), true)
         };
-        var code = 'SP', missing = [];
-        Object.keys(parts).forEach(function (k) { if (parts[k]) { code += '_' + parts[k]; } else { missing.push(k); } });
-        return { code: code, missing: missing };
+        var spec = 'SP', missing = [];
+        Object.keys(parts).forEach(function (k) { if (parts[k]) { spec += '_' + parts[k]; } else { missing.push(k); } });
+        return { spec: spec, missing: missing };
     }
+    var lookupTimer = null, lookupSeq = 0;
     function fill() {
-        var input = document.getElementById('fg_code');
+        var input = document.getElementById('fg_code'), note = document.getElementById('fg_code_note');
         if (!input) { return; }
         var r = build();
-        input.value = r.code;
-        document.getElementById('fg_code_note').textContent = r.missing.length ? 'Not yet readable from the form: ' + r.missing.join(', ') : '';
+        if (r.missing.length) {
+            input.value = '';
+            note.textContent = 'No code yet - not readable from the form: ' + r.missing.join(', ');
+            return;
+        }
+        clearTimeout(lookupTimer);
+        var mine = ++lookupSeq;
+        lookupTimer = setTimeout(function () {
+            $.getJSON("<?php echo page_url; ?>Opportunity/fg_code_lookup", { spec: r.spec }, function (res) {
+                if (mine !== lookupSeq) { return; }
+                if (res.code) { input.value = res.code; note.textContent = ''; }
+                else { input.value = ''; note.textContent = 'New specification - code ' + (res.next || 'SPFGMC') + ' will be assigned when the quotation is saved.'; }
+            });
+        }, 250);
     }
 
     document.addEventListener('DOMContentLoaded', function () {

@@ -3,16 +3,22 @@
 /**
  * Finished goods code for the first (fixed) line of Annexure-IV (Price Schedule).
  *
- * SP + Model Type + L/P + Track + Axis + Speed, joined with underscores, all read (e.g. SP_600_L_4_5_60) from the quotation:
+ * Format: SP (Shubham Pack) + FG (Finished Good) + MC (Machine) + 5-digit sequence, e.g. SPFGMC00001.
+ * The number goes up by one for each new code. A code stands for one machine specification, so quotes with the same
+ * specification share it and a new number is used only when a new specification appears. The specification is read
+ * from the quotation (spec key, e.g. SP_600_L_4_5_60):
  *   SP | "Specify Machine Model (For Internal Purpose)"; when that is not selected, the Model in
  *      "Quotation Cum Technical Specification Of The Machine" | L (liquid/paste) or P (powder/granules)
  *      | No. of Tracks | number of axis rows | actual speed (the highest value when a range such as 50-60 is entered)
- * A part that cannot be read from the quotation is left out of the code and reported in 'missing'.
+ * A part that cannot be read from the quotation is reported in 'missing'; such a quotation gets no code and no number is used.
+ * The registry is the table fg_code_master (Database/fg_code_master_001.sql). The counter continues from the highest
+ * number in it, or from fg_code_last_number (last number already created in SAP) when that is higher.
  */
 class Fg_code
 {
     const PREFIX = 'SP';
     const SEPARATOR = '_';
+    const CODE_PREFIX = 'SPFGMC';
 
     private $model_types = array(1250, 1200, 1000, 800, 600, 300);
 
@@ -23,9 +29,10 @@ class Fg_code
      * @param string     $tracks       No. of Tracks text
      * @param int|string $axis_count   number of axis rows on the quotation
      * @param string     $speed        actual speed text (may contain HTML from the editor)
-     * @return array code (string), parts (array), missing (array of part names)
+     * @param bool       $allocate     false = only look up the code of a known specification, never take a new number
+     * @return array code (string, '' when incomplete), spec (string), parts (array), missing (array of part names)
      */
-    public function build($model, $product_type, $tracks, $axis_count, $speed, $fallback_model = '')
+    public function build($model, $product_type, $tracks, $axis_count, $speed, $fallback_model = '', $allocate = true)
     {
         $parts = array(
             'model' => $this->model_type($model) !== '' ? $this->model_type($model) : $this->model_type($fallback_model),
@@ -36,22 +43,91 @@ class Fg_code
         );
 
         $missing = array();
-        $code = self::PREFIX;
+        $spec = self::PREFIX;
         foreach ($parts as $name => $value) {
             if ($value === '') {
                 $missing[] = $name;
                 continue;
             }
-            $code .= self::SEPARATOR . $value;
+            $spec .= self::SEPARATOR . $value;
         }
 
-        return array('code' => $code, 'parts' => $parts, 'missing' => $missing);
+        $code = '';
+        if (empty($missing)) {
+            $code = $allocate ? $this->code_for_spec($spec) : $this->peek($spec);
+        }
+
+        return array('code' => $code, 'spec' => $spec, 'parts' => $parts, 'missing' => $missing);
+    }
+
+    /**
+     * Existing code of a specification, or the next number that a new specification would receive.
+     * @return array code ('' when the specification has no code yet), next (the code a new specification would get)
+     */
+    public function lookup($spec)
+    {
+        $existing = $this->peek($spec);
+        return array('code' => $existing, 'next' => $existing !== '' ? '' : $this->format($this->next_number()));
+    }
+
+    // Code already registered for the specification, '' when there is none.
+    private function peek($spec)
+    {
+        $ci =& get_instance();
+        if (!$ci->db->table_exists('fg_code_master')) {
+            return '';
+        }
+
+        $row = $ci->db->select('fg_code')->from('fg_code_master')->where('spec_key', $spec)->limit(1)->get()->row_array();
+        return isset($row['fg_code']) ? $row['fg_code'] : '';
+    }
+
+    // Code of the specification; registers it with the next number when it is new.
+    private function code_for_spec($spec)
+    {
+        $ci =& get_instance();
+        if (!$ci->db->table_exists('fg_code_master')) {
+            log_message('error', 'fg_code_master is missing: run Database/fg_code_master_001.sql.');
+            return '';
+        }
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $existing = $this->peek($spec);
+            if ($existing !== '') {
+                return $existing;
+            }
+
+            // INSERT IGNORE: a concurrent save taking the same number or specification is simply retried
+            $seq = $this->next_number();
+            $ci->db->query(
+                'INSERT IGNORE INTO fg_code_master (seq, fg_code, spec_key, created_at) VALUES (?, ?, ?, ?)',
+                array($seq, $this->format($seq), $spec, date('Y-m-d H:i:s'))
+            );
+        }
+
+        log_message('error', 'Could not register finished goods code for ' . $spec);
+        return '';
+    }
+
+    private function next_number()
+    {
+        $ci =& get_instance();
+        $row = $ci->db->select_max('seq')->from('fg_code_master')->get()->row_array();
+        $last = isset($row['seq']) ? (int) $row['seq'] : 0;
+        $sap_last = defined('fg_code_last_number') ? (int) fg_code_last_number : 0;
+
+        return max($last, $sap_last) + 1;
+    }
+
+    private function format($number)
+    {
+        return self::CODE_PREFIX . str_pad((string) $number, 5, '0', STR_PAD_LEFT);
     }
 
     /**
      * Builds the code for a stored quotation record (quotation_* tables keyed by record_id).
      */
-    public function for_record($record_id)
+    public function for_record($record_id, $allocate = true)
     {
         $ci =& get_instance();
         $record_id = (int) $record_id;
@@ -72,7 +148,8 @@ class Fg_code
             isset($two['no_of_track']) ? $two['no_of_track'] : '',
             $axis_rows,
             isset($two['actual_speed']) ? $two['actual_speed'] : '',
-            isset($tech['model']) ? $tech['model'] : ''
+            isset($tech['model']) ? $tech['model'] : '',
+            $allocate
         );
     }
 

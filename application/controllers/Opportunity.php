@@ -4014,6 +4014,20 @@ else // Powder
 // Adds the finished goods code (first Annexure-IV line) to a quotation_annexture_4 row.
 // Uses the code typed/shown on the form; when it was left empty it is built from the posted quotation values.
 // Skipped until Database/quotation_fg_code_001.sql has added the column.
+// JSON for the quotation form: the finished goods code of a machine specification (e.g. SP_600_L_4_5_60),
+// or the next number a new specification would receive. Nothing is registered here.
+public function fg_code_lookup()
+{
+	$spec=(string)$this->input->get('spec');
+	$result=array('code'=>'','next'=>'');
+	if(preg_match('/^SP_[0-9]+_[LP]_[0-9]+_[0-9]+_[0-9]+$/',$spec))
+	{
+		$this->load->library('Fg_code');
+		$result=$this->fg_code->lookup($spec);
+	}
+	$this->output->set_content_type('application/json')->set_output(json_encode($result));
+}
+
 // Final step after the first Annexure-IV line is written: rebuilds the finished goods code from the quotation as it is now
 // stored (model, product, tracks, axis rows, actual speed) and saves it on that line, so the code SAP receives always
 // matches the saved quotation. Skipped until Database/quotation_fg_code_001.sql has added the column.
