@@ -7,9 +7,9 @@
  *   Numbered from the first quotation in the system; every quotation takes the next number once and keeps it.
  *   Registry: table fg_code_master (Database/fg_code_master_001.sql). The counter continues from the highest number in
  *   it, or from fg_code_last_number (last number already created in SAP) when that is higher.
- * Title 1: machine type | tracks | speed | axis details, built from the stored quotation, e.g.
- *   VFFS MULTI TRACK MACHINE | 4 Track | Speed 50 | Axis: Laminate Pulling x1, Vertical Sealing x2
- *   Title 2 starts as a copy of Title 1 and can be edited by the sales person.
+ * Title: Machine Model No | Machine Type | Product to be packed | No. of tracks | Actual speed | No. of axis, e.g.
+ *   SPM-300 | VFFS MULTI TRACK MACHINE | Liquid / Paste | 4 Track | Speed 50 | 5 Axis
+ *   Title 1 and Title 2 start out equal (existing quotations were filled this way); Title 2 can be edited by the sales person.
  */
 class Fg_code
 {
@@ -64,43 +64,57 @@ class Fg_code
         return $ci->db->table_exists('fg_code_master') ? $this->format($this->next_number()) : '';
     }
 
-    /** Title 1 of a stored quotation. */
+    /** Title of a stored quotation (Title 1 and Title 2 start out equal). */
     public function title1_for_record($record_id)
     {
         $ci =& get_instance();
         $record_id = (int) $record_id;
 
-        $header = $ci->db->select('machine_name')->from('quotation_customer_data')->where('id', $record_id)->limit(1)->get()->row_array();
+        $header = $ci->db->select('machine_model_no, machine_name')->from('quotation_customer_data')->where('id', $record_id)->limit(1)->get()->row_array();
+        $one = $ci->db->select('product_to_be_packed')->from('quotation_annexture_1')->where('record_id', $record_id)->limit(1)->get()->row_array();
         $two = $ci->db->select('no_of_track, actual_speed')->from('quotation_annexure_2')->where('record_id', $record_id)->limit(1)->get()->row_array();
-        $axis = $ci->db->select('description, axiscount')->from('quotation_no_of_axis_in_machine')
-            ->where('record_id', $record_id)->order_by('id', 'asc')->get()->result_array();
-
-        $rows = array();
-        foreach ($axis as $a) {
-            $rows[] = array('name' => $a['description'], 'count' => $a['axiscount']);
-        }
+        $axis_rows = $ci->db->from('quotation_no_of_axis_in_machine')->where('record_id', $record_id)->count_all_results();
 
         return $this->title1(
+            isset($header['machine_model_no']) ? $header['machine_model_no'] : '',
             isset($header['machine_name']) ? $header['machine_name'] : '',
+            isset($one['product_to_be_packed']) ? $one['product_to_be_packed'] : '',
             isset($two['no_of_track']) ? $two['no_of_track'] : '',
             isset($two['actual_speed']) ? $two['actual_speed'] : '',
-            $rows
+            $axis_rows
         );
     }
 
     /**
-     * @param string $machine_type machine name / type of the quotation
-     * @param string $tracks       No. of Tracks text
-     * @param string $speed        actual speed text (may contain HTML); the highest value when a range is entered
-     * @param array  $axis_rows    list of array(name, count)
+     * Title = Machine Model No | Machine Type | Product to be packed | No. of tracks | Actual speed | No. of axis, e.g.
+     *   SPM-300 | VFFS MULTI TRACK MACHINE | Liquid / Paste | 4 Track | Speed 50 | 5 Axis
+     * A part that is empty on the quotation is left out.
+     *
+     * @param string     $model_no     "Machine Model No." (General Information)
+     * @param string     $machine_type machine name / type of the quotation
+     * @param string|int $product      Product to be packed: 1 = Liquid / Paste, 2 = Powder / Granules (or the text itself)
+     * @param string     $tracks       No. of Tracks text
+     * @param string     $speed        actual speed text (may contain HTML); the highest value when a range is entered
+     * @param int|string $axis_count   number of axis rows on the quotation
      */
-    public function title1($machine_type, $tracks, $speed, $axis_rows)
+    public function title1($model_no, $machine_type, $product, $tracks, $speed, $axis_count)
     {
-        $parts = array();
+        $clean = function ($text) {
+            return trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) $text))));
+        };
 
-        $machine_type = trim(preg_replace('/\s+/', ' ', strip_tags((string) $machine_type)));
-        if ($machine_type !== '') {
-            $parts[] = $machine_type;
+        $parts = array();
+        foreach (array($clean($model_no), $clean($machine_type)) as $text) {
+            if ($text !== '') {
+                $parts[] = $text;
+            }
+        }
+
+        $product_names = array('1' => 'Liquid / Paste', '2' => 'Powder / Granules');
+        $product = $clean($product);
+        $product = isset($product_names[$product]) ? $product_names[$product] : $product;
+        if ($product !== '') {
+            $parts[] = $product;
         }
 
         $track = $this->first_number($tracks, false);
@@ -113,17 +127,9 @@ class Fg_code
             $parts[] = 'Speed ' . $speed_value;
         }
 
-        $axis = array();
-        foreach ((array) $axis_rows as $row) {
-            $name = trim(preg_replace('/\s+/', ' ', strip_tags((string) $row['name'])));
-            if ($name === '') {
-                continue;
-            }
-            $count = trim((string) $row['count']);
-            $axis[] = $name . (is_numeric($count) && (float) $count > 0 ? ' x' . (int) $count : '');
-        }
-        if (!empty($axis)) {
-            $parts[] = 'Axis: ' . implode(', ', $axis);
+        $axis = $this->first_number($axis_count, false);
+        if ($axis !== '') {
+            $parts[] = $axis . ' Axis';
         }
 
         return substr(implode(' | ', $parts), 0, 255);

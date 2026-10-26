@@ -3,8 +3,8 @@
 // new, edit and clone quotation screens.
 //   Finished Goods Code : SPFGMC + number, assigned by the system (read-only). A new or cloned quotation shows the number it
 //                         will receive when saved; an edited quotation keeps its own.
-//   Title 1             : blank by default. "Fill from quotation" builds it from the form: machine type | tracks | speed | axis
-//                         details (the text itself is read-only).
+//   Title 1             : blank by default. "Fill from quotation" builds it from the form: Machine Model No | Machine Type |
+//                         Product to be packed | tracks | actual speed | no. of axis (the text itself is read-only).
 //   Title 2             : blank by default; the sales person types it, or the same button copies Title 1 into it.
 // Expects $fg_code, $fg_title1, $fg_title2 (saved values, '' for a new quotation) and $fg_mode ('new' | 'edit' | 'clone').
 // A new or cloned quotation starts with both titles blank.
@@ -52,29 +52,32 @@ $fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'
         if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances[id]) { return CKEDITOR.instances[id].getData(); }
         return val(id);
     }
-    // axis rows: new rows (noofaxisinmachine[] / noofaxisincount[]) and saved rows (editnoofaxisinmachine<id> / editnoofaxisincount<id>)
-    function axisRows() {
-        var rows = [];
+    // number of axis rows: new rows (noofaxisinmachine[]) and saved rows (editnoofaxisinmachine<id>) that have an axis name
+    function axisCount() {
+        var count = 0;
         document.querySelectorAll('[name^="noofaxisinmachine["], [name^="editnoofaxisinmachine"]').forEach(function (nameEl) {
-            var row = nameEl.closest('.row') || nameEl.parentNode.parentNode;
-            var countEl = row ? row.querySelector('[name^="noofaxisincount"], [name^="editnoofaxisincount"]') : null;
-            var name = plain(nameEl.value);
-            if (!name) { return; }
-            var count = countEl ? parseFloat(countEl.value) : NaN;
-            rows.push(name + (count > 0 ? ' x' + parseInt(count, 10) : ''));
+            if (plain(nameEl.value)) { count++; }
         });
-        return rows;
+        return count;
     }
-    // same layout as libraries/Fg_code.php title1(): machine type | N Track | Speed N | Axis: name xN, ...
+    function selectedText(id) {
+        var el = document.getElementById(id);
+        return el && el.selectedIndex > 0 ? plain(el.options[el.selectedIndex].text) : '';
+    }
+    // same layout as libraries/Fg_code.php title1():
+    // Machine Model No | Machine Type | Product to be packed | N Track | Speed N | N Axis
     function title1() {
-        var parts = [], machine = plain(val('machineName') || val('machineNameDFSF'));
+        var parts = [];
+        var model = plain(val('machineModel')), machine = plain(val('machineName') || val('machineNameDFSF')), product = selectedText('producttobepacked');
+        if (model) { parts.push(model); }
         if (machine) { parts.push(machine); }
+        if (product) { parts.push(product); }
         var track = firstNumber(val('nooftracks'), false);
         if (track) { parts.push(track + ' Track'); }
         var speed = firstNumber(editorValue('actualspeed'), true);
         if (speed) { parts.push('Speed ' + speed); }
-        var axis = axisRows();
-        if (axis.length) { parts.push('Axis: ' + axis.join(', ')); }
+        var axis = axisCount();
+        if (axis) { parts.push(axis + ' Axis'); }
         return parts.join(' | ').substring(0, 255);
     }
 

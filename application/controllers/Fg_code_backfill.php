@@ -2,10 +2,11 @@
 
 /**
  * One-off, CLI-only: gives every existing quotation its finished goods code (SPFGMC00001, SPFGMC00002 ...) in order of
- * quotation id, starting from the first quotation, on its first Annexure-IV line. Titles are not touched (they are blank by default and filled by the sales person).
+ * quotation id, starting from the first quotation, on its first Annexure-IV line, and sets Title 1 and Title 2 to the same generated title
+ * (Machine Model No | Machine Type | Product to be packed | tracks | actual speed | no. of axis).
  *   php index.php Fg_code_backfill run        dry run: reports what would be done, changes nothing, takes no numbers
  *   php index.php Fg_code_backfill run 1      writes the codes
- * Safe to run again: a quotation keeps the code it already has, and titles are never changed.
+ * Safe to run again: a quotation keeps the code it already has, and a Title 2 edited by hand is left alone.
  */
 class Fg_code_backfill extends CI_Controller
 {
@@ -29,6 +30,7 @@ class Fg_code_backfill extends CI_Controller
         $quotes = $this->db->select('id')->from('quotation_customer_data')->order_by('id', 'asc')->get()->result_array();
 
         $coded = 0;
+        $kept = 0;
         $no_line = array();
         foreach ($quotes as $quote) {
             $record_id = (int) $quote['id'];
@@ -48,7 +50,18 @@ class Fg_code_backfill extends CI_Controller
                 continue;
             }
 
-            $this->db->where('id', (int) $line['id'])->update('quotation_annexture_4', array('fg_code' => $code));
+            // Title 1 and Title 2 are set to the same generated title. A Title 2 that a sales person has changed by hand
+            // (it differs from the Title 1 saved with it) is left as it is.
+            $title = $this->fg_code->title1_for_record($record_id);
+            $old1 = trim((string) $line['fg_title1']);
+            $old2 = trim((string) $line['fg_title2']);
+            $update = array('fg_code' => $code, 'fg_title1' => $title);
+            if ($old2 === '' || $old2 === $old1) {
+                $update['fg_title2'] = $title;
+            } else {
+                $kept++;
+            }
+            $this->db->where('id', (int) $line['id'])->update('quotation_annexture_4', $update);
             $coded++;
         }
 
@@ -58,6 +71,7 @@ class Fg_code_backfill extends CI_Controller
         }
 
         echo ((int) $write === 1 ? 'Coded: ' : 'Would code: ') . $coded . ' quotations (first id ' . (isset($quotes[0]) ? $quotes[0]['id'] : '-') . ', last id ' . (count($quotes) ? $quotes[count($quotes) - 1]['id'] : '-') . ')' . "\n";
+        echo 'Title 2 left as edited by hand: ' . $kept . "\n";
         echo 'Quotations with no model line to store it on: ' . count($no_line) . (count($no_line) ? ' (ids ' . implode(',', array_slice($no_line, 0, 20)) . ')' : '') . "\n";
     }
 }
