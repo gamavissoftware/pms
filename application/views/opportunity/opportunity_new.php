@@ -332,6 +332,10 @@ if($permisson==0)
     </div>
     </div>
 
+    <div class="col-md-12">
+    <?php $this->load->view('opportunity/fg_code_field', array('fg_mode' => 'new')); ?>
+    </div>
+
 
 
     </div>
@@ -1649,7 +1653,6 @@ if($permisson==0)
     <tbody>
     <tr>
     <td><input type="text" class="form-control mmodel" name="modelno" id="modelno" onkeyup="getmachinemodelno2();" placeholder="Model" value="<?php echo set_value('modelno');?>" required>
-<?php $this->load->view('opportunity/fg_code_field', array('fg_mode' => 'new')); ?>
 
                 <input type="checkbox" name="additionalinformation" id="additionalinformation">
 <div id="additionalinformationofmachine" style="display: none;">

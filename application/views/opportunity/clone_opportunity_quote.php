@@ -590,6 +590,15 @@ $kldimage=$this->salescrm->get_quotation_machine_kld_image($record_id);
     </div>
     </div>
 
+    <?php
+    // finished goods code and titles live on the model line of the quotation (first Annexure-IV line)
+    $fg_line = $this->salescrm->getPriceDataByCategory($record_id, 0);
+    $fg_line = isset($fg_line[0]) ? $fg_line[0] : array();
+    ?>
+    <div class="col-md-12">
+    <?php $this->load->view('opportunity/fg_code_field', array('fg_mode' => 'clone', 'fg_code' => isset($fg_line['fg_code']) ? $fg_line['fg_code'] : '', 'fg_title1' => isset($fg_line['fg_title1']) ? $fg_line['fg_title1'] : '', 'fg_title2' => isset($fg_line['fg_title2']) ? $fg_line['fg_title2'] : '')); ?>
+    </div>
+
 
 
     </div>
@@ -2369,7 +2378,6 @@ $formatted_total_price =$total_price;
 ?>
     <tr>
     <td><input type="text" class="form-control mmodel" name="modelno" id="modelno" onkeyup="getmachinemodelno2();" placeholder="Model" required value="<?php echo $desc;?>">
-<?php $this->load->view('opportunity/fg_code_field', array('fg_mode' => 'clone', 'fg_code' => isset($dprice1['fg_code']) ? $dprice1['fg_code'] : '', 'fg_title1' => isset($dprice1['fg_title1']) ? $dprice1['fg_title1'] : '', 'fg_title2' => isset($dprice1['fg_title2']) ? $dprice1['fg_title2'] : '')); ?>
         <input type="checkbox" name="additionalinformation" id="additionalinformation" <?php if($additionalinformationwiththemachine){echo "checked";}?>>
 <div id="additionalinformationofmachine" <?php if($additionalinformationwiththemachine){}else{?> style="display: none;"<?php }?>>
     <textarea class="form-control" name="additionalinformationwiththemachine" id="additionalinformationwiththemachine"><?php echo $additionalinformationwiththemachine;?></textarea>
