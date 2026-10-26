@@ -4017,10 +4017,10 @@ public function fg_code_next()
 	$this->output->set_content_type('application/json')->set_output(json_encode(array('next'=>$this->fg_code->next_code())));
 }
 
-// Final step after the first Annexure-IV line is written. Saves the three finished goods fields on the model line:
+// Final step after the first Annexure-IV line is written. Saves the finished goods fields on the model line:
 //  - code: SPFGMC + number, taken once per quotation (a new or cloned quotation gets the next number, an edit keeps its own);
-//  - title 1: rebuilt from the quotation as stored (machine type, tracks, speed, axis details);
-//  - title 2: the sales person's edit; it follows title 1 as long as it has not been changed by hand.
+//  - title 1 and title 2: exactly as submitted on the form (blank by default, never filled in automatically);
+//    a save that does not carry the fields (older edit page) leaves the saved titles alone.
 // Skipped until Database/quotation_fg_code_001.sql, quotation_fg_titles_002.sql and fg_code_master_001.sql have been run.
 private function store_fg_code($record_id)
 {
@@ -4030,31 +4030,22 @@ private function store_fg_code($record_id)
 	}
 
 	$this->load->library('Fg_code');
-	$code=$this->fg_code->assign($record_id);
-	$title1=$this->fg_code->title1_for_record($record_id);
+	$data=array('fg_code'=>$this->fg_code->assign($record_id));
+
+	foreach(array('fg_title1','fg_title2') as $field)
+	{
+		$posted=$this->input->post($field);
+		if($posted!==null)
+		{
+			$data[$field]=substr(trim((string)$posted),0,255);
+		}
+	}
 
 	// the model line only (category_type 0); the other Annexure-IV items of the quotation keep no code
-	$line=$this->db->select('fg_title1,fg_title2')->from('quotation_annexture_4')
-		->where('record_id',$record_id)->where('flag',0)->where('category_type',0)->order_by('id','asc')->limit(1)->get()->row_array();
-	$old_title1=isset($line['fg_title1']) ? trim((string)$line['fg_title1']) : '';
-	$title2=isset($line['fg_title2']) ? trim((string)$line['fg_title2']) : '';
-
-	$posted=$this->input->post('fg_title2');
-	if($posted!==null)
-	{
-		$opened_with=trim((string)$this->input->post('fg_title1_original'));
-		$posted=trim((string)$posted);
-		$title2=($posted==='' || $posted===$opened_with) ? $title1 : $posted;
-	}
-	elseif($title2==='' || $title2===$old_title1)
-	{
-		$title2=$title1;
-	}
-
 	$this->db->where('record_id',$record_id);
 	$this->db->where('flag',0);
 	$this->db->where('category_type',0);
-	$this->db->update('quotation_annexture_4',array('fg_code'=>$code,'fg_title1'=>substr($title1,0,255),'fg_title2'=>substr($title2,0,255)));
+	$this->db->update('quotation_annexture_4',$data);
 }
 
 function getCurrentVersion($lead_id)

@@ -2,10 +2,10 @@
 
 /**
  * One-off, CLI-only: gives every existing quotation its finished goods code (SPFGMC00001, SPFGMC00002 ...) in order of
- * quotation id, starting from the first quotation, and fills Title 1 / Title 2 on its first Annexure-IV line.
+ * quotation id, starting from the first quotation, on its first Annexure-IV line. Titles are not touched (they are blank by default and filled by the sales person).
  *   php index.php Fg_code_backfill run        dry run: reports what would be done, changes nothing, takes no numbers
- *   php index.php Fg_code_backfill run 1      writes codes and titles
- * Safe to run again: a quotation keeps the code it already has, and a Title 2 edited by hand is left alone.
+ *   php index.php Fg_code_backfill run 1      writes the codes
+ * Safe to run again: a quotation keeps the code it already has, and titles are never changed.
  */
 class Fg_code_backfill extends CI_Controller
 {
@@ -48,14 +48,7 @@ class Fg_code_backfill extends CI_Controller
                 continue;
             }
 
-            $title1 = $this->fg_code->title1_for_record($record_id);
-            $old1 = trim((string) $line['fg_title1']);
-            $title2 = trim((string) $line['fg_title2']);
-            if ($title2 === '' || $title2 === $old1) {
-                $title2 = $title1;
-            }
-
-            $this->db->where('id', (int) $line['id'])->update('quotation_annexture_4', array('fg_code' => $code, 'fg_title1' => $title1, 'fg_title2' => substr($title2, 0, 255)));
+            $this->db->where('id', (int) $line['id'])->update('quotation_annexture_4', array('fg_code' => $code));
             $coded++;
         }
 

@@ -3,13 +3,19 @@
 // new, edit and clone quotation screens.
 //   Finished Goods Code : SPFGMC + number, assigned by the system (read-only). A new or cloned quotation shows the number it
 //                         will receive when saved; an edited quotation keeps its own.
-//   Title 1             : machine type | tracks | speed | axis details, built automatically from the form (read-only).
-//   Title 2             : starts as a copy of Title 1; the sales person can edit it. It follows Title 1 until changed by hand.
+//   Title 1             : blank by default. "Fill from quotation" builds it from the form: machine type | tracks | speed | axis
+//                         details (the text itself is read-only).
+//   Title 2             : blank by default; the sales person types it, or the same button copies Title 1 into it.
 // Expects $fg_code, $fg_title1, $fg_title2 (saved values, '' for a new quotation) and $fg_mode ('new' | 'edit' | 'clone').
+// A new or cloned quotation starts with both titles blank.
 $fg_code = isset($fg_code) ? $fg_code : '';
 $fg_title1 = isset($fg_title1) ? $fg_title1 : '';
 $fg_title2 = isset($fg_title2) ? $fg_title2 : '';
 $fg_mode = isset($fg_mode) ? $fg_mode : 'new';
+if ($fg_mode !== 'edit') {
+    $fg_title1 = '';
+    $fg_title2 = '';
+}
 $fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
 ?>
 <div class="form-group" style="margin-top:8px;">
@@ -18,15 +24,16 @@ $fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'
     <small id="fg_code_note" style="color:#777;"></small>
 
     <label for="fg_title1" style="margin:8px 0 2px;">Title 1</label>
-    <input type="hidden" name="fg_title1_original" value="<?php echo $fg_e($fg_title1); ?>">
-    <textarea class="form-control" id="fg_title1" rows="2" readonly><?php echo $fg_e($fg_title1); ?></textarea>
+    <textarea class="form-control" name="fg_title1" id="fg_title1" rows="2" maxlength="255" readonly><?php echo $fg_e($fg_title1); ?></textarea>
 
     <label for="fg_title2" style="margin:8px 0 2px;">Title 2 <small>(you can edit this)</small></label>
     <textarea class="form-control" name="fg_title2" id="fg_title2" rows="2" maxlength="255"><?php echo $fg_e($fg_title2); ?></textarea>
+
+    <button type="button" class="btn btn-default btn-sm" id="fg_fill" style="margin-top:6px;">Fill from quotation</button>
 </div>
 <script>
 (function () {
-    var mode = <?php echo json_encode($fg_mode); ?>, savedCode = <?php echo json_encode($fg_mode === 'clone' ? '' : $fg_code); ?>;
+    var savedCode = <?php echo json_encode($fg_mode === 'clone' ? '' : $fg_code); ?>;
 
     function plain(html) {
         var d = document.createElement('div');
@@ -72,15 +79,14 @@ $fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'
     }
 
     var t1 = document.getElementById('fg_title1'), t2 = document.getElementById('fg_title2'), codeBox = document.getElementById('fg_code'), note = document.getElementById('fg_code_note');
-    // Title 2 follows Title 1 until the sales person changes it
-    var following = (t2.value.trim() === '' || t2.value.trim() === t1.value.trim());
-    t2.addEventListener('input', function () { following = (t2.value.trim() === t1.value.trim()); });
 
-    function refresh() {
-        var next = title1();
-        t1.value = next;
-        if (following) { t2.value = next; }
-    }
+    // Titles stay as they are (blank by default) until the button is used: it rebuilds Title 1 from the form as it is now
+    // and copies it into Title 2 when Title 2 is still empty.
+    document.getElementById('fg_fill').addEventListener('click', function () {
+        var built = title1();
+        t1.value = built;
+        if (t2.value.trim() === '') { t2.value = built; }
+    });
 
     // the code: the saved one for an edit; otherwise the number this quotation will receive when saved
     if (savedCode) {
@@ -92,27 +98,5 @@ $fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'
         });
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
-        ['machineName', 'nooftracks', 'actualspeed'].forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) { el.addEventListener('change', refresh); el.addEventListener('keyup', refresh); }
-        });
-        document.addEventListener('change', function (e) {
-            if (e.target && /axis/i.test(e.target.name || '')) { refresh(); }
-        });
-        document.addEventListener('keyup', function (e) {
-            if (e.target && /axis/i.test(e.target.name || '')) { refresh(); }
-        });
-        document.addEventListener('click', function (e) {
-            if (e.target && /axis|remove|delete/i.test((e.target.id || '') + ' ' + (e.target.className || ''))) { setTimeout(refresh, 300); }
-        });
-        if (window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances.actualspeed) {
-            CKEDITOR.instances.actualspeed.on('change', refresh);
-        }
-        // the server rebuilds Title 1 and assigns the code on every save; keep the screen in step at submit time
-        var form = t1.form;
-        if (form) { form.addEventListener('submit', refresh, true); }
-        if (mode === 'new' || mode === 'clone') { refresh(); }
-    });
 })();
 </script>
