@@ -7,8 +7,8 @@
  *   Numbered from the first quotation in the system; every quotation takes the next number once and keeps it.
  *   Registry: table fg_code_master (Database/fg_code_master_001.sql). The counter continues from the highest number in
  *   it, or from fg_code_last_number (last number already created in SAP) when that is higher.
- * Title: Machine Model No | Machine Type | Product to be packed | No. of tracks | Actual speed | No. of axis, e.g.
- *   SPM-300 | VFFS MULTI TRACK MACHINE | Liquid / Paste | 4 Track | Speed 50 | 5 Axis
+ * Title: SP-{model}{L|P}-{tracks}T-{axis}A-{speed} | {machine type}, e.g.
+ *   SP-1200L-12T-5A-100 | VFFS SINGLE TRACK MACHINE
  *   Title 1 and Title 2 start out equal (existing quotations were filled this way); Title 2 can be edited by the sales person.
  */
 class Fg_code
@@ -70,13 +70,16 @@ class Fg_code
         $ci =& get_instance();
         $record_id = (int) $record_id;
 
-        $header = $ci->db->select('machine_model_no, machine_name')->from('quotation_customer_data')->where('id', $record_id)->limit(1)->get()->row_array();
+        $header = $ci->db->select('mach_model_no, machine_name')->from('quotation_customer_data')->where('id', $record_id)->limit(1)->get()->row_array();
+        $tech = $ci->db->select('model')->from('quotation_cum_tech_spec')
+            ->where('record_id', $record_id)->where("model <> ''", null, false)->order_by('id', 'asc')->limit(1)->get()->row_array();
         $one = $ci->db->select('product_to_be_packed')->from('quotation_annexture_1')->where('record_id', $record_id)->limit(1)->get()->row_array();
         $two = $ci->db->select('no_of_track, actual_speed')->from('quotation_annexure_2')->where('record_id', $record_id)->limit(1)->get()->row_array();
         $axis_rows = $ci->db->from('quotation_no_of_axis_in_machine')->where('record_id', $record_id)->count_all_results();
 
         return $this->title1(
-            isset($header['machine_model_no']) ? $header['machine_model_no'] : '',
+            isset($header['mach_model_no']) ? $header['mach_model_no'] : '',
+            isset($tech['model']) ? $tech['model'] : '',
             isset($header['machine_name']) ? $header['machine_name'] : '',
             isset($one['product_to_be_packed']) ? $one['product_to_be_packed'] : '',
             isset($two['no_of_track']) ? $two['no_of_track'] : '',
@@ -86,53 +89,73 @@ class Fg_code
     }
 
     /**
-     * Title = Machine Model No | Machine Type | Product to be packed | No. of tracks | Actual speed | No. of axis, e.g.
-     *   SPM-300 | VFFS MULTI TRACK MACHINE | Liquid / Paste | 4 Track | Speed 50 | 5 Axis
+     * Title = SP-{model type}{L|P}-{tracks}T-{axis}A-{speed} followed by the machine type, e.g.
+     *   SP-1200L-12T-5A-100 | VFFS SINGLE TRACK MACHINE
+     *   model type : "Specify Machine Model (For Internal Purpose)" (300, 600, 800, 1000, 1200, 1250); when that is not
+     *                selected, the Model in "Quotation Cum Technical Specification Of The Machine"
+     *   L / P      : Product to be packed - Liquid / Paste = L, Powder / Granules = P
+     *   tracks, axis, speed : No. of Tracks, number of axis rows, actual speed (the highest value of a range)
      * A part that is empty on the quotation is left out.
-     *
-     * @param string     $model_no     "Machine Model No." (General Information)
-     * @param string     $machine_type machine name / type of the quotation
-     * @param string|int $product      Product to be packed: 1 = Liquid / Paste, 2 = Powder / Granules (or the text itself)
-     * @param string     $tracks       No. of Tracks text
-     * @param string     $speed        actual speed text (may contain HTML); the highest value when a range is entered
-     * @param int|string $axis_count   number of axis rows on the quotation
      */
-    public function title1($model_no, $machine_type, $product, $tracks, $speed, $axis_count)
+    public function title1($model, $fallback_model, $machine_type, $product, $tracks, $speed, $axis_count)
     {
-        $clean = function ($text) {
-            return trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) $text))));
-        };
+        $model_type = $this->model_type($model) !== '' ? $this->model_type($model) : $this->model_type($fallback_model);
+        $head = 'SP';
+        $lp = $this->liquid_or_powder($product);
+        if ($model_type !== '' || $lp !== '') {
+            $head .= '-' . $model_type . $lp;
+        }
 
-        $parts = array();
-        foreach (array($clean($model_no), $clean($machine_type)) as $text) {
-            if ($text !== '') {
-                $parts[] = $text;
+        $pieces = array($head);
+        $track = $this->first_number($tracks, false);
+        if ($track !== '') {
+            $pieces[] = $track . 'T';
+        }
+        $axis = $this->first_number($axis_count, false);
+        if ($axis !== '') {
+            $pieces[] = $axis . 'A';
+        }
+        $speed_value = $this->first_number($speed, true);
+        if ($speed_value !== '') {
+            $pieces[] = $speed_value;
+        }
+
+        $title = implode('-', $pieces);
+        $machine_type = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) $machine_type))));
+        if ($machine_type !== '') {
+            $title .= ' | ' . $machine_type;
+        }
+
+        return substr($title, 0, 255);
+    }
+
+    private $model_types = array(1250, 1200, 1000, 800, 600, 300);
+
+    // One of the supported model types found in the text (as a whole number), '' when none.
+    private function model_type($text)
+    {
+        $text = trim(html_entity_decode(strip_tags((string) $text)));
+        foreach ($this->model_types as $number) {
+            if (preg_match('/(?<![0-9.])' . $number . '(?![0-9])/', $text)) {
+                return (string) $number;
             }
         }
 
-        $product_names = array('1' => 'Liquid / Paste', '2' => 'Powder / Granules');
-        $product = $clean($product);
-        $product = isset($product_names[$product]) ? $product_names[$product] : $product;
-        if ($product !== '') {
-            $parts[] = $product;
+        return '';
+    }
+
+    // 1 / Liquid / Paste = L, 2 / Powder / Granules = P, '' otherwise.
+    private function liquid_or_powder($value)
+    {
+        $value = strtolower(trim(strip_tags((string) $value)));
+        if ($value === '1' || preg_match('/liquid|paste/', $value)) {
+            return 'L';
+        }
+        if ($value === '2' || preg_match('/powder|granul/', $value)) {
+            return 'P';
         }
 
-        $track = $this->first_number($tracks, false);
-        if ($track !== '') {
-            $parts[] = $track . ' Track';
-        }
-
-        $speed_value = $this->first_number($speed, true);
-        if ($speed_value !== '') {
-            $parts[] = 'Speed ' . $speed_value;
-        }
-
-        $axis = $this->first_number($axis_count, false);
-        if ($axis !== '') {
-            $parts[] = $axis . ' Axis';
-        }
-
-        return substr(implode(' | ', $parts), 0, 255);
+        return '';
     }
 
     private function next_number()

@@ -4,7 +4,7 @@
 //   Finished Goods Code : SPFGMC + number, assigned by the system (read-only). A new or cloned quotation shows the number it
 //                         will receive when saved; an edited quotation keeps its own.
 //   Title 1             : blank on a new quotation until a field is chosen, then built automatically as the form is filled:
-//                         Machine Model No | Machine Type | Product to be packed | tracks | actual speed | no. of axis (read-only).
+//                         SP-{model}{L|P}-{tracks}T-{axis}A-{speed} | {machine type}, e.g. SP-1200L-12T-5A-100 (read-only).
 //   Title 2             : starts as a copy of Title 1 and follows it; the sales person can edit it, after which it is left alone.
 // Expects $fg_code, $fg_title1, $fg_title2 (saved values, '' for a new quotation) and $fg_mode ('new' | 'edit' | 'clone').
 // A new or cloned quotation starts with both titles blank.
@@ -58,25 +58,34 @@ $fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'
         });
         return count;
     }
-    function selectedText(id) {
-        var el = document.getElementById(id);
-        return el && el.selectedIndex > 0 ? plain(el.options[el.selectedIndex].text) : '';
+    var MODEL = [1250, 1200, 1000, 800, 600, 300];
+    function modelType(text) {
+        text = plain(text);
+        for (var i = 0; i < MODEL.length; i++) {
+            if (new RegExp('(^|[^0-9.])' + MODEL[i] + '([^0-9]|$)').test(text)) { return String(MODEL[i]); }
+        }
+        return '';
     }
-    // same layout as libraries/Fg_code.php title1():
-    // Machine Model No | Machine Type | Product to be packed | N Track | Speed N | N Axis
+    // Product to be packed: Liquid / Paste = L, Powder / Granules = P
+    function liquidOrPowder() {
+        var v = plain(val('producttobepacked')).toLowerCase();
+        if (v === '1' || /liquid|paste/.test(v)) { return 'L'; }
+        if (v === '2' || /powder|granul/.test(v)) { return 'P'; }
+        return '';
+    }
+    // same layout as libraries/Fg_code.php title1():  SP-{model}{L|P}-{tracks}T-{axis}A-{speed} | {machine type}
     function title1() {
-        var parts = [];
-        var model = plain(val('machineModel')), machine = plain(val('machineName') || val('machineNameDFSF')), product = selectedText('producttobepacked');
-        if (model) { parts.push(model); }
-        if (machine) { parts.push(machine); }
-        if (product) { parts.push(product); }
+        var model = modelType(val('mach_model_no')) || modelType(val('machinemodelno')), lp = liquidOrPowder();
+        var pieces = ['SP' + (model || lp ? '-' + model + lp : '')];
         var track = firstNumber(val('nooftracks'), false);
-        if (track) { parts.push(track + ' Track'); }
-        var speed = firstNumber(editorValue('actualspeed'), true);
-        if (speed) { parts.push('Speed ' + speed); }
+        if (track) { pieces.push(track + 'T'); }
         var axis = axisCount();
-        if (axis) { parts.push(axis + ' Axis'); }
-        return parts.join(' | ').substring(0, 255);
+        if (axis) { pieces.push(axis + 'A'); }
+        var speed = firstNumber(editorValue('actualspeed'), true);
+        if (speed) { pieces.push(speed); }
+        var title = pieces.join('-'), machine = plain(val('machineName') || val('machineNameDFSF'));
+        if (machine) { title += ' | ' + machine; }
+        return title.substring(0, 255);
     }
 
     var t1 = document.getElementById('fg_title1'), t2 = document.getElementById('fg_title2'), codeBox = document.getElementById('fg_code'), note = document.getElementById('fg_code_note');
@@ -102,7 +111,7 @@ $fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'
 
 
     document.addEventListener('DOMContentLoaded', function () {
-        ['machineModel', 'machineName', 'producttobepacked', 'nooftracks', 'actualspeed'].forEach(function (id) {
+        ['mach_model_no', 'machinemodelno', 'machineName', 'producttobepacked', 'nooftracks', 'actualspeed'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) { el.addEventListener('change', refresh); el.addEventListener('keyup', refresh); }
         });
