@@ -4,7 +4,7 @@
 //   Finished Goods Code : SPFGMC + number, assigned by the system (read-only). A new or cloned quotation shows the number it
 //                         will receive when saved; an edited quotation keeps its own.
 //   Title 1             : blank on a new quotation until a field is chosen, then built automatically as the form is filled:
-//                         SP-{model}{L|P}-{tracks}T-{axis}A-{speed} | {machine type}, e.g. SP-1200L-12T-5A-100 (read-only).
+//                         SP-{model}{L|P}-{axis}A-{tracks}T-{speed} | {machine type}, e.g. SP-1200L-5A-12T-100 (read-only).
 //   Title 2             : starts as a copy of Title 1 and follows it; the sales person can edit it, after which it is left alone.
 // Expects $fg_code, $fg_title1, $fg_title2 (saved values, '' for a new quotation) and $fg_mode ('new' | 'edit' | 'clone').
 // A new or cloned quotation starts with both titles blank.
@@ -73,14 +73,14 @@ $fg_e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'
         if (v === '2' || /powder|granul/.test(v)) { return 'P'; }
         return '';
     }
-    // same layout as libraries/Fg_code.php title1():  SP-{model}{L|P}-{tracks}T-{axis}A-{speed} | {machine type}
+    // same layout as libraries/Fg_code.php title1():  SP-{model}{L|P}-{axis}A-{tracks}T-{speed} | {machine type}
     function title1() {
         var model = modelType(val('mach_model_no')) || modelType(val('machinemodelno')), lp = liquidOrPowder();
         var pieces = ['SP' + (model || lp ? '-' + model + lp : '')];
-        var track = firstNumber(val('nooftracks'), false);
-        if (track) { pieces.push(track + 'T'); }
         var axis = axisCount();
         if (axis) { pieces.push(axis + 'A'); }
+        var track = firstNumber(val('nooftracks'), false);
+        if (track) { pieces.push(track + 'T'); }
         var speed = firstNumber(editorValue('actualspeed'), true);
         if (speed) { pieces.push(speed); }
         var title = pieces.join('-'), machine = plain(val('machineName') || val('machineNameDFSF'));

@@ -7,8 +7,8 @@
  *   Numbered from the first quotation in the system; every quotation takes the next number once and keeps it.
  *   Registry: table fg_code_master (Database/fg_code_master_001.sql). The counter continues from the highest number in
  *   it, or from fg_code_last_number (last number already created in SAP) when that is higher.
- * Title: SP-{model}{L|P}-{tracks}T-{axis}A-{speed} | {machine type}, e.g.
- *   SP-1200L-12T-5A-100 | VFFS SINGLE TRACK MACHINE
+ * Title: SP-{model}{L|P}-{axis}A-{tracks}T-{speed} | {machine type}, e.g.
+ *   SP-1200L-5A-12T-100 | VFFS SINGLE TRACK MACHINE
  *   Title 1 and Title 2 start out equal (existing quotations were filled this way); Title 2 can be edited by the sales person.
  */
 class Fg_code
@@ -89,12 +89,12 @@ class Fg_code
     }
 
     /**
-     * Title = SP-{model type}{L|P}-{tracks}T-{axis}A-{speed} followed by the machine type, e.g.
-     *   SP-1200L-12T-5A-100 | VFFS SINGLE TRACK MACHINE
+     * Title = SP-{model type}{L|P}-{axis}A-{tracks}T-{speed} followed by the machine type, e.g.
+     *   SP-1200L-5A-12T-100 | VFFS SINGLE TRACK MACHINE
      *   model type : "Specify Machine Model (For Internal Purpose)" (300, 600, 800, 1000, 1200, 1250); when that is not
      *                selected, the Model in "Quotation Cum Technical Specification Of The Machine"
      *   L / P      : Product to be packed - Liquid / Paste = L, Powder / Granules = P
-     *   tracks, axis, speed : No. of Tracks, number of axis rows, actual speed (the highest value of a range)
+     *   axis, tracks, speed : number of axis rows, No. of Tracks, actual speed (the highest value of a range)
      * A part that is empty on the quotation is left out.
      */
     public function title1($model, $fallback_model, $machine_type, $product, $tracks, $speed, $axis_count)
@@ -107,13 +107,13 @@ class Fg_code
         }
 
         $pieces = array($head);
-        $track = $this->first_number($tracks, false);
-        if ($track !== '') {
-            $pieces[] = $track . 'T';
-        }
         $axis = $this->first_number($axis_count, false);
         if ($axis !== '') {
             $pieces[] = $axis . 'A';
+        }
+        $track = $this->first_number($tracks, false);
+        if ($track !== '') {
+            $pieces[] = $track . 'T';
         }
         $speed_value = $this->first_number($speed, true);
         if ($speed_value !== '') {
