@@ -593,6 +593,24 @@ $customTerms=$this->salescrm->getCustomTerms($record_id);
     </div>
 
     <?php
+    // Attention person printed on the cover page: the saved value for this quotation, otherwise the customer's contact name
+    $attention_saved = '';
+    if ($this->db->field_exists('attention_person', 'quotation_customer_data')) {
+        $att_row = $this->db->select('attention_person')->from('quotation_customer_data')->where('id', $record_id)->limit(1)->get()->row_array();
+        $attention_saved = isset($att_row['attention_person']) ? trim((string) $att_row['attention_person']) : '';
+    }
+    if ($attention_saved === '') {
+        $att_customer = $this->salescrm->getCustomerdetail($this->salescrm->getquoteBasicData($record_id)[2]);
+        $attention_saved = isset($att_customer[0]) ? trim((string) $att_customer[0]) : '';
+    }
+    ?>
+    <div class="col-md-6">
+    <div class="form-group">
+    <label>Attention Person <small>(name printed on the quotation cover page)</small></label>
+    <input type="text" class="form-control" name="attention_person" id="attention_person" maxlength="150" value="<?php echo htmlspecialchars($attention_saved, ENT_QUOTES, 'UTF-8'); ?>" style="font-weight:bold;color:black;">
+    </div>
+    </div>
+    <?php
     // finished goods code and titles live on the model line of the quotation (first Annexure-IV line)
     $fg_line = $this->salescrm->getPriceDataByCategory($record_id, 0);
     $fg_line = isset($fg_line[0]) ? $fg_line[0] : array();

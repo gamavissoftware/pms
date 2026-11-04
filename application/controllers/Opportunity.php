@@ -2985,6 +2985,11 @@ function Update_newopportunity()
 				'gst_actual'=>$gst_actual,
 				'validity'=>$this->input->post('validity'),
 				'updatedBy'=>$user_id);
+			// Attention person shown on the cover page (blank = the customer's contact name)
+			if($this->input->post('attention_person')!==null && $this->db->field_exists('attention_person','quotation_customer_data'))
+			{
+				$data['attention_person']=substr(trim((string)$this->input->post('attention_person')),0,150);
+			}
 			$this->db->where('lead_id',$this->uri->segment(3));
 			$this->db->update('quotation_customer_data',$data);
 

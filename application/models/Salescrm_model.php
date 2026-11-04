@@ -12248,6 +12248,15 @@ if(count($basicData)>0)
 	{
 		$customerName=$customer_detail[1];
 		$customercontactperson = $customer_detail[0];
+		// attention person edited on this quotation (sales quote only) replaces the customer's contact name on the cover
+		if($this->db->field_exists('attention_person','quotation_customer_data'))
+		{
+			$att=$this->db->select('attention_person')->from('quotation_customer_data')->where('id',$record_id)->limit(1)->get()->row_array();
+			if(!empty($att['attention_person']) && trim($att['attention_person'])!=='')
+			{
+				$customercontactperson=trim($att['attention_person']);
+			}
+		}
 	}else{
 		$customerName='';
 		$customercontactperson = '';
