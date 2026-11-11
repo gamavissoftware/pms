@@ -591,7 +591,11 @@ $color = '';
                         $v = $versioninfo->version;
                         for($i=1; $i<=$v; $i++){
                           $fileNL='Quotation_'.$refrencenumber.'_V'.$i.'.pdf';
-                          $fileurl = $filelocation.'Quotation_'.$refrencenumber.'_V'.$i.'.pdf';
+                          // the current version is opened through the page that generates the PDF (always fresh); earlier versions
+                          // stay as the files saved when they were current, since the quotation data is not stored per version
+                          $fileurl = ($i == $v && $recordid > 0)
+                            ? page_url.'Opportunity/GeneratedQuote/'.$recordid.'/Open?nocache='.time()
+                            : $filelocation.'Quotation_'.$refrencenumber.'_V'.$i.'.pdf';
                         ?>
                       <tr>
                         <td><?php echo $i;?></td>

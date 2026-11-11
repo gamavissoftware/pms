@@ -173,7 +173,9 @@ if($permisson==0)
                         <div class="col-md-8">
                         <?php
                         $filelocation = softwarepath.'shubhamquotation/';
-                        $fileNL=$filelocation.'Quotation_'.$refrencenumber.'_V'.$version.'.pdf?nocache='.time();
+                        // Always open the page that generates the PDF (it rebuilds and re-saves the file from the current quotation
+                        // data and shows it), never the saved file, so a cached or stale copy is never displayed.
+                        $fileNL=page_url.'Opportunity/GeneratedQuote/'.(int)$this->uri->segment(3).'/Open?nocache='.time();
                         if(in_array($currentstatus,$notallowed))
                         {
                             
