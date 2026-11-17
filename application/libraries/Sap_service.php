@@ -426,7 +426,20 @@ class Sap_service
             return $login;
         }
 
-        $result = $this->request('POST', 'BusinessPartners', $payload, $login['cookie']);
+        // The customer numbering series in SAP is manual (SAP no longer generates codes), so the code is supplied here:
+        // the next SPMC number after the highest customer code in SAP. A code taken meanwhile is retried with the next number.
+        if (empty($payload['CardCode'])) {
+            $number = $this->last_customer_code_number($login['cookie']);
+            for ($attempt = 0; $attempt < 3; $attempt++) {
+                $payload['CardCode'] = 'SPMC' . str_pad((string) ($number + 1 + $attempt), 4, '0', STR_PAD_LEFT);
+                $result = $this->request('POST', 'BusinessPartners', $payload, $login['cookie']);
+                if (!empty($result['success']) || stripos((string) (isset($result['message']) ? $result['message'] : ''), 'already exist') === false) {
+                    break;
+                }
+            }
+        } else {
+            $result = $this->request('POST', 'BusinessPartners', $payload, $login['cookie']);
+        }
         $status = !empty($result['success']) ? 'SUCCESS' : 'FAILED';
         $sap_card_code = null;
 
@@ -601,6 +614,17 @@ class Sap_service
             'GSTIN' => $this->null_if_empty($gst),
             'GstType' => $gst !== '' ? 'gstRegularTDSISD' : null
         );
+    }
+
+    // Number part of the highest customer code (SPMC####) in SAP; 0 when it cannot be read.
+    private function last_customer_code_number($cookie)
+    {
+        $result = $this->request('GET', "BusinessPartners?\$select=CardCode&\$filter=startswith(CardCode,'SPMC')&\$orderby=CardCode%20desc&\$top=1", null, $cookie);
+        if (!empty($result['success']) && !empty($result['decoded']['value'][0]['CardCode'])) {
+            return (int) preg_replace('/[^0-9]/', '', $result['decoded']['value'][0]['CardCode']);
+        }
+
+        return 0;
     }
 
     private function login()
