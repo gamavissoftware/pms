@@ -213,7 +213,7 @@ defined('sap_service_layer_base_url') OR define('sap_service_layer_base_url', ge
 defined('sap_company_db') OR define('sap_company_db', getenv('SAP_COMPANY_DB') ?: '');
 defined('sap_username') OR define('sap_username', getenv('SAP_USERNAME') ?: '');
 defined('sap_password') OR define('sap_password', getenv('SAP_PASSWORD') ?: '');
-defined('sap_customer_series') OR define('sap_customer_series', getenv('SAP_CUSTOMER_SERIES') ?: 109);
+defined('sap_customer_series') OR define('sap_customer_series', getenv('SAP_CUSTOMER_SERIES') ?: 1); // SAP customer numbering series (was 109, which no longer exists in SAP)
 defined('sap_customer_group_code') OR define('sap_customer_group_code', getenv('SAP_CUSTOMER_GROUP_CODE') ?: 100);
 defined('sap_customer_currency') OR define('sap_customer_currency', getenv('SAP_CUSTOMER_CURRENCY') ?: 'INR');
 defined('sap_customer_sales_person_code') OR define('sap_customer_sales_person_code', getenv('SAP_CUSTOMER_SALES_PERSON_CODE') ?: -1);
