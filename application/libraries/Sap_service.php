@@ -210,6 +210,204 @@ class Sap_service
         }
     }
 
+    /**
+     * Sends a sales quotation (quotation_customer_data record) to SAP as a Sales Quotation (POST Quotations), or updates the
+     * SAP quotation already created for it (PATCH). Header: dates, customer, reference, currency, remarks. Line: the model
+     * line of Annexure-IV with the finished goods code (SPFGMC.....) as ItemCode, quantity and price.
+     * The customer is sent with its SAP BP code (SAP_bp_map, loaded from the SAP BP master); a customer without a mapped code is
+     * logged as FAILED and not sent.
+     */
+    public function sync_quotation($record_id)
+    {
+        $record_id = (int) $record_id;
+        if ($record_id <= 0) {
+            return array('success' => false, 'message' => 'Invalid quotation id.');
+        }
+        if (!$this->ci->db->table_exists('SAP_quotation_sync') || !$this->sync_table_ready()) {
+            log_message('error', 'SAP quotation sync table is missing. Run Database/sap_quotation_sync_004.sql.');
+            return array('success' => false, 'skipped' => true, 'message' => 'SAP quotation sync table missing.');
+        }
+        if (!$this->is_configured()) {
+            return array('success' => false, 'skipped' => true, 'message' => 'SAP Service Layer is not configured.');
+        }
+
+        $quote = $this->load_quotation($record_id);
+        if (empty($quote)) {
+            return array('success' => false, 'message' => 'Quotation or its model line not found.');
+        }
+        if ($quote['fg_code'] === '') {
+            $this->record_quote_sync($record_id, 'SKIPPED', null, null, 'The quotation has no finished goods code yet.');
+            return array('success' => false, 'skipped' => true, 'message' => 'No finished goods code.');
+        }
+
+        $card_code = $this->customer_card_code((int) $quote['customer_id']);
+        if ($card_code === '') {
+            $this->record_quote_sync($record_id, 'FAILED', null, null, 'The customer has no SAP BP code mapped (SAP_bp_map), so the quotation was not sent.');
+            return array('success' => false, 'message' => 'Customer has no SAP BP code mapped.');
+        }
+
+        $payload = $this->build_quotation_payload($quote, $card_code);
+        $existing = $this->ci->db->select('sap_doc_entry')->from('SAP_quotation_sync')
+            ->where('record_id', $record_id)->where('sap_doc_entry IS NOT NULL', null, false)->limit(1)->get()->row_array();
+
+        $login = $this->login();
+        if (empty($login['success'])) {
+            $this->record_quote_sync($record_id, 'FAILED', $payload, isset($login['response']) ? $login['response'] : null, isset($login['message']) ? $login['message'] : 'SAP login failed.');
+            return $login;
+        }
+
+        if (!empty($existing['sap_doc_entry'])) {
+            // an edit: update the same SAP quotation (header and the model line)
+            $doc_entry = (int) $existing['sap_doc_entry'];
+            $result = $this->request('PATCH', 'Quotations(' . $doc_entry . ')', $this->quotation_update_payload($payload), $login['cookie']);
+            $this->record_quote_sync($record_id, !empty($result['success']) ? 'SUCCESS' : 'FAILED', $payload, isset($result['body']) ? $result['body'] : null,
+                !empty($result['success']) ? null : (isset($result['message']) ? $result['message'] : 'SAP quotation update failed.'), $doc_entry, null);
+            return $result;
+        }
+
+        $result = $this->request('POST', 'Quotations', $payload, $login['cookie']);
+        $doc_entry = null;
+        $doc_num = null;
+        if (!empty($result['decoded']) && is_array($result['decoded'])) {
+            $doc_entry = isset($result['decoded']['DocEntry']) ? (int) $result['decoded']['DocEntry'] : null;
+            $doc_num = isset($result['decoded']['DocNum']) ? (int) $result['decoded']['DocNum'] : null;
+        }
+        $this->record_quote_sync($record_id, !empty($result['success']) ? 'SUCCESS' : 'FAILED', $payload, isset($result['body']) ? $result['body'] : null,
+            !empty($result['success']) ? null : (isset($result['message']) ? $result['message'] : 'SAP quotation create failed.'), $doc_entry, $doc_num);
+
+        return $result;
+    }
+
+    private function load_quotation($record_id)
+    {
+        $header = $this->ci->db->select('id, ref_no, quotation_date, customer_id, currency, validity, version, machine_name')
+            ->from('quotation_customer_data')->where('id', (int) $record_id)->limit(1)->get()->row_array();
+        if (empty($header)) {
+            return array();
+        }
+
+        $has_fg = $this->ci->db->field_exists('fg_code', 'quotation_annexture_4');
+        $line = $this->ci->db->select('description, hsn, qty, unit, price' . ($has_fg ? ', fg_code, fg_title2' : ''))->from('quotation_annexture_4')
+            ->where('record_id', (int) $record_id)->where('flag', 0)->where('category_type', 0)->order_by('id', 'asc')->limit(1)->get()->row_array();
+        if (empty($line)) {
+            return array();
+        }
+
+        $header['fg_code'] = $has_fg && isset($line['fg_code']) ? trim((string) $line['fg_code']) : '';
+        $header['fg_title2'] = $has_fg && isset($line['fg_title2']) ? trim((string) $line['fg_title2']) : '';
+        $header['line'] = $line;
+
+        return $header;
+    }
+
+    // SAP card code of the quotation's customer: the BP code mapped from the SAP BP master (SAP_bp_map), otherwise the code of a
+    // customer that PMS created in SAP itself. A customer with neither is not created here: it must be mapped first, so the
+    // quotation never goes to a new duplicate of a business partner that already exists in SAP.
+    private function customer_card_code($customer_id)
+    {
+        if ($customer_id <= 0) {
+            return '';
+        }
+
+        if ($this->ci->db->table_exists('SAP_bp_map')) {
+            $row = $this->ci->db->select('bp_code')->from('SAP_bp_map')->where('customer_id', $customer_id)->limit(1)->get()->row_array();
+            if (!empty($row['bp_code'])) {
+                return trim($row['bp_code']);
+            }
+        }
+
+        $row = $this->ci->db->select('sap_card_code')->from('SAP_customer_sync')
+            ->where('source_type', 'marketing')->where('source_record_id', $customer_id)->where('sync_status', 'SUCCESS')
+            ->where('sap_card_code IS NOT NULL', null, false)->limit(1)->get()->row_array();
+
+        return !empty($row['sap_card_code']) ? $row['sap_card_code'] : '';
+    }
+
+    private function build_quotation_payload($quote, $card_code)
+    {
+        $currencies = array('1' => 'USD', '2' => 'INR', '3' => 'EUR');
+        $date = !empty($quote['quotation_date']) && strtotime($quote['quotation_date']) ? date('Y-m-d', strtotime($quote['quotation_date'])) : date('Y-m-d');
+        $validity = max(1, (int) $quote['validity']);
+        $line = $quote['line'];
+
+        $remarks = $quote['fg_title2'] !== '' ? $quote['fg_title2'] : trim((string) $line['description']);
+        $row = array(
+            'LineNum' => 0,
+            'ItemCode' => $quote['fg_code'],
+            'ItemDescription' => $this->null_if_empty(substr(trim(strip_tags((string) $line['description'])), 0, 100)),
+            'Quantity' => max(1, (float) $line['qty']),
+            'Price' => (float) $line['price'],
+            'UnitPrice' => (float) $line['price']
+        );
+        if (trim((string) sap_quote_warehouse) !== '') {
+            $row['WarehouseCode'] = trim((string) sap_quote_warehouse);
+        }
+        if (trim((string) sap_quote_tax_code) !== '') {
+            $row['TaxCode'] = trim((string) sap_quote_tax_code);
+        }
+
+        $payload = array(
+            'DocType' => 'dDocument_Items',
+            'DocDate' => $date,
+            'DocDueDate' => date('Y-m-d', strtotime($date . ' +' . $validity . ' days')),
+            'CardCode' => $card_code,
+            'NumAtCard' => $this->null_if_empty($quote['ref_no']),
+            'Comments' => $this->null_if_empty(substr($remarks, 0, 254)),
+            'DocumentLines' => array($row)
+        );
+        if (isset($currencies[(string) $quote['currency']])) {
+            $payload['DocCurrency'] = $currencies[(string) $quote['currency']];
+        }
+        if (trim((string) sap_quote_sales_person_code) !== '') {
+            $payload['SalesPersonCode'] = (int) sap_quote_sales_person_code;
+        }
+
+        return $payload;
+    }
+
+    // Update body: only what the PMS quotation owns (dates, customer reference number, remarks and the model line).
+    private function quotation_update_payload($payload)
+    {
+        $update = array();
+        foreach (array('DocDate', 'DocDueDate', 'NumAtCard', 'Comments', 'DocumentLines') as $key) {
+            if (array_key_exists($key, $payload)) {
+                $update[$key] = $payload[$key];
+            }
+        }
+
+        return $update;
+    }
+
+    private function record_quote_sync($record_id, $status, $payload, $response, $error_message = null, $doc_entry = null, $doc_num = null)
+    {
+        $existing = $this->ci->db->select('id, attempt_count')->from('SAP_quotation_sync')->where('record_id', (int) $record_id)->get()->row_array();
+        $data = array(
+            'sync_status' => $status,
+            'request_payload' => $payload === null ? null : json_encode($payload),
+            'response_payload' => $response,
+            'error_message' => $error_message,
+            'last_attempt_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s')
+        );
+        if ($doc_entry !== null) {
+            $data['sap_doc_entry'] = $doc_entry;
+        }
+        if ($doc_num !== null) {
+            $data['sap_doc_num'] = $doc_num;
+        }
+
+        if (!empty($existing)) {
+            $data['attempt_count'] = (int) $existing['attempt_count'] + 1;
+            $this->ci->db->where('id', (int) $existing['id'])->update('SAP_quotation_sync', $data);
+            return;
+        }
+
+        $data['record_id'] = (int) $record_id;
+        $data['attempt_count'] = 1;
+        $data['created_at'] = date('Y-m-d H:i:s');
+        $this->ci->db->insert('SAP_quotation_sync', $data);
+    }
+
     private function create_business_partner($source_type, $source_record_id, $payload)
     {
         if (!$this->sync_table_ready()) {

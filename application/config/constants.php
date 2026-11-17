@@ -222,6 +222,10 @@ defined('sap_customer_debitor_account') OR define('sap_customer_debitor_account'
 defined('sap_ssl_verify') OR define('sap_ssl_verify', getenv('SAP_SSL_VERIFY') === '1');
 // Last finished goods number already created in SAP (the counter continues after it); 0 starts at SPFGMC00001
 defined('fg_code_last_number') OR define('fg_code_last_number', (int) getenv('FG_CODE_LAST_NUMBER'));
+// Sales quotation -> SAP (Quotations API). Blank values are left out of the request so SAP uses its own defaults.
+defined('sap_quote_warehouse') OR define('sap_quote_warehouse', getenv('SAP_QUOTE_WAREHOUSE') ?: '');
+defined('sap_quote_tax_code') OR define('sap_quote_tax_code', getenv('SAP_QUOTE_TAX_CODE') ?: '');
+defined('sap_quote_sales_person_code') OR define('sap_quote_sales_person_code', getenv('SAP_QUOTE_SALES_PERSON_CODE') ?: '');
 /* Overtime module outgoing mail. Point these at whichever automated PMS mailbox should
    send overtime notifications. Set overtime_mail_pass to the app password for that
    account - the same one application/controllers/Auto_reports.php already uses for the

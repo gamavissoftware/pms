@@ -4051,6 +4051,27 @@ private function store_fg_code($record_id)
 	$this->db->where('flag',0);
 	$this->db->where('category_type',0);
 	$this->db->update('quotation_annexture_4',$data);
+
+	$this->push_quotation_to_sap($record_id);
+}
+
+// Sends the saved quotation to SAP (creates it, or updates the one already sent). A SAP problem is logged and never
+// blocks saving the quotation. Skipped until Database/sap_quotation_sync_004.sql has been run.
+private function push_quotation_to_sap($record_id)
+{
+	try
+	{
+		$this->load->library('Sap_service');
+		$result=$this->sap_service->sync_quotation($record_id);
+		if(empty($result['success']) && empty($result['skipped']))
+		{
+			log_message('error','SAP quotation sync failed for quotation '.(int)$record_id.': '.(isset($result['message']) ? $result['message'] : 'Unknown error'));
+		}
+	}
+	catch(Exception $e)
+	{
+		log_message('error','SAP quotation sync error for quotation '.(int)$record_id.': '.$e->getMessage());
+	}
 }
 
 function getCurrentVersion($lead_id)
