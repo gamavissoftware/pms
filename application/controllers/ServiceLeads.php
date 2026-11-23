@@ -1424,11 +1424,24 @@ class ServiceLeads extends CI_Controller {
             $data['state_id'] = $state_input > 0 ? $state_input : null;
         }
 
+        // Duplicate guard: the same company + contact person + phone or email is the same customer; a repeated or double
+        // submit returns the existing customer instead of inserting another one.
+        $this->load->library('Customer_guard');
+        $guard_lock = $this->customer_guard->lock($data['company_name']);
+        $existing_id = $this->customer_guard->find_spares_customer($data['company_name'], $data['contact_person'], $data['contact_person_no'], $data['email']);
+        if ($existing_id > 0) {
+            $this->customer_guard->unlock($guard_lock);
+            echo "1~" . $existing_id;
+            return;
+        }
+
         if ($this->db->insert('spares_customers', $data)) {
             $customer_id = $this->db->insert_id();
+            $this->customer_guard->unlock($guard_lock);
             $this->sync_customer_to_sap('spares', $customer_id);
             echo "1~" . $customer_id;
         } else {
+            $this->customer_guard->unlock($guard_lock);
             echo "0~Failed to save customer.";
         }
     }

@@ -3,8 +3,9 @@
 /**
  * Finished goods code and titles for the first (fixed) line of Annexure-IV (Price Schedule).
  *
- * Code: SP (Shubham Pack) + FG (Finished Good) + MC (Machine) + 5-digit number, e.g. SPFGMC00001.
- *   Numbered from the first quotation in the system; every quotation takes the next number once and keeps it.
+ * Code: SP (Shubham Pack) + FG (Finished Good) + MC (Machine) + 5-digit number. Quotes created from the SAP go-live use
+ *   SAP's series, SPFGMCH + 5 digits (next after the last FG item in SAP, e.g. SPFGMCH04212); earlier quotes keep SPFGMC00001 ...
+ *   Every quotation takes a number once and keeps it.
  *   Registry: table fg_code_master (Database/fg_code_master_001.sql). The counter continues from the highest number in
  *   it, or from fg_code_last_number (last number already created in SAP) when that is higher.
  * Title: SP-{model}{L|P}-{axis}A-{tracks}T-{speed} | {machine type}, e.g.
@@ -13,7 +14,9 @@
  */
 class Fg_code
 {
-    const CODE_PREFIX = 'SPFGMC';
+    // New quotes continue SAP's own finished goods series (SPFGMCH04184 ... SPFGMCH04211 already exist in SAP).
+    // Quotes numbered before this (SPFGMC00001 ...) keep their codes and are not sent to SAP.
+    const CODE_PREFIX = 'SPFGMCH';
 
     /** Code of the quotation, registering the next number when it has none yet. '' only if the registry is missing. */
     public function assign($record_id)
@@ -164,6 +167,13 @@ class Fg_code
         $row = $ci->db->select_max('seq')->from('fg_code_master')->get()->row_array();
         $last = isset($row['seq']) ? (int) $row['seq'] : 0;
         $sap_last = defined('fg_code_last_number') ? (int) fg_code_last_number : 0;
+
+        // the last FG item actually in SAP (someone may have created more there); falls back to the configured number
+        $ci->load->library('Sap_service');
+        $live = $ci->sap_service->last_fg_item_number();
+        if ($live > $sap_last) {
+            $sap_last = $live;
+        }
 
         return max($last, $sap_last) + 1;
     }

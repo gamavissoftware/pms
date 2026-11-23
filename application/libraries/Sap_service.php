@@ -235,9 +235,10 @@ class Sap_service
         if (empty($quote)) {
             return array('success' => false, 'message' => 'Quotation or its model line not found.');
         }
-        if ($quote['fg_code'] === '') {
-            $this->record_quote_sync($record_id, 'SKIPPED', null, null, 'The quotation has no finished goods code yet.');
-            return array('success' => false, 'skipped' => true, 'message' => 'No finished goods code.');
+        // Only quotes numbered in SAP's series (SPFGMCH#####, created from the SAP go-live) are sent; older quotes keep their
+        // PMS-only codes and are skipped without a log entry.
+        if (!preg_match('/^SPFGMCH[0-9]{5}$/', $quote['fg_code'])) {
+            return array('success' => true, 'skipped' => true, 'message' => 'Quotation predates the SAP go-live; not sent.');
         }
 
         $card_code = $this->customer_card_code((int) $quote['customer_id']);
@@ -265,6 +266,13 @@ class Sap_service
             return $result;
         }
 
+        // a new quotation: its finished goods item must exist in SAP first
+        $item = $this->ensure_fg_item($quote, $login['cookie']);
+        if (empty($item['success'])) {
+            $this->record_quote_sync($record_id, 'FAILED', $payload, isset($item['body']) ? $item['body'] : null, 'Finished goods item could not be created in SAP: ' . (isset($item['message']) ? $item['message'] : 'unknown error'));
+            return $item;
+        }
+
         $result = $this->request('POST', 'Quotations', $payload, $login['cookie']);
         $doc_entry = null;
         $doc_num = null;
@@ -276,6 +284,69 @@ class Sap_service
             !empty($result['success']) ? null : (isset($result['message']) ? $result['message'] : 'SAP quotation create failed.'), $doc_entry, $doc_num);
 
         return $result;
+    }
+
+    /**
+     * Number of the last finished goods item in SAP's series (SPFGMCH#####), 0 when it cannot be read.
+     * Used to continue the numbering after SAP's own last code.
+     */
+    public function last_fg_item_number()
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $cached = 0;
+        if (!$this->is_configured()) {
+            return $cached;
+        }
+
+        $login = $this->login();
+        if (empty($login['success'])) {
+            return $cached;
+        }
+
+        $result = $this->request('GET', "Items?\$select=ItemCode&\$filter=startswith(ItemCode,'SPFGMCH')&\$orderby=ItemCode%20desc&\$top=1", null, $login['cookie']);
+        if (!empty($result['success']) && !empty($result['decoded']['value'][0]['ItemCode'])) {
+            $cached = (int) preg_replace('/[^0-9]/', '', $result['decoded']['value'][0]['ItemCode']);
+        }
+
+        return $cached;
+    }
+
+    // Creates the finished goods item of the quotation in SAP (group FINISH GOODS) unless it is already there.
+    private function ensure_fg_item($quote, $cookie)
+    {
+        $code = $quote['fg_code'];
+        $found = $this->request('GET', "Items('" . rawurlencode($code) . "')?\$select=ItemCode", null, $cookie);
+        if (!empty($found['success'])) {
+            return array('success' => true, 'existing' => true);
+        }
+
+        $name = $quote['fg_title2'] !== '' ? $quote['fg_title2'] : trim(strip_tags((string) $quote['line']['description']));
+        $name = function_exists('mb_substr') ? mb_substr($name, 0, 100) : substr($name, 0, 100);
+
+        // same set-up as the finished goods machine items already in SAP (e.g. SPFGMCH04195)
+        $item = array(
+            'ItemCode' => $code,
+            'ItemName' => $name !== '' ? $name : $code,
+            'ItemType' => 'itItems',
+            'ItemsGroupCode' => 104,
+            'InventoryItem' => 'tYES',
+            'SalesItem' => 'tYES',
+            'PurchaseItem' => 'tYES',
+            'SalesUnit' => 'NOS',
+            'InventoryUOM' => 'NOS',
+            'GSTRelevnt' => 'tYES',
+            'MaterialType' => 'mt_FinishedGoods',
+            'PlanningSystem' => 'bop_MRP',
+            'ProcurementMethod' => 'bom_Make',
+            'Valid' => 'tYES',
+            'Frozen' => 'tNO'
+        );
+
+        return $this->request('POST', 'Items', $item, $cookie);
     }
 
     private function load_quotation($record_id)

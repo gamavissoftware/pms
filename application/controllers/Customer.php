@@ -10234,21 +10234,53 @@ function customerpendingforpaymenttermsapproval() {
 		$geo = $this->_customer_country_state_data();
 		if($geo===false){ echo "0~State is required"; exit; }
 		if($personcontactno<>''){
-		// $a = $this->db->select('contact_no')->from('customer_detail')->where('contact_no',$personcontactno)->get();
-		// if($a->num_rows()>0){
-		// 	echo "Record Already Exist."; exit;
-		// }else{
+		// Duplicate guard: the same company + contact person + phone or email is the same customer. A repeated or double
+		// submit returns the customer that already exists instead of inserting another one. The lock makes two requests
+		// that arrive together wait for each other, so the second one sees the first one's row.
+		$lock='pms_cust_'.md5(strtolower(trim($company)));
+		$this->db->query('SELECT GET_LOCK(?, 10)',array($lock));
+		$existing_id=$this->find_existing_customer($company,$contactpersonname,$personcontactno,$email);
+		if($existing_id>0)
+		{
+			$this->db->query('SELECT RELEASE_LOCK(?)',array($lock));
+			echo "1~".$existing_id;
+			return;
+		}
 				$dr=array('company_brand'=>$brand,'company_name'=>$company,'email'=>$email,'bill_email'=>$email,'address'=>$address,'bill_address'=>$address,'status'=>1,'customer_name'=>$contactpersonname,'contact_no'=>$personcontactno,'alt_contact'=>$acontactno);
 		$dr = array_merge($dr, $geo);
 
 
 		$this->db->insert('customer_detail',$dr);
 		$id=$this->db->insert_id();
+		$this->db->query('SELECT RELEASE_LOCK(?)',array($lock));
 		$this->sync_customer_to_sap('marketing', $id);
 		echo $this->db->affected_rows()."~".$id;
 		
 	}
 	
+	}
+
+	// Id of an existing customer with the same company name, contact person and phone number or email (0 when there is none).
+	private function find_existing_customer($company,$contact,$phone,$email)
+	{
+		$norm=function($v){ return strtolower(trim(preg_replace('/\s+/',' ',(string)$v))); };
+		$digits=function($v){ return preg_replace('/[^0-9]/','',(string)$v); };
+		$rows=$this->db->select('id,customer_name,contact_no,email')->from('customer_detail')
+			->where('LOWER(TRIM(company_name))',$norm($company))->order_by('id','asc')->limit(50)->get()->result_array();
+		foreach($rows as $row)
+		{
+			if($norm($row['customer_name'])!==$norm($contact))
+			{
+				continue;
+			}
+			$same_phone=$digits($phone)!=='' && $digits($row['contact_no'])===$digits($phone);
+			$same_email=$norm($email)!=='' && $norm($row['email'])===$norm($email);
+			if($same_phone || $same_email)
+			{
+				return (int)$row['id'];
+			}
+		}
+		return 0;
 	}
 
 
@@ -10290,6 +10322,10 @@ function add_new_ajax_customer_with_multiple_Record()
 
         // Start a transaction to ensure atomicity
         $this->db->trans_start();
+
+        // Two requests for the same contact number wait for each other (the lock drops when the request ends, after the commit),
+        // so the second one finds the first one's row below.
+        $this->db->query('SELECT GET_LOCK(?, 10)', array('pms_cust_contact_' . md5($first_contact_no)));
 
         // Check if the first contact number already exists in customer_detail
         $a = $this->db->select('contact_no')->from('customer_detail')->where('contact_no', $first_contact_no)->get();
