@@ -315,38 +315,117 @@ class Sap_service
         return $cached;
     }
 
-    // Creates the finished goods item of the quotation in SAP (group FINISH GOODS) unless it is already there.
+    /**
+     * Sends the finished goods code of a quotation to SAP as an Item (group 104 FINISH GOODS), for every quotation, old or
+     * new, whether or not its customer is mapped. An item that already exists is only renamed when the quotation's
+     * Title 2 changed. Result logged in SAP_item_sync. $cookie lets a batch reuse one SAP login.
+     */
+    public function sync_fg_item($record_id, $cookie = null)
+    {
+        $record_id = (int) $record_id;
+        if (!$this->ci->db->table_exists('SAP_item_sync')) {
+            log_message('error', 'SAP item sync table is missing. Run Database/sap_item_sync_006.sql.');
+            return array('success' => false, 'skipped' => true, 'message' => 'SAP item sync table missing.');
+        }
+        if (!$this->is_configured()) {
+            return array('success' => false, 'skipped' => true, 'message' => 'SAP Service Layer is not configured.');
+        }
+
+        $quote = $this->load_quotation($record_id);
+        if (empty($quote) || $quote['fg_code'] === '') {
+            return array('success' => false, 'skipped' => true, 'message' => 'Quotation has no finished goods code.');
+        }
+
+        if ($cookie === null) {
+            $login = $this->login();
+            if (empty($login['success'])) {
+                return $login;
+            }
+            $cookie = $login['cookie'];
+        }
+
+        $result = $this->ensure_fg_item($quote, $cookie);
+        $this->record_item_sync($quote['fg_code'], $record_id, $this->fg_item_name($quote), !empty($result['success']) ? 'SUCCESS' : 'FAILED',
+            isset($result['body']) ? $result['body'] : null, !empty($result['success']) ? null : (isset($result['message']) ? $result['message'] : 'SAP item create failed.'));
+
+        return $result;
+    }
+
+    /** A logged-in SAP cookie for batch work (null when the login fails). */
+    public function session_cookie()
+    {
+        $login = $this->login();
+        return !empty($login['success']) ? $login['cookie'] : null;
+    }
+
+    private function fg_item_name($quote)
+    {
+        $name = $quote['fg_title2'] !== '' ? $quote['fg_title2'] : trim(strip_tags((string) $quote['line']['description']));
+        // SAP accepts item names in uppercase only
+        $name = trim(preg_replace('/\s+/', ' ', $name));
+        $name = function_exists('mb_strtoupper') ? mb_strtoupper($name, 'UTF-8') : strtoupper($name);
+        $name = function_exists('mb_substr') ? mb_substr($name, 0, 100) : substr($name, 0, 100);
+        return $name !== '' ? $name : $quote['fg_code'];
+    }
+
+    // Creates the finished goods item of the quotation in SAP unless it is already there (then only the name is kept current).
+    // Field values follow the SAP Item Master mapping sheet and the finished goods machine items already in SAP (e.g. SPFGMCH04195).
     private function ensure_fg_item($quote, $cookie)
     {
         $code = $quote['fg_code'];
-        $found = $this->request('GET', "Items('" . rawurlencode($code) . "')?\$select=ItemCode", null, $cookie);
+        $name = $this->fg_item_name($quote);
+
+        $found = $this->request('GET', "Items('" . rawurlencode($code) . "')?\$select=ItemCode,ItemName", null, $cookie);
         if (!empty($found['success'])) {
-            return array('success' => true, 'existing' => true);
+            $current = isset($found['decoded']['ItemName']) ? $found['decoded']['ItemName'] : '';
+            if ($current === $name) {
+                return array('success' => true, 'existing' => true, 'body' => null);
+            }
+            $renamed = $this->request('PATCH', "Items('" . rawurlencode($code) . "')", array('ItemName' => $name), $cookie);
+            $renamed['existing'] = true;
+            return $renamed;
         }
 
-        $name = $quote['fg_title2'] !== '' ? $quote['fg_title2'] : trim(strip_tags((string) $quote['line']['description']));
-        $name = function_exists('mb_substr') ? mb_substr($name, 0, 100) : substr($name, 0, 100);
-
-        // same set-up as the finished goods machine items already in SAP (e.g. SPFGMCH04195)
         $item = array(
             'ItemCode' => $code,
-            'ItemName' => $name !== '' ? $name : $code,
+            'ItemName' => $name,
             'ItemType' => 'itItems',
-            'ItemsGroupCode' => 104,
+            'ItemsGroupCode' => 104,              // Finish Goods
             'InventoryItem' => 'tYES',
             'SalesItem' => 'tYES',
             'PurchaseItem' => 'tYES',
             'SalesUnit' => 'NOS',
+            'PurchaseUnit' => 'NOS',
             'InventoryUOM' => 'NOS',
-            'GSTRelevnt' => 'tYES',
+            'ManageSerialNumbers' => 'tNO',
+            'ManageBatchNumbers' => 'tYES',
+            'Valid' => 'tYES',
+            'Frozen' => 'tNO',
             'MaterialType' => 'mt_FinishedGoods',
             'PlanningSystem' => 'bop_MRP',
             'ProcurementMethod' => 'bom_Make',
-            'Valid' => 'tYES',
-            'Frozen' => 'tNO'
+            'GSTRelevnt' => 'tYES',
+            'GSTTaxCategory' => 'gtc_Regular',
+            'ChapterID' => 4                      // tariff heading 84229010 (packaging machines), as on the existing FG items
         );
 
         return $this->request('POST', 'Items', $item, $cookie);
+    }
+
+    private function record_item_sync($fg_code, $record_id, $name, $status, $response, $error)
+    {
+        $existing = $this->ci->db->select('attempt_count')->from('SAP_item_sync')->where('fg_code', $fg_code)->get()->row_array();
+        $data = array('record_id' => (int) $record_id, 'item_name' => $name, 'sync_status' => $status, 'error_message' => $error,
+            'response_payload' => $response, 'last_attempt_at' => date('Y-m-d H:i:s'));
+        if (!empty($existing)) {
+            $data['attempt_count'] = (int) $existing['attempt_count'] + 1;
+            $this->ci->db->where('fg_code', $fg_code)->update('SAP_item_sync', $data);
+            return;
+        }
+        $data['fg_code'] = $fg_code;
+        $data['attempt_count'] = 1;
+        $data['created_at'] = date('Y-m-d H:i:s');
+        $this->ci->db->insert('SAP_item_sync', $data);
     }
 
     private function load_quotation($record_id)

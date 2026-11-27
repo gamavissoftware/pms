@@ -4062,6 +4062,12 @@ private function push_quotation_to_sap($record_id)
 	try
 	{
 		$this->load->library('Sap_service');
+		// the finished goods item goes to SAP for every quotation; the quotation itself only when it qualifies
+		$item=$this->sap_service->sync_fg_item($record_id);
+		if(empty($item['success']) && empty($item['skipped']))
+		{
+			log_message('error','SAP FG item sync failed for quotation '.(int)$record_id.': '.(isset($item['message']) ? $item['message'] : 'Unknown error'));
+		}
 		$result=$this->sap_service->sync_quotation($record_id);
 		if(empty($result['success']) && empty($result['skipped']))
 		{
